@@ -1,3 +1,9 @@
+98193bb88a127c832705b35ac3631fc2afa76d7da2081b30ae16cce32d7f8cbd  ./esp32-p4-board/cad/ESP32-P4-WIFI6_3d-20260109.stp
+ab011f813216be51e0ce4e22977cc82acf1d5c1c19a75a8572de7c92423a8e31  ./esp32-p4-board/cad/ESP32-P4-WIFI6-dimensions-20260109.dxf
+f38c5b9b7fe5a0313aa76b676201019de8a2fdf4ca7537c1960aa21c7718e6dd  ./esp32-p4-board/cad/ESP32-P4-WIFI6-dimensions-20260109.pdf
+7607acbc102b7e15149bd6dbaf95f26c95f4f2c0ffaaeffeff735e09abdf76a0  ./esp32-p4-board/Waveshare_ESP32-P4-WIFI6_schematic.pdf
+fb4f3e91cc2ac519ec08cdec3dac9cb62b546cf5402ead1c5b83595a21bb6bc6  ./esp32-p4-chip/Espressif_ESP32-P4_datasheet_v0.7.pdf
+622fe9625d19cf00bd7aa49e65f0b5dd6ef2197f83cb7a88b4405078d6a957d4  ./esp32-p4-chip/Espressif_ESP32-P4_technical_reference_manual_v0.7.pdf
 a3d5c4c3c943aacfb374bd195025caeec78b32d63a19fb8d0752be38d18d1a97  ./feetech-protocol/Feetech_memory_table_magnetic_encoder.xlsx
 84ac8fa29ebf73f373b57ac959f4150bbd692807ff814cb3399fc770d3ae27c8  ./feetech-protocol/Feetech_protocol_manual_magnetic_encoder.pdf
 5233f85bfb6db962730843c9b95f84d38fe0abd6883f1d55d7b86432ff96ab5d  ./feetech-protocol/Feetech_wiki_FT-SCS_protocol_EN.md
@@ -9,6 +15,9 @@ eeac0fb6b73bf2215974d8f73fb7db0f09d59a59f5affff99aa89fee64948286  ./feetech-sts3
 707da810d6443597bb7877fc191251915bf01a3d3594ee77b1e0f8ef8b45d017  ./feetech-sts3215/Feetech_ST-3215-C001_datasheet.pdf
 d0a735a8ddc23585dd7fef40bf7ed87359b6234436103e00bb6e992b5ffe9f39  ./feetech-sts3215/Feetech_ST-3215-C018_12V_datasheet.pdf
 22e0141cfce200b147a0b91946de4f11c2feeffaf2a94e0dc38c4f42897b3954  ./feetech-sts3215/Feetech_STS3215_drawing.png
+b13715ed4fac37ef8357ffddf824cfafe923e55aa849941c5508986cc625c994  ./raspberry-pi-camera-module-3/cad/Camera_module_3_wide_model_simple.stp
+c5f87a9b48d63857fb3d9c0a3deeec797325c56d198c80bcb77a2062e6925b92  ./raspberry-pi-camera-module-3/cad/Camera-Module-3-Wide-mechanical-drawing.pdf
+578efcad6337696a29b9c068815a01d63ddcf7beacf584051d61cf1cddeeaf0a  ./raspberry-pi-camera-module-3/RaspberryPi_Camera_Module_3_product_brief_RP-008151-DS-1.pdf
 cd056a9a90cbd5d2fd26abc22dcb6f87a954ca411128b0e46e02d5e4473bd1ae  ./waveshare-bus-servo-adapter-a/Waveshare_Bus_Servo_Adapter_A_schematic_docs.pdf
 702645126730724854f8b15509cee5db562c8b292db41306211800d90d54d649  ./waveshare-bus-servo-adapter-a/Waveshare_Bus_Servo_Adapter_A_schematic_wiki.pdf
 2abebb4b5e9d71a14ad331694f3963d153224a9d6cc71d5f8b7ef2a481cf956b  ./waveshare-bus-servo-adapter-a/Waveshare_Bus_Servo_Driver_Circuit_schematic_docs.pdf

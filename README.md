@@ -9,7 +9,8 @@ to use components we already have, and running the arms in simulation.
 |---|---|---|
 | `third_party/SO-ARM100/` | Upstream SO-101 design from [TheRobotStudio/SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) (Apache-2.0): STEP CAD, STL print files, URDF/MuJoCo models, optional mounts, BOM. Pinned commit in `UPSTREAM_COMMIT`. | No, mirror only |
 | `third_party/hiwonder-so-arm101/` | Hiwonder's variant (HX-10HM/HX-30HM servos): manuals, servo protocol, print files, Rhino CAD, LeRobot patch | No, reference only |
-| `docs/datasheets/` | Component datasheets (servos, driver board) with source manifest | No, reference only |
+| `docs/PLAN.md` | Build decisions, camera pipeline, LeRobot integration options, open items | Yes |
+| `docs/datasheets/` | Datasheets + official CAD: servos, servo driver board, Camera Module 3, ESP32-P4 board/chip | No, reference only |
 | `hardware/` | *(to come)* Our modified CAD / print files | Yes |
 | `sim/` | *(to come)* Our modified URDF / MJCF models and sim scripts | Yes |
 | `scripts/` | `sync_so_arm100.sh`: re-sync the upstream mirror | |

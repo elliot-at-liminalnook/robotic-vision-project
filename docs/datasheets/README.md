@@ -81,6 +81,48 @@ From the Waveshare pages:
 - **USB-serial chip:** CH343, default 1 Mbps.
 - **Jumper:** position A = UART, B = USB.
 
+## Raspberry Pi Camera Module 3 Wide: `raspberry-pi-camera-module-3/`
+
+Our fixed scene cameras (PiShop SKU 527-1, MPN SC1224; IMX708 sensor).
+
+| File | What | Source |
+|---|---|---|
+| `RaspberryPi_Camera_Module_3_product_brief_RP-008151-DS-1.pdf` | Product brief (June 2024) | [pip-assets.raspberrypi.com](https://pip-assets.raspberrypi.com/categories/786-raspberry-pi-camera-module-3/documents/RP-008151-DS-1-camera-module-3-product-brief.pdf) |
+| `cad/Camera_module_3_wide_model_simple.stp` | Official simplified STEP model, Wide variant (exported 2024-01-23) | `camera_module_3.zip` from the [Raspberry Pi design-files portal](https://pip.raspberrypi.com/categories/1207-design-files) ([archive](https://pip-assets.raspberrypi.com/categories/1207-design-files/documents/RP-008154-DS-1-camera-module-3-step.zip)) |
+| `cad/Camera-Module-3-Wide-mechanical-drawing.pdf` | Official mechanical drawing, Wide | [pip-assets.raspberrypi.com](https://pip-assets.raspberrypi.com/categories/1207-design-files/documents/RP-008155-DS-1-camera-module-3-wide-mechanical-drawing.pdf) |
+
+The CAD files were retrieved 2026-10-02 for `~/Projects/esp32-stereo-camera` and copied here
+byte-identical (checked against that project's `provenance.json`).
+
+## Waveshare ESP32-P4-WIFI6-M: `esp32-p4-board/`
+
+Camera host boards (PiShop SKU 3093 = Waveshare SKU 31647, "-M" = pre-soldered headers).
+Docs: https://docs.waveshare.com/ESP32-P4-WIFI6 (resources page lists the -M variant).
+
+| File | What | Source |
+|---|---|---|
+| `Waveshare_ESP32-P4-WIFI6_schematic.pdf` | Schematic (vendor filename says "datasheet") | [files.waveshare.com](https://files.waveshare.com/wiki/ESP32-P4-WIFI6/ESP32-P4-WIFI6-datasheet.pdf) |
+| `cad/ESP32-P4-WIFI6_3d-20260109.stp` | Official STEP assembly (Creo export 2026-01-09) | [ESP32-P4-WIFI6.zip](https://files.waveshare.com/wiki/ESP32-P4-WIFI6/ESP32-P4-WIFI6.zip) |
+| `cad/ESP32-P4-WIFI6-dimensions-20260109.pdf`, `.dxf` | Dimension drawing | same archive |
+
+The board has three USB interfaces:
+- **USB-C:** goes to a CH343P USB-to-UART bridge (P4 UART0, GPIO37/38). It handles power, flashing and the serial console only, so it is *not* the P4's native USB.
+- **4-pin MX1.25 header marked "USB" (V, D−, D+, G):** the P4's native **USB 2.0 High-Speed OTG** port. A USB webcam (UVC) mode would need a cable from this header to a USB-A/C male plug.
+- **Header pins GPIO24/25:** USB Serial/JTAG, Full-Speed only.
+
+## Espressif ESP32-P4 chip: `esp32-p4-chip/`
+
+| File | What | Source |
+|---|---|---|
+| `Espressif_ESP32-P4_datasheet_v0.7.pdf` | Series datasheet, pre-release v0.7, 102 pp | [documentation.espressif.com](https://documentation.espressif.com/esp32-p4_datasheet_en.pdf) |
+| `Espressif_ESP32-P4_technical_reference_manual_v0.7.pdf` | Technical reference manual, pre-release v0.7, 3701 pp | [documentation.espressif.com](https://documentation.espressif.com/esp32-p4_technical_reference_manual_en.pdf) |
+
+Relevant limits from the datasheet:
+- One MIPI CSI interface, so one Camera Module 3 per board.
+- ISP max 1920×1080.
+- JPEG encoder "up to 1080P@40fps, 720P@70fps".
+- USB 2.0 HS OTG, configurable as host or device.
+
 ## Not available
 - No Feetech-hosted C044/C046 datasheets (Feetech lists only C001 and C018).
 - No English official protocol manual or memory table; only the wiki transcriptions above.

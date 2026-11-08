@@ -1,0 +1,84 @@
+# Build plan
+
+Decisions as of 2026-11-08. Update this file when a decision changes.
+
+## Decisions
+
+| Area | Decision |
+|---|---|
+| Arms | Fully custom leader + follower, printed on our own printer (Bambu). Upstream TheRobotStudio and Hiwonder files are the starting point only. |
+| Servos | Hiwonder **HX-10HM / HX-30HM** bus servos (to buy). Feetech-STS-compatible protocol, so stock LeRobot `sts3215` drives them (see `third_party/hiwonder-so-arm101/README.md`). |
+| Servo driver | Hiwonder BusLinker V3.0 or Waveshare Bus Servo Adapter (A). Either one is USB to half-duplex TTL at 1 Mbps. |
+| Cameras | 2× Raspberry Pi **Camera Module 3 Wide** (IMX708) in **two fixed views**, nothing on the arm. |
+| Camera boards | 2× Waveshare **ESP32-P4-WIFI6-M**, one per camera, running the existing firmware from `~/Projects/esp32-stereo-camera` (see below). |
+| LeRobot host | Linux PC with GPU (teleop, recording, training, inference). |
+| Simulation | MuJoCo. Start from upstream `Simulation/SO101`, then rebuild geometry/inertia/actuators for the HX-servo arm. |
+
+## Parts on hand
+
+| Qty | Item | Role |
+|---:|---|---|
+| 2 | Raspberry Pi Camera Module 3 Wide | Fixed scene cameras |
+| 2 | ESP32-P4-WIFI6-M dev board | Camera host: CSI → ISP → HW JPEG → Wi-Fi MJPEG |
+| 2 | Pi Zero v1.3 camera cable, 150 mm | Camera ↔ board (fixed mounts, so 150 mm is enough if the board sits behind the camera) |
+| 2 | Pro Mini camera mount for Pi Zero | Possibly reusable; dedicated printed mounts are likely better |
+| 2 | USB-C ↔ USB-C, USB 3.2 Gen 2, 3 ft | Board power / flashing / serial console |
+
+## Camera pipeline (existing, proven)
+
+Prior work in `~/Projects/esp32-stereo-camera` (see its `outputs/board-diagnostics/CAMERA-TECHNICAL-REFERENCE.md`):
+
+- **Driver:** `mushBrainDave/esp32-p4-imx-camera` @ `079e30b` (Apache-2.0), ESP-IDF v5.5.5,
+  esp_video 2.5.0 / esp_cam_sensor 2.6.0. IMX708 over 2-lane MIPI CSI, RAW10, P4 ISP → RGB565,
+  hardware JPEG. DW9807 lens motor at I²C `0x0c`, sensor at `0x1a`.
+- **Firmware ("Camera Lab"):** HTTP control on `:80`, MJPEG stream on `:81/stream.mjpg` (3 viewer slots),
+  USB serial control at 2 Mbaud. Wi-Fi via the on-board ESP32-C6. Both boards were already flashed and streaming (2026-10-03).
+- **Measured Wi-Fi delivery** (one board, short bench samples): 640×480 ≈ 27 fps, 800×600 ≈ 27 fps,
+  1024×768 ≈ 15 fps, 1280×720 ≈ 5 fps, 1080p ≈ 9 fps.
+  **640×480 @ ~27–30 fps matches LeRobot's typical camera setup.**
+- **Smaller modes are center crops** of a 2304×1296 binned field, not downscales. So 640×480
+  sees much less of the scene than 1080p, and the "wide" lens doesn't give a wide view at VGA.
+  This matters for camera placement.
+
+Oddities already resolved or documented there:
+- **RAW10 stall:** fixed by clearing ISP line-start/end expectations (IMX708 + bypass only).
+- **Pink cast:** removed by replacing the provisional color matrix with identity. A green cast remains (no calibrated CCM).
+- **IPA (auto 3A) disabled** in Camera Lab. Auto exposure, white balance and focus run host-side (bridge or browser).
+  **For dataset recording, use fixed exposure / white balance / focus** so frames stay consistent.
+- **`VIDIOC_G_FMT` reports `sizeimage = 0`:** derive buffer sizes from width × height instead.
+- **No frame timestamps or sensor-level sync between boards.** The two views are not exposure-synchronized.
+
+## LeRobot integration: camera input (to build)
+
+Stock LeRobot can't use these streams directly (checked against `huggingface/lerobot@d490e47`):
+- `OpenCVCameraConfig.index_or_path` is `int | Path`. From the CLI, a URL becomes a `Path`, and
+  `str(Path("http://h:81/stream.mjpg"))` == `"http:/h:81/stream.mjpg"`, which is broken.
+- On connect it calls `VideoCapture.set(CAP_PROP_FPS)` and validates the result. Network streams generally can't honor that.
+
+Options:
+1. **Custom LeRobot camera class** (recommended): `ESP32MjpegCameraConfig` registered as a
+   `CameraConfig` subclass. It reads the HTTP MJPEG stream in a background thread, keeps the latest frame,
+   timestamps on receipt, reconnects, and pushes fixed exposure/focus via the `:80` API on connect.
+2. **Virtual webcam on the Linux host:** `ffmpeg` → `v4l2loopback` `/dev/videoN`, then stock OpenCVCamera
+   with `fps` unset. No LeRobot code, but more moving parts and the FPS check still needs care.
+3. **USB UVC webcam firmware** on the P4 (wired, no Wi-Fi). Feasible, but not tried yet:
+   - **Software:** Espressif's `esp_video` `examples/uvc` (create it with `idf.py create-project-from-example "espressif/esp_video:uvc"`) on top of esp-iot-solution `usb_device_uvc` (TinyUSB, defaults to the P4's HS port). Supports MJPEG or H.264; use MJPEG for OpenCV.
+   - **Defaults:** the example's default is SC2336 @ 720p30, so it needs porting to our IMX708 driver and RAW10 fix.
+   - **Expected rate:** hardware allows up to 1080p (JPEG 1080p@40). 1080p MJPEG over USB 2.0 HS at ~25–30 fps is an estimate, not measured.
+   - **Cabling catch:** the board's USB-C port is a CH343P serial bridge, not the P4's USB. UVC needs the
+     4-pin MX1.25 "USB" header wired to a USB male plug. **Our USB-C cables can't carry it as-is.**
+   - **One board per camera** (P4 has one CSI). Set a unique `CONFIG_TUSB_SERIAL_NUM` per board.
+     Both default to VID 0x303A / PID 0x8000 / serial "12345678"; unique serials give stable `/dev/v4l/by-id` names.
+   - **Advantages over Wi-Fi:** stock LeRobot `OpenCVCamera` with no custom code, deterministic bandwidth,
+     and full field of view at 1080p if the rate holds.
+
+## Open items
+
+- [ ] HX-10HM / HX-30HM datasheets: torque, speed, voltage, dimensions, horn spline. Needed for CAD and sim actuator params.
+- [ ] HX servo memory table (Hiwonder protocol doc references an "HX-35HM memory table" not in their Drive folder).
+- [ ] Identify Hiwonder 3MF/3DM parts (names are generic `Document_N`) and map them to SO-101 links.
+- [ ] Fixed camera mount design (camera + ESP32-P4 board, 150 mm ribbon). Reuse ideas from the
+      stereo enclosure prototypes in `~/Projects/esp32-stereo-camera/outputs/stereo-prototype-v*`.
+- [ ] Camera intrinsics/extrinsics calibration for each fixed view.
+- [ ] Add matching MuJoCo cameras to the sim scene (upstream model has no `<camera>`).
+- [ ] Power: servo supply voltage for HX servos; BusLinker vs Waveshare board.
