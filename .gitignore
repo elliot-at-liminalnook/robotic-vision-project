@@ -7,3 +7,6 @@ firmware/**/build/
 firmware/**/managed_components/
 firmware/**/sdkconfig
 firmware/**/sdkconfig.old
+sim/.cache/
+sim/out/
+venv/

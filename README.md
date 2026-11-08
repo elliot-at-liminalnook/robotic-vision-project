@@ -14,7 +14,7 @@ to use components we already have, and running the arms in simulation.
 | `firmware/p4-uvc-camera/` | ESP32-P4 + Camera Module 3 → USB UVC webcam firmware (ESP-IDF) | Yes |
 | `firmware/components/` | Vendored IMX708 camera driver (Apache-2.0) used by the firmware | Carefully |
 | `hardware/` | *(to come)* Our modified CAD / print files | Yes |
-| `sim/` | *(to come)* Our modified URDF / MJCF models and sim scripts | Yes |
+| `sim/` | Simulation: generated SO-101 follower MJCF (fixed jaw collision, finger pads, cameras), workcell, Newton/MuJoCo runtime, scripted pick demo. See `sim/README.md` | Yes (not `sim/model/`, which is generated) |
 | `scripts/` | `sync_so_arm100.sh`: re-sync the upstream mirror | |
 
 Keep `third_party/` and `docs/datasheets/` pristine so we can always diff our
@@ -33,6 +33,8 @@ git clone https://github.com/elliot-at-liminalnook/robotic-vision-project.git
 Without LFS you get small pointer files instead of meshes, and simulation won't load.
 
 ## Quick start: view the arm in simulation
+
+Our simulation lives in `sim/` (see `sim/README.md`). The upstream model can still be viewed directly:
 
 The upstream MuJoCo scene works as-is (verified with MuJoCo 3.10.0, Python 3.13):
 

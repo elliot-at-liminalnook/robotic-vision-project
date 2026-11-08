@@ -1,0 +1,7 @@
+# For regenerating sim/model/ (tools/build_model.py). Any OS; validated on macOS
+# x86_64 with mujoco 3.10.0 and on Linux with mujoco 3.15.0.
+mujoco
+numpy
+trimesh
+scipy
+coacd

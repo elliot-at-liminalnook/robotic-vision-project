@@ -1,0 +1,62 @@
+# Simulated cameras. Single source of truth: tools/build_model.py writes matching
+# <camera> elements into the MJCF (for the MuJoCo viewer), and so101sim renders
+# from these specs in Newton.
+#
+# Frames: world is z-up, the robot base sits at the origin facing +x, and the
+# table top is z = 0. Camera convention (MuJoCo and Newton agree): the camera
+# looks along its local -Z with +Y up.
+#
+# Intrinsics are PLACEHOLDERS from the Camera Module 3 Wide datasheet until each
+# real camera is calibrated (OpenCV checkerboard), then paste fx/fy/cx/cy/k*/p*.
+#   f = 2.75 mm; the 1920x1080 mode is a 2x2-binned centre crop -> 2.8 um pixels
+#   fx = fy = 2.75 / 0.0028 = 982.1 px, cx = 960, cy = 540, no distortion.
+# The real lens has barrel distortion (datasheet HFOV 102 deg on the full sensor
+# vs 99 deg pinhole), so expect non-zero k1/k2 after calibration.
+
+[intrinsics.cm3_wide_1080p]
+model = "pinhole_opencv"      # "pinhole_opencv" or "fisheye_opencv"
+calib_width = 1920            # resolution fx..cy are expressed at
+calib_height = 1080
+fx = 982.1
+fy = 982.1
+cx = 960.0
+cy = 540.0
+k1 = 0.0
+k2 = 0.0
+k3 = 0.0
+p1 = 0.0
+p2 = 0.0
+
+# Wrist camera: rides on the follower's gripper body. PLACEHOLDER pose taken from
+# upstream's SO101 wrist camera mount (third_party/.../so101_new_calib_camera.xml)
+# until our Camera Module 3 mount is designed; then use the lens pose from its CAD.
+# pos/look_at/up are in the gripper body frame [m]. look_at = between the jaw tips.
+[cameras.wrist]
+parent_body = "gripper"
+intrinsics = "cm3_wide_1080p"
+render_width = 640
+render_height = 360
+pos = [0.0025, 0.0734, 0.0066]
+look_at = [-0.0079, -0.0002, -0.0981]
+up = [0.0, 0.0, 1.0]
+
+# Main fixed scene camera: in front of the robot, looking back at the workspace.
+[cameras.scene_front]
+parent_body = "world"
+intrinsics = "cm3_wide_1080p"
+render_width = 640
+render_height = 360
+pos = [0.62, 0.0, 0.38]
+look_at = [0.22, 0.0, 0.02]
+up = [0.0, 0.0, 1.0]
+
+# Optional second fixed camera from the side. Set enabled = false to drop it.
+[cameras.scene_side]
+enabled = true
+parent_body = "world"
+intrinsics = "cm3_wide_1080p"
+render_width = 640
+render_height = 360
+pos = [0.24, -0.55, 0.32]
+look_at = [0.22, 0.0, 0.02]
+up = [0.0, 0.0, 1.0]

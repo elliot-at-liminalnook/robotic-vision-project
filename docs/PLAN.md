@@ -10,11 +10,12 @@ Decisions as of 2026-11-08. Update this file when a decision changes.
 | Servos | Hiwonder **HX-10HM / HX-30HM** bus servos (to buy). Feetech-STS-compatible protocol, so stock LeRobot `sts3215` drives them (see `third_party/hiwonder-so-arm101/README.md`). |
 | Servo driver | Hiwonder BusLinker V3.0 or Waveshare Bus Servo Adapter (A). Either one is USB to half-duplex TTL at 1 Mbps. |
 | Servo power | **12V supply** (HX servos: rated 11.1V, range 9–12.6V; Hiwonder kit ships 12V 5A). Waveshare adapter passes input through unregulated (wiki: 9–12.6V input). Stall is 3A per servo, so size the supply for simultaneous moves. |
-| Cameras | 2× Raspberry Pi **Camera Module 3 Wide** (IMX708) in **two fixed views**, nothing on the arm. |
+| Cameras | Raspberry Pi **Camera Module 3 Wide** (IMX708): **one on the follower's wrist + one fixed scene camera**, optionally a second fixed camera from another angle (decided 2026-11-08). |
 | Camera boards | 2× Waveshare **ESP32-P4-WIFI6-M**, one per camera. |
 | Camera transport | **USB UVC webcam** (decided 2026-11-08): new firmware `firmware/p4-uvc-camera/`, so each board appears to the Linux PC as a standard webcam. Wi-Fi Camera Lab firmware remains the fallback. |
-| LeRobot host | Linux PC with GPU (teleop, recording, training, inference). |
-| Simulation | MuJoCo. Start from upstream `Simulation/SO101`, then rebuild geometry/inertia/actuators for the HX-servo arm. |
+| Compute host | Linux PC with GPU (teleop, recording, training, inference, simulation). |
+| Learning stack | **Not LeRobot** (decided 2026-11-08). Simulation in **Newton 1.7 with `SolverMuJoCo` on the MuJoCo Warp backend**; see `sim/`. |
+| Simulation | `sim/`: generated from upstream `Simulation/SO101` with fixed jaw collision, finger pads, HX-30HM torque limit, 3 cameras, workcell. Runs on Newton (Linux) and plain MuJoCo (anywhere). |
 
 ## Parts on hand
 
@@ -96,5 +97,7 @@ Options:
 - [ ] Fixed camera mount design (camera + ESP32-P4 board, 150 mm ribbon). Reuse ideas from the
       stereo enclosure prototypes in `~/Projects/esp32-stereo-camera/outputs/stereo-prototype-v*`.
 - [ ] Camera intrinsics/extrinsics calibration for each fixed view.
-- [ ] Add matching MuJoCo cameras to the sim scene (upstream model has no `<camera>`).
+- [x] Sim cameras (wrist + 2 fixed) in `sim/config/cameras.toml`; replace placeholder poses/intrinsics with measured ones.
+- [ ] Verify the sim on the Linux GPU PC with `--solver warp` (MuJoCo Warp); only the CPU path has been run so far.
+- [ ] Design the Camera Module 3 wrist mount + forearm cradle for the ESP32-P4 board; update the wrist pose in `cameras.toml`.
 - [ ] Power: servo supply voltage for HX servos; BusLinker vs Waveshare board.

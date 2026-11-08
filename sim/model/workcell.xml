@@ -1,0 +1,59 @@
+<!--
+  Workcell: SO-101 follower on a table with graspable objects and fixed cameras.
+  Hand-written source; tools/build_model.py copies it into sim/model/ next to the
+  generated robot (MJCF resolves meshdir relative to the main file).
+
+  World frame: z up, table top at z = 0, robot base at the origin facing +x.
+  Units: metres, kilograms.
+-->
+<mujoco model="so101_workcell">
+  <include file="so101_follower.xml"/>
+
+  <!-- Elliptic friction cones + impratio > 1: MuJoCo's recommended setting for
+       stable grasping (less slip under the same normal force). implicitfast is
+       the recommended integrator for position-controlled robots. -->
+  <option timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="10"/>
+
+  <visual>
+    <global offwidth="1920" offheight="1080" azimuth="150" elevation="-25"/>
+    <headlight ambient="0.25 0.25 0.25" diffuse="0.4 0.4 0.4" specular="0 0 0"/>
+    <quality shadowsize="4096"/>
+  </visual>
+
+  <asset>
+    <texture name="floor" type="2d" builtin="checker" rgb1="0.35 0.35 0.38" rgb2="0.3 0.3 0.33" width="256" height="256"/>
+    <material name="floor" texture="floor" texrepeat="8 8" reflectance="0.05"/>
+    <material name="table" rgba="0.72 0.6 0.45 1"/>
+  </asset>
+
+  <worldbody>
+    <light name="key" pos="0.35 -0.35 1.3" dir="-0.2 0.25 -1" diffuse="0.65 0.65 0.62" castshadow="true"/>
+    <light name="fill" pos="-0.3 0.45 1.0" dir="0.3 -0.4 -1" diffuse="0.25 0.25 0.27" castshadow="false"/>
+
+    <!-- rgba as well as material: Newton's renderer uses geom colour, not MJCF textures. -->
+    <geom name="floor" type="plane" pos="0 0 -0.75" size="2 2 0.05" material="floor" rgba="0.33 0.33 0.36 1"/>
+    <!-- Table: 0.8 m (x) by 0.9 m (y), top at z = 0. Wood-ish friction. -->
+    <geom name="table" type="box" pos="0.25 0 -0.02" size="0.4 0.45 0.02" material="table" rgba="0.72 0.6 0.45 1"
+          friction="0.5 0.005 0.0001"/>
+
+    <include file="cameras_world.xml"/>
+
+    <!-- Graspable objects, sized and weighted like 3D-printed PLA parts.
+         condim 4 adds torsional friction so a pinched object doesn't spin. -->
+    <body name="cube" pos="0.24 0.06 0.0151">
+      <freejoint name="cube_free"/>
+      <geom name="cube" type="box" size="0.015 0.015 0.015" mass="0.03"
+            rgba="0.85 0.2 0.2 1" friction="0.4 0.005 0.0001" condim="4"/>
+    </body>
+    <body name="cylinder" pos="0.27 -0.08 0.0301">
+      <freejoint name="cylinder_free"/>
+      <geom name="cylinder" type="cylinder" size="0.015 0.03" mass="0.025"
+            rgba="0.2 0.4 0.85 1" friction="0.4 0.005 0.0001" condim="4"/>
+    </body>
+    <body name="block" pos="0.18 -0.03 0.0101">
+      <freejoint name="block_free"/>
+      <geom name="block" type="box" size="0.02 0.0125 0.01" mass="0.02"
+            rgba="0.2 0.7 0.3 1" friction="0.4 0.005 0.0001" condim="4"/>
+    </body>
+  </worldbody>
+</mujoco>

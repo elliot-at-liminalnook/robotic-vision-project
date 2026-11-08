@@ -1,0 +1,47 @@
+# Follower arm servos: Hiwonder HX-30HM (docs/datasheets/hiwonder-hx-servos/).
+#   stall torque 30 kg.cm @ 11.1 V  = 2.94 N.m
+#   no-load speed 0.19 s / 60 deg @ 11.1 V = 5.51 rad/s
+#   gear ratio 1:345 (same as the STS3215-C001 the upstream sim was tuned for)
+#   12-bit magnetic encoder: 4096 ticks per revolution
+#
+# Actuator gains and joint damping/friction/armature are upstream's STS3215
+# values (same ratio and nearly the same speed); refit them from real step
+# responses once the servos arrive (system identification).
+
+[follower]
+torque_limit_nm = 2.94
+max_speed_rad_s = 5.51
+ticks_per_rev = 4096
+
+# Joint <-> servo mapping. Sim angle 0 = middle of the joint's range (upstream
+# "new calibration"). rad = direction * (ticks - zero_ticks) * 2*pi / 4096.
+# PLACEHOLDERS: measure zero_ticks/direction on the real arm.
+[follower.joints.shoulder_pan]
+id = 1
+zero_ticks = 2048
+direction = 1
+
+[follower.joints.shoulder_lift]
+id = 2
+zero_ticks = 2048
+direction = 1
+
+[follower.joints.elbow_flex]
+id = 3
+zero_ticks = 2048
+direction = 1
+
+[follower.joints.wrist_flex]
+id = 4
+zero_ticks = 2048
+direction = 1
+
+[follower.joints.wrist_roll]
+id = 5
+zero_ticks = 2048
+direction = 1
+
+[follower.joints.gripper]
+id = 6
+zero_ticks = 2048
+direction = 1

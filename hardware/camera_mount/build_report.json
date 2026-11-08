@@ -1,0 +1,21 @@
+{
+  "source": "source/stereo_v9_camera_beam.step",
+  "solids": 1,
+  "bbox_mm": [
+    68.0,
+    85.5,
+    15.95
+  ],
+  "volume_mm3": {
+    "cradle_as_cut": 15675.8,
+    "added_outer": 9298.2,
+    "added_board_edge_collar": 1953.5,
+    "holder": 26764.1
+  },
+  "mass_g_pla_100pct": 33.2,
+  "spring_clearance_overlap_mm3": {
+    "left_spring": 0.0,
+    "right_spring": 0.0
+  },
+  "camera_model_overlap_mm3": 0.0
+}

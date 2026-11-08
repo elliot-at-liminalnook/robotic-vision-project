@@ -1,0 +1,6 @@
+# Runtime (Linux x86_64 / aarch64; Warp has no Intel-macOS build).
+# newton[sim] pulls in mujoco ~=3.15 and mujoco-warp ~=3.15.
+newton[sim]==1.7.0
+numpy
+pillow
+scipy        # used by trimesh when Newton loads meshes (else a noisy fallback)
