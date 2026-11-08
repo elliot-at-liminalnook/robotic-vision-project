@@ -98,3 +98,19 @@ def load_cameras(include_disabled: bool = False) -> dict[str, CameraSpec]:
 
 def load_servos() -> dict:
     return _load("servos.toml")
+
+
+def servo_limits(arm: str = "follower") -> dict:
+    """Servo torque/speed at the configured supply voltage (DC motor: both scale with voltage).
+
+    Returns stall_torque_nm, no_load_speed_rad_s, gripper_torque_nm (torque-limit
+    register applied), rated values and the voltages.
+    """
+    f = load_servos()[arm]
+    k = float(f["supply_voltage_v"]) / float(f["rated_voltage_v"])
+    stall = float(f["torque_limit_nm"]) * k
+    return dict(stall_torque_nm=stall, no_load_speed_rad_s=float(f["max_speed_rad_s"]) * k,
+                gripper_torque_nm=stall * float(f["gripper_torque_limit_frac"]),
+                rated_stall_torque_nm=float(f["torque_limit_nm"]), rated_speed_rad_s=float(f["max_speed_rad_s"]),
+                supply_voltage_v=float(f["supply_voltage_v"]), rated_voltage_v=float(f["rated_voltage_v"]),
+                voltage_scale=k)

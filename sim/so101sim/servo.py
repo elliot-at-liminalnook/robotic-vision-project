@@ -33,6 +33,44 @@ class ServoMap:
         return np.clip(np.rint(t), 0, self.ticks_per_rev - 1).astype(int)
 
 
+class GoalInterpolator:
+    """Spreads each new joint goal over one control period (linear in joint space).
+
+    IK runs at the control/frame rate (~30 Hz) but the motion generator at the
+    physics/servo rate. Stepping the goal once per frame makes a fast generator
+    catch it, stop, and restart every frame; interpolating costs one frame of
+    latency and gives a continuously moving goal instead.
+    """
+
+    def __init__(self, initial, period_s: float):
+        self.period = float(period_s)
+        self.prev = np.array(initial, float)
+        self.goal = self.prev.copy()
+        self.t = self.period
+
+    def set(self, goal):
+        goal = np.asarray(goal, float)
+        if np.array_equal(goal, self.goal):
+            return
+        self.prev = self.now()
+        self.goal = goal.copy()
+        self.t = 0.0
+
+    def now(self) -> np.ndarray:
+        a = min(1.0, self.t / self.period) if self.period > 0 else 1.0
+        return self.prev + (self.goal - self.prev) * a
+
+    def velocity(self) -> np.ndarray:
+        """The interpolated goal's velocity right now (feed-forward for the motion generator)."""
+        if self.period <= 0 or self.t >= self.period:
+            return np.zeros_like(self.goal)
+        return (self.goal - self.prev) / self.period
+
+    def advance(self, dt: float) -> np.ndarray:
+        self.t += dt
+        return self.now()
+
+
 class ProfileLimiter:
     """Trapezoidal motion profile: speed AND acceleration limited, per joint.
 

@@ -9,20 +9,47 @@
 # responses once the servos arrive (system identification).
 
 [follower]
+# Datasheet values at the RATED voltage. Torque and speed scale ~linearly with
+# supply voltage (DC motor); the sim uses the values at supply_voltage_v
+# (so101sim.config.servo_limits). Current per N.m does not change with voltage.
+rated_voltage_v = 11.1
+# Bench supply (plugged in, current not limited). HX-30HM range is 9-12.6 V;
+# 12.0 V gives ~+8 % torque and speed while staying below the 12.6 V maximum.
+# Size the supply for ~20 A (all six servos stalled).
+supply_voltage_v = 12.0
 torque_limit_nm = 2.94
 max_speed_rad_s = 5.51
 ticks_per_rev = 4096
-# Gripper torque limit (servo register 16 "maximum torque limit" = 500 -> 50 %):
+# Gripper torque limit, fraction of stall (servo register 16 "maximum torque limit" = 500 -> 50 %):
 # less squeeze, less heat. A sustained grip at the limit still trips overload
 # protection after 2 s if the 80 % threshold is relative to this limit (likely,
 # unverified); the sim grasp survives that either way
 # (sim/docs/SERVO_LOAD_FINDINGS.md).
-gripper_torque_limit_nm = 1.47
+gripper_torque_limit_frac = 0.5
 # Motion profile the control software commands (trapezoidal, per joint). The
 # servo's no-load speed is not reachable under load; commanding it saturates
 # every joint and the arm lags far behind the target.
 profile_speed_rad_s = 2.75
 profile_accel_rad_s2 = 8.0
+
+# Torque governor for fast teleop (so101sim/governor.py). Instead of a fixed
+# speed/acceleration, every control tick it predicts each joint's torque with
+# the arm's dynamics model and commands the fastest motion the servos can
+# follow. See sim/docs/FAST_TELEOP_FINDINGS.md.
+[follower.governor]
+voltage_margin = 0.90         # plan with at most this fraction of the supply voltage (the rest is the position loop's headroom)
+reserve_frac = 0.10           # at full speed keep this fraction of stall torque spare (to brake and correct)
+speed_frac = 0.90             # never command more than this fraction of the no-load speed
+accel_max_rad_s2 = 40.0       # upper bound even where torque would allow more (smoothness)
+bandwidth_rad_s = 35.0        # reference smoothness: critically damped; 50 rings the (sim) servo loop. Raise only after measuring a step response
+jerk_max_rad_s3 = 1000.0      # acceleration steps ring the servo's lightly damped position loop
+assumed_payload_kg = 0.05     # assumed at the tip whenever planning (a grasped object is unknown)
+overload_budget_s = 1.0       # max time above the 80 % overload threshold (servo trips at 2.0 s)
+heat_window_s = 120.0         # RMS-torque window for the heat budget (continuous rating 1/3 stall)
+click_speed_m_s = 0.8         # click-to-move: tip speed along the straight line (paced by the measured arm)
+click_accel_m_s2 = 3.0
+pace_lag_rad = 0.4            # the path slows once the measured arm is > pace_lag_rad/2 behind its goal
+max_lag_deg = 3.0             # with a measured position: slow down if the arm lags the command by more
 
 # Joint <-> servo mapping. Sim angle 0 = middle of the joint's range (upstream
 # "new calibration"). rad = direction * (ticks - zero_ticks) * 2*pi / 4096.

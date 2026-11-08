@@ -17,7 +17,7 @@
     <default class="hx30hm">
       <geom contype="0" conaffinity="0" />
       <joint damping="0.60" frictionloss="0.052" armature="0.028" />
-      <position kp="998.22" kv="2.731" forcerange="-2.94 2.94" />
+      <position kp="998.22" kv="2.731" forcerange="-3.178 3.178" />
     </default>
     <default class="backlash">
       <joint damping="0.01" frictionloss="0" armature="0.01" limited="true" range="-0.008726646259971648 0.008726646259971648" />
@@ -187,12 +187,12 @@
     <exclude body1="wrist_camera_assembly" body2="moving_jaw_so101_v1" />
   </contact>
   <actuator>
-    <position class="hx30hm" name="shoulder_pan" joint="shoulder_pan" forcerange="-2.94 2.94" ctrlrange="-1.91986 1.91986" />
-    <position class="hx30hm" name="shoulder_lift" joint="shoulder_lift" forcerange="-2.94 2.94" ctrlrange="-1.74533 1.74533" />
-    <position class="hx30hm" name="elbow_flex" joint="elbow_flex" forcerange="-2.94 2.94" ctrlrange="-1.69 1.69" />
-    <position class="hx30hm" name="wrist_flex" joint="wrist_flex" forcerange="-2.94 2.94" ctrlrange="-1.65806 1.65806" />
-    <position class="hx30hm" name="wrist_roll" joint="wrist_roll" forcerange="-2.94 2.94" ctrlrange="-2.74385 2.84121" />
-    <position class="hx30hm" name="gripper" joint="gripper" forcerange="-1.47 1.47" ctrlrange="-0.17453 1.74533" />
+    <position class="hx30hm" name="shoulder_pan" joint="shoulder_pan" forcerange="-3.178 3.178" ctrlrange="-1.91986 1.91986" />
+    <position class="hx30hm" name="shoulder_lift" joint="shoulder_lift" forcerange="-3.178 3.178" ctrlrange="-1.74533 1.74533" />
+    <position class="hx30hm" name="elbow_flex" joint="elbow_flex" forcerange="-3.178 3.178" ctrlrange="-1.69 1.69" />
+    <position class="hx30hm" name="wrist_flex" joint="wrist_flex" forcerange="-3.178 3.178" ctrlrange="-1.65806 1.65806" />
+    <position class="hx30hm" name="wrist_roll" joint="wrist_roll" forcerange="-3.178 3.178" ctrlrange="-2.74385 2.84121" />
+    <position class="hx30hm" name="gripper" joint="gripper" forcerange="-1.589 1.589" ctrlrange="-0.17453 1.74533" />
   </actuator>
   <equality />
 </mujoco>

@@ -9,7 +9,7 @@ Decisions as of 2026-11-08. Update this file when a decision changes.
 | Arms | Fully custom leader + follower, printed on our own printer (Bambu). Upstream TheRobotStudio and Hiwonder files are the starting point only. |
 | Servos | Hiwonder **HX-10HM / HX-30HM** bus servos (to buy). Feetech-STS-compatible protocol, so stock LeRobot `sts3215` drives them (see `third_party/hiwonder-so-arm101/README.md`). |
 | Servo driver | Hiwonder BusLinker V3.0 or Waveshare Bus Servo Adapter (A). Either one is USB to half-duplex TTL at 1 Mbps. |
-| Servo power | **12V supply** (HX servos: rated 11.1V, range 9–12.6V; Hiwonder kit ships 12V 5A). Waveshare adapter passes input through unregulated (wiki: 9–12.6V input). Stall is 3A per servo, so size the supply for simultaneous moves. |
+| Servo power | **12.0 V bench supply, ~20 A** (decided, DECISIONS F1). HX servos: rated 11.1 V, range 9–12.6 V; Hiwonder kit ships 12 V 5 A. Waveshare adapter passes input through unregulated (wiki: 9–12.6 V input). Stall is ~3.2 A per servo at 12 V. |
 | Cameras | Raspberry Pi **Camera Module 3 Wide** (IMX708): **one on the follower's wrist + one fixed scene camera**, optionally a second fixed camera from another angle (decided 2026-11-08). |
 | Camera boards | 2× Waveshare **ESP32-P4-WIFI6-M**, one per camera. |
 | Camera transport | **USB UVC webcam** (decided 2026-11-08): new firmware `firmware/p4-uvc-camera/`, so each board appears to the Linux PC as a standard webcam. Wi-Fi Camera Lab firmware remains the fallback. |
@@ -103,7 +103,8 @@ Options:
 - [ ] Print + test: camera holder snap fit, bracket fit on the gripper, wobble; design the ESP32-P4 cradle on the holder's back.
 - [ ] Fixed scene-camera stand for the holder (2× M3 holes), then measure its pose into `cameras.toml`.
 - [ ] Real-robot backend for `teleop.py` (HX servos over the bus, `ServoMap` ticks↔rad, UVC cameras).
-- [ ] On the real HX-30HM: measure position error under a known load (stiffness), check whether overload protection is relative to the torque-limit register, and log temperature after a 10-min far-reach hold; update `ServoSpec` and rerun `servo_load_study.py`.
-- [ ] Set servo registers: goal speed/acceleration to match the gentle profile; gripper torque limit 500.
-- [ ] Power supply: ≥ 10 A at 12 V if full-speed motion is ever wanted (the kit's 5 A is fine for the gentle profile).
+- [ ] On the real HX-30HM: measure position error under a known load (stiffness), a step response (D term, loop ringing frequency), whether overload protection is relative to the torque-limit register, and temperature after a 10-min far-reach hold; update `ServoSpec` (`sat_error_deg`, `d_time_s`) and the governor's `bandwidth_rad_s`, rerun `servo_load_study.py` and `fast_teleop_study.py`.
+- [ ] Real-robot teleop: stream governor commands as goal positions (servo goal speed = max, acceleration off), feed measured positions back for the lag guard and path pacing, log present current (register 69) against the governor's predicted torque. Gripper torque limit 500.
+- [x] Power supply: 12.0 V bench supply sized for ~20 A (DECISIONS F1).
+- [x] Fast teleop: torque governor, straight-line clicks, load-aware IK (default 0°): `sim/docs/FAST_TELEOP_FINDINGS.md`.
 - [ ] Power: servo supply voltage for HX servos; BusLinker vs Waveshare board.

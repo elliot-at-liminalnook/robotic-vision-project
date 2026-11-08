@@ -76,7 +76,24 @@ Newest at the bottom. Dates are 2026.
 |---|---|---|
 | L1 | Keep the wrist camera assembly as designed (46 g, board on the wrist) | Worst-case static holding torque +4–5 % of stall (shoulder 28 → 32 % with 30 g payload); far from the 80 % overload trigger; droop +0.3–2 mm |
 | L2 | Realistic servo model (`servo_model.py`) with unknown stiffness swept (0.5 / 2 / 5 deg) | HX P-gain units are undocumented; conclusions must not hinge on a guess |
-| L3 | Control software commands a gentle profile: 2.75 rad/s, 8 rad/s² | Commanding the no-load speed saturates every joint even without the camera (100 % peaks, 85–340 mm lag, 10–12 A); gentle: ≤ 75 % peaks, ≤ 50 mm lag, ~4 A |
+| L3 | Control software commands a gentle profile: 2.75 rad/s, 8 rad/s² (now GENTLE mode; FAST is the default, F3) | Commanding the no-load speed with unlimited acceleration saturates every joint even without the camera (100 % peaks, 160–180 mm lag, 12 A); gentle: ≤ 55 % peaks, ≤ 10 mm lag, ~3 A (corrected run, L7) |
 | L4 | Gripper torque limit 50 % (register 16 = 500) | The only overload trips were the gripper squeezing at stall for > 2 s; a lower limit means less heat and squeeze, and the grasp works even after a trip |
-| L5 | Power supply ≥ 10 A at 12 V if full-speed motion is ever used; 5 A OK with the gentle profile | Simulated current peaks |
+| L5 | ~~Power supply ≥ 10 A at 12 V if full-speed motion is ever used~~ → superseded by F1 | Simulated current peaks |
 | L6 | Measure real servo stiffness, overload semantics, temperature before trusting droop numbers | Model assumptions (see SERVO_LOAD_FINDINGS.md) |
+| L7 | Correction: no joint damping when the servo model drives the joints; add a derivative term (`d_time_s`) | Upstream's 0.6 N·m·s/rad damping stands in for motor losses in the ideal-actuator model; adding back-EMF on top halved the top speed. Static results unchanged; dynamic headroom much larger (gentle peak 72 → 45 %) |
+
+## Fast teleop (2026-11-08, with the user)
+
+See `sim/docs/FAST_TELEOP_FINDINGS.md`.
+
+| # | Decision | Why |
+|---|---|---|
+| F1 | 12.0 V bench supply (`supply_voltage_v`), sized for ~20 A | User's choice: plugged-in supply, current not limited. 12 V gives +8 % torque and speed over the 11.1 V datasheet point while staying below the 12.6 V maximum; ~20 A = all six servos stalled |
+| F2 | Torque governor (`so101sim/governor.py`) instead of a fixed profile | A fixed profile has to be set for the worst pose and servo; the governor predicts torque with the dynamics model every tick. 18 % faster clicks, lower peaks, no trips even with +40 % mass / 150 g unknown payload or the servo loop 4× stiffer or softer |
+| F3 | Teleop defaults to FAST (governor, 0.25 m/s keys, 0.8 m/s clicks); `G` toggles GENTLE | User wants fast teleop; at 0.25 m/s the governor tracks to 16 mm mean vs 37 mm (112 mm worst) with the gentle profile |
+| F4 | Click-to-move and Home travel a straight line, paced by the measured arm | The old joint-space jump drove the gripper into the table from a low pose (1.7 s at 100 % torque, stuck 111 mm short) |
+| F5 | Smooth reference (critically damped, 35 rad/s), goals interpolated between frames, no velocity feed-forward | Bang-bang commands, frame-rate stop-and-go and stepped feed-forward each rang the lightly damped servo loop (100 % spikes); 50 rad/s rings the wrist |
+| F6 | Load-aware IK available, tilt cone **default 0°** (`[` / `]`), ramped to 0° below 10 cm | User's choice, for dependability. Data agrees: 15° saves 8 % shoulder holding torque on average (45 % max) but almost only below 10 cm, where grasps need straight-down fingers; it doesn't lower the worst case |
+| F7 | Don't flip wrist roll by 180° for load | Twin roll is inside the camera-safe range for only 23 % of rolls and saves ≤ 4 %; it would flip the wrist view |
+| F8 | Teleop panel shows each joint's predicted torque (tick = overload threshold) and heat | Same numbers the governor uses; on the real arm compare them with present current (register 69) |
+

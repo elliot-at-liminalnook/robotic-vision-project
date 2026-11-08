@@ -23,6 +23,12 @@ Payloads (at the gripper tip): 0, 30 g (the test cube) and 100 g.
    error), because the real HX stiffness is unmeasured; droop depends on it,
    torque mostly doesn't.
 
+Supply: the datasheet's 11.1 V (ServoSpec default; fast_teleop_study.py uses
+the 12 V bench supply). Joint damping is zeroed when the servo model drives the
+joints (the motor's losses are in its torque-speed line; upstream's damping
+stood in for them in the ideal-actuator model; counting both halved the top
+speed in the first version of this study).
+
 Uses MuJoCo C (the same physics model Newton's SolverMuJoCo runs), so the
 whole study takes minutes on a laptop.
 
@@ -46,7 +52,7 @@ from so101sim import JOINTS, SlewLimiter  # noqa: E402
 from so101sim.servo import ProfileLimiter  # noqa: E402
 from so101sim.config import MODEL_DIR, load_wrist_mount, wrist_roll_range  # noqa: E402
 from so101sim.ik import ArmIK  # noqa: E402
-from so101sim.servo_model import ServoBank, ServoSpec  # noqa: E402
+from so101sim.servo_model import ServoBank, ServoSpec, zero_joint_damping  # noqa: E402
 
 OUT = SIM / "out" / "servo_study"
 DOCS = SIM / "docs"
@@ -220,6 +226,7 @@ def run_task(task, variant, sat_deg, payload, parts, record=False, profile="max"
     m, d = load_model()
     set_variant(m, variant, parts)
     to_torque_actuators(m)
+    zero_joint_damping(m, JOINTS)      # motor losses are in the servo's torque-speed line (servo_model doc)
     mujoco.mj_setConst(m, d)
     qa, dof = qadr(m)
     act = np.array([m.actuator(n).id for n in JOINTS])

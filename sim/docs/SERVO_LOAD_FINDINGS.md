@@ -3,6 +3,13 @@
 Question: the wrist camera assembly (bracket + holder + Camera Module 3 + ESP32-P4) adds **46 g** about 72 mm
 out from the gripper's centreline. Do the follower's **HX-30HM** servos cope?
 
+> **Correction (2026-11-08, second run).** The first version of this study double-counted the motor's
+> losses: upstream's joint damping (0.6 N·m·s/rad, fitted for an ideal position actuator, where it stands in
+> for the motor) was left on while the servo model added back-EMF as well, which halved the arm's top speed.
+> The servo model now drives joints with zero joint damping and has a derivative term (the HX's D gain). The
+> static results are unchanged. The dynamic numbers below are from the corrected run: the gentle profile has
+> far more headroom than first reported, and every pick succeeds. The conclusions stand.
+
 **Short answer: yes, with large margins.** The camera costs about 4–5 points of stall torque at the shoulder
 and adds 0.3–2 mm of droop. Motion settings (speed, acceleration, grip torque) and the power supply matter far
 more than the camera's mass.
@@ -16,7 +23,7 @@ Raw numbers: `sim/out/servo_study/report.json`.
   - stall 2.94 N·m @ 11.1 V; no-load speed 5.51 rad/s; stall current 3 A;
   - continuous load recommended at 1/5–1/3 of stall;
   - overload protection (on by default): above **80 % for 2 s → output capped at 20 %**;
-  - position loop P = 32, I = 0, so the joint must droop to hold a load.
+  - position loop P = 32, D = 32, I = 0, so the joint must droop to hold a load.
 - **Static (robust):** gravity + payload holding torque per joint over the reachable workspace, at five wrist
   rolls. This depends only on masses and geometry.
 - **Dynamic:** torque-controlled joints with a realistic servo model (`so101sim/servo_model.py`): voltage
@@ -45,18 +52,20 @@ Raw numbers: `sim/out/servo_study/report.json`.
   80 % overload trigger.
 - **Wrist roll:** the off-centre camera adds about 0.03 N·m, roughly 1 % of stall.
 
-**2. Moving at the servo's full no-load speed saturates the arm, camera or not.**
-- **Peaks:** commanding joints at 5.51 rad/s (the no-load speed, unreachable under load) drives the shoulder and
-  elbow to 100 % of stall in every case, including with no camera.
-- **Lag:** the arm trails its target by up to 85–340 mm.
-- **Current:** total peaks reach 10–12 A.
+**2. Moving at the servo's full no-load speed with no acceleration limit saturates the arm, camera or not.**
+- **Peaks:** commanding joints at 5.51 rad/s with unlimited acceleration drives the shoulder and elbow to 100 %
+  of stall in every case, including with no camera.
+- **Lag:** the arm trails its target by up to 160–180 mm.
+- **Current:** total peaks reach 12 A.
 - **The fix is the motion profile**, not the mass. At half speed with 8 rad/s² acceleration:
 
 | sweep task (2° stiffness) | peak shoulder | max tip lag | peak / mean current |
 |---|---|---|---|
-| max speed, camera | 100 % | 327 mm | 10.4 / 3.2 A |
-| **gentle, camera** | **72 %** (brief, < 80 % trip) | **38 mm** | **4.0 / 2.4 A** |
-| gentle, no camera | 68 % | 37 mm | 3.9 / 2.2 A |
+| max speed, camera | 100 % | 180 mm | 12.2 / 2.7 A |
+| **gentle, camera** | **45 %** | **9 mm** | **2.8 / 1.9 A** |
+| gentle, no camera | 40 % | 8.5 mm | 2.6 / 1.6 A |
+
+  The gentle profile leaves a lot unused; [FAST_TELEOP_FINDINGS.md](FAST_TELEOP_FINDINGS.md) uses it.
 
 **3. Overload trips came from the gripper, not the arm.**
 - **Cause:** squeezing at full stall for over 2 s trips the gripper's protection, which caps it at 20 %. It
@@ -67,8 +76,8 @@ Raw numbers: `sim/out/servo_study/report.json`.
 **4. Droop.**
 - **How much:** at the stretched-out hold, the camera adds about 0.8 mm (4.1 → 4.9 mm at 2° stiffness; 8.9 →
   10.8 mm at 5°).
-- **Why it matters:** droop, not torque, is what would hurt grasp accuracy. In one run (max speed, softest servo,
-  camera) a pre-planned pick missed. With the gentle profile all picks succeeded.
+- **Why it matters:** droop, not torque, is what would hurt grasp accuracy. All picks succeeded in the
+  corrected run (in the first run, one max-speed pick with the softest servo missed).
 
 ## Recommendations (applied ones marked ✅)
 
@@ -78,9 +87,10 @@ Raw numbers: `sim/out/servo_study/report.json`.
 2. ✅ **Limit gripper torque to 50 %** (register 16 = 500) for less heat and squeeze. The sim gripper actuator
    now uses ±1.47 N·m. Whether the overload threshold is relative to this limit is unverified; the grasp works
    either way.
-3. **Power supply: plan for at least 10 A at 12 V**, or keep the gentle profile. With it, peaks stay around 4 A for
-   arm moves, and 8 A when the gripper is also squeezing. Hiwonder's kit supply is 12 V 5 A, which is fine for
-   gentle motion and too small for full-speed moves.
+3. ✅ **Power supply: 12 V bench supply** (chosen; `supply_voltage_v` in `config/servos.toml`). Size it for
+   ~20 A (all six servos stalled). In practice: gentle moves peak ~3 A, fast teleop ~5–6 A, ~6 A with the
+   gripper squeezing, uncontrolled full speed ~12 A. Hiwonder's 12 V 5 A kit supply would cover gentle motion
+   only.
 4. **Keep the board on the wrist.** Moving the ESP32-P4 off the wrist saves 12 g, which is about 1 point of stall
    torque and 0.2 mm of droop. Not worth an FFC across two joints.
 5. **Measure on the real servos:**
@@ -88,13 +98,16 @@ Raw numbers: `sim/out/servo_study/report.json`.
    - whether overload protection is relative to the torque limit;
    - temperature after a 10-minute hold at far reach.
 
-   Then update `ServoSpec.sat_error_deg` and rerun the study.
+   - a step response (overshoot, ringing), which gives the derivative term.
+
+   Then update `ServoSpec.sat_error_deg` / `d_time_s` and rerun the study.
 6. **If droop matters for precision:** close the loop on vision (the wrist camera sees the jaws and object), or
    set a small integral gain (register 23, default 0) after testing for oscillation.
 
 ## Caveats
 
-- Same physics model as the main sim (upstream joint damping/friction/armature, not yet fitted to HX servos).
+- Same physics model as the main sim (upstream friction/armature, not yet fitted to HX servos). Joint damping
+  is zero under the servo model (its losses are in the torque–speed line).
 - The motor model is an ideal DC motor. It ignores supply sag under current, which would cut torque further at
   high current (one more reason for the gentle profile).
 - Thermal behaviour is judged only against the manual's continuous-load rule of thumb; temperature isn't

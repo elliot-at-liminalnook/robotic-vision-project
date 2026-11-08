@@ -12,7 +12,7 @@ reproducible from this script:
 2. Finger pads. A thin box on each jaw's inner face, fitted to the measured
    jaw surface, with higher friction and torsional friction (condim 4), so
    grasp contact is stable and its friction is tunable in one place.
-3. Actuators. Torque limit = HX-30HM stall torque (config/servos.toml). Gains
+3. Actuators. Torque limit = HX-30HM stall torque at the supply voltage (config/servos.toml). Gains
    and joint damping/friction/armature stay upstream's STS3215 values (same
    1:345 gear ratio, near-identical speed).
 4. Wrist camera. A <camera> on the gripper body (pose from
@@ -36,7 +36,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "sim"))
-from so101sim.config import load_wrist_mount, look_at_axes, resolve_camera_entry  # noqa: E402  (shared with the runtime)
+from so101sim.config import load_wrist_mount, look_at_axes, resolve_camera_entry, servo_limits  # noqa: E402  (shared with the runtime)
 UPSTREAM = ROOT / "third_party/SO-ARM100/Simulation/SO101"
 SIM = ROOT / "sim"
 OUT = SIM / "model"
@@ -332,8 +332,9 @@ def main() -> int:
                 "friction": PAD["friction"], "condim": PAD["condim"], "rgba": "0.9 0.3 0.2 1"}))
             report.append(f"{prefix}_{k}: land x = {x_face * 1000:+.2f} mm, z {z_lo * 1000:.1f}..{z_hi * 1000:.1f} mm")
 
-    # 3. Actuator torque limit = HX-30HM stall torque.
-    tl = servos["follower"]["torque_limit_nm"]
+    # 3. Actuator torque limit = HX-30HM stall torque at the supply voltage.
+    lim_cfg = servo_limits()
+    tl = round(lim_cfg["stall_torque_nm"], 3)
     for d in root.iter("default"):
         if d.get("class") == "sts3215":
             d.set("class", "hx30hm")
@@ -342,11 +343,12 @@ def main() -> int:
     for el in root.iter():
         if el.get("class") == "sts3215":
             el.set("class", "hx30hm")
-    gl = servos["follower"]["gripper_torque_limit_nm"]
+    gl = round(lim_cfg["gripper_torque_nm"], 3)
     for act in root.find("actuator"):
         lim = gl if act.get("name") == "gripper" else tl
         act.set("forcerange", f"{-lim} {lim}")
-    report.append(f"actuators: forcerange +/-{tl} N.m (HX-30HM stall); gripper +/-{gl} N.m (torque-limit register)")
+    report.append(f"actuators: forcerange +/-{tl} N.m (HX-30HM stall at {lim_cfg['supply_voltage_v']} V); "
+                  f"gripper +/-{gl} N.m (torque-limit register)")
 
     # 4. Wrist camera on the gripper body.
     def cam_element(name, spec):

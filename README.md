@@ -15,7 +15,7 @@ to use components we already have, and running the arms in simulation.
 | `firmware/components/` | Vendored IMX708 camera driver (Apache-2.0) used by the firmware | Carefully |
 | `hardware/camera_mount/` | Single Camera Module 3 holder (from the stereo V9 beam, reinforced): STEP/STL + CadQuery build | Yes |
 | `hardware/wrist_mount/` | Wrist bracket + camera placement study (gripper +y side, lens between the jaw tips) | Yes |
-| `sim/` | Simulation (Newton/MuJoCo Warp + MuJoCo): follower with the mounted wrist camera, workcell, 3 cameras, keyboard/mouse **teleop**, pick demo, vision check. See `sim/README.md` | Yes (not `sim/model/`, which is generated) |
+| `sim/` | Simulation (Newton/MuJoCo Warp + MuJoCo): follower with the mounted wrist camera, workcell, 3 cameras, keyboard/mouse **teleop** (fast: torque governor; optional load-aware IK), pick demo, vision check, servo load + fast-teleop studies. See `sim/README.md` | Yes (not `sim/model/`, which is generated) |
 | `scripts/` | `sync_so_arm100.sh`: re-sync the upstream mirror | |
 
 Keep `third_party/` and `docs/datasheets/` pristine so we can always diff our
