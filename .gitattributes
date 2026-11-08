@@ -1,0 +1,9 @@
+# Large binary CAD / mesh / document files are stored with Git LFS
+*.stl  filter=lfs diff=lfs merge=lfs -text
+*.STL  filter=lfs diff=lfs merge=lfs -text
+*.step filter=lfs diff=lfs merge=lfs -text
+*.STEP filter=lfs diff=lfs merge=lfs -text
+*.stp  filter=lfs diff=lfs merge=lfs -text
+*.3mf  filter=lfs diff=lfs merge=lfs -text
+*.pdf  filter=lfs diff=lfs merge=lfs -text
+*.3dm  filter=lfs diff=lfs merge=lfs -text

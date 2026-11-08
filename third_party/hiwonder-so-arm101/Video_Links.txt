@@ -1,0 +1,23 @@
+
+2.2.2 Miniconda Windows Environment Setup: https://youtu.be/EakY-0QjZiU
+2.2.3 Miniconda Ubuntu Installation: https://youtu.be/BK0OerjHF4o
+2.2.4 Miniconda Environment Configurationv: https://youtu.be/VVItCaKXOG0
+
+3.1.1 Leader Arm Assembly: https://youtu.be/eP0pN5-AD9k
+3.1.2 Follower Arm Assembly: https://youtu.be/-pcWH1APvew
+3.2 Camera Installation: https://youtu.be/mAhBwFt__CQ
+3.3 Circuit Connection: https://youtu.be/1q6qAIjLyoQ
+3.5.1 Follower Arm ID Setting: https://youtu.be/alwucevpiCQ
+3.5.2 Leader Arm ID Setting: https://youtu.be/3n-g9WUL9KQ
+
+4.1.1 Follower Arm Calibration: https://youtu.be/G26y6T_UDi0
+4.1.2 Leader Arm Calibration: https://youtu.be/00QJ_KSOQ5U
+4.2 Remote Control Operation without Camera: https://youtu.be/LQQJsJouuck
+4.3 Remote Control Operation with Camera: https://youtu.be/vbKQ7RpDNiE
+
+If you encounter any issues with the servo assembly dimensions or need more details about the servo installation, please refer to the 3D video below:
+30HM Obligue U+Bottom Bracket Assembly: https://youtu.be/279003bhuhM
+30HM Obligue U+Side Bracket Assembly: https://youtu.be/1NKoG5OG9Hg
+30HM Straight U+Bottom Bracket Assembly: https://youtu.be/QbdKL7coO0U
+30HM Straight U+Side Bracket Assembly: https://youtu.be/9Cw9Lwd0-ZA
+

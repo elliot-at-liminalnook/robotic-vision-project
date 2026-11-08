@@ -1,0 +1,58 @@
+diff -r -u -x __pycache__ upstream_lerobot_882c80d/src/lerobot/motors/motors_bus.py hiwonder_lerobot_x/lerobot/src/lerobot/motors/motors_bus.py
+--- upstream_lerobot_882c80d/src/lerobot/motors/motors_bus.py	2026-11-08 09:46:35
++++ hiwonder_lerobot_x/lerobot/src/lerobot/motors/motors_bus.py	2025-09-02 15:12:18
+@@ -1056,7 +1056,7 @@
+         motors: str | list[str] | None = None,
+         *,
+         normalize: bool = True,
+-        num_retry: int = 0,
++        num_retry: int = 1,
+     ) -> dict[str, Value]:
+         """Read the same register from several motors at once.
+ 
+@@ -1104,7 +1104,7 @@
+         length: int,
+         motor_ids: list[int],
+         *,
+-        num_retry: int = 0,
++        num_retry: int = 1,
+         raise_on_error: bool = True,
+         err_msg: str = "",
+     ) -> tuple[dict[int, int], int]:
+@@ -1113,7 +1113,7 @@
+             comm = self.sync_reader.txRxPacket()
+             if self._is_comm_success(comm):
+                 break
+-            logger.debug(
++            logger.info(
+                 f"Failed to sync read @{addr=} ({length=}) on {motor_ids=} ({n_try=}): "
+                 + self.packet_handler.getTxRxResult(comm)
+             )
+@@ -1151,7 +1151,7 @@
+         values: Value | dict[str, Value],
+         *,
+         normalize: bool = True,
+-        num_retry: int = 0,
++        num_retry: int = 1,
+     ) -> None:
+         """Write the same register on multiple motors.
+ 
+@@ -1192,7 +1192,7 @@
+         addr: int,
+         length: int,
+         ids_values: dict[int, int],
+-        num_retry: int = 0,
++        num_retry: int = 1,
+         raise_on_error: bool = True,
+         err_msg: str = "",
+     ) -> int:
+@@ -1201,7 +1201,7 @@
+             comm = self.sync_writer.txPacket()
+             if self._is_comm_success(comm):
+                 break
+-            logger.debug(
++            logger.info(
+                 f"Failed to sync write @{addr=} ({length=}) with {ids_values=} ({n_try=}): "
+                 + self.packet_handler.getTxRxResult(comm)
+             )
+Only in hiwonder_lerobot_x/lerobot/src/lerobot/robots/so101_follower: so101.mdx
