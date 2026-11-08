@@ -9,6 +9,7 @@ Decisions as of 2026-11-08. Update this file when a decision changes.
 | Arms | Fully custom leader + follower, printed on our own printer (Bambu). Upstream TheRobotStudio and Hiwonder files are the starting point only. |
 | Servos | Hiwonder **HX-10HM / HX-30HM** bus servos (to buy). Feetech-STS-compatible protocol, so stock LeRobot `sts3215` drives them (see `third_party/hiwonder-so-arm101/README.md`). |
 | Servo driver | Hiwonder BusLinker V3.0 or Waveshare Bus Servo Adapter (A). Either one is USB to half-duplex TTL at 1 Mbps. |
+| Servo power | **12V supply** (HX servos: rated 11.1V, range 9–12.6V; Hiwonder kit ships 12V 5A). Waveshare adapter passes input through unregulated (wiki: 9–12.6V input). Stall is 3A per servo, so size the supply for simultaneous moves. |
 | Cameras | 2× Raspberry Pi **Camera Module 3 Wide** (IMX708) in **two fixed views**, nothing on the arm. |
 | Camera boards | 2× Waveshare **ESP32-P4-WIFI6-M**, one per camera. |
 | Camera transport | **USB UVC webcam** (decided 2026-11-08): new firmware `firmware/p4-uvc-camera/`, so each board appears to the Linux PC as a standard webcam. Wi-Fi Camera Lab firmware remains the fallback. |
@@ -88,8 +89,9 @@ Options:
 - [ ] Make the MX1.25-4P → USB-A male cable (pinout in `firmware/p4-uvc-camera/README.md`), flash, verify UVC on Linux.
 - [ ] Lock exposure / white balance / focus for dataset recording (UVC controls or fixed firmware settings).
 
-- [ ] HX-10HM / HX-30HM datasheets: torque, speed, voltage, dimensions, horn spline. Needed for CAD and sim actuator params.
-- [ ] HX servo memory table (Hiwonder protocol doc references an "HX-35HM memory table" not in their Drive folder).
+- [x] HX-10HM / HX-30HM docs, register table, servo STEP: `docs/datasheets/hiwonder-hx-servos/`.
+- [ ] Print upstream `STL/Gauges/Gauge_0.STL` and test-fit an HX servo. If it fits, upstream SO-101 STLs are usable as-is.
+- [ ] Sim actuator params for HX servos (upstream MJCF uses STS3215 values from Open Duck Mini).
 - [ ] Identify Hiwonder 3MF/3DM parts (names are generic `Document_N`) and map them to SO-101 links.
 - [ ] Fixed camera mount design (camera + ESP32-P4 board, 150 mm ribbon). Reuse ideas from the
       stereo enclosure prototypes in `~/Projects/esp32-stereo-camera/outputs/stereo-prototype-v*`.

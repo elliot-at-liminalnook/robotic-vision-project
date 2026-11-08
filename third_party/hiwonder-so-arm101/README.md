@@ -25,9 +25,11 @@ Hiwonder's kit replaces the Feetech STS3215 servos with its own
   `software/hiwonder-lerobot-882c80d.patch`: sync read/write `num_retry` 0 → 1,
   failed-sync log messages raised from debug to info, and an added `so101.mdx` doc.
   The retry suggests the HX servos occasionally drop sync packets.
-- **Print files are different from upstream.** `print/*.3mf` (Bambu Studio projects, 2 plates
-  each) and `cad/*.3dm` (Rhino) are Hiwonder's geometry for the HX servos. The upstream
-  `../SO-ARM100/STL` files are sized for STS3215 and may not fit.
+- **Print files are Hiwonder's own.** `print/*.3mf` (Bambu Studio projects, 2 plates each) and
+  `cad/*.3dm` (Rhino) are Hiwonder's arm geometry. However, the HX servos share the STS3215's outer
+  body (45.2 × 24.7 × 35 mm per both datasheets; 45.23 × 24.73 measured from the HX STEP), so the
+  upstream `../SO-ARM100/STL` parts *may* fit. Horn spline and hole positions are unverified;
+  test with `../SO-ARM100/STL/Gauges/Gauge_0.STL`. Servo docs: `docs/datasheets/hiwonder-hx-servos/`.
 - **No HX-specific simulation model.** `urdf_model_download_link.txt` just points to
   upstream `TheRobotStudio/SO-ARM100/Simulation/SO101` (STS3215 geometry and motor params).
 

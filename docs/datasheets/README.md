@@ -81,6 +81,52 @@ From the Waveshare pages:
 - **USB-serial chip:** CH343, default 1 Mbps.
 - **Jumper:** position A = UART, B = USB.
 
+## Hiwonder HX-10HM / HX-30HM servos: `hiwonder-hx-servos/`
+
+Our planned servos. Hiwonder's SO-ARM101 uses 6× HX-10HM (1:147) on the **leader** and
+6× HX-30HM (1:345) on the **follower**. Sources: the per-servo Drive folders linked from
+Hiwonder's [bus servo learn page](https://www.hiwonder.com.cn/store/learn/43.html)
+(Drive `1yaZ8iRYgWncdHPopioo7OYuHoGhrMxCi`), and the product pages
+[HX-10HM](https://www.hiwonder.com/products/hx-10hm) ($17.99) and [HX-30HM](https://www.hiwonder.com/products/hx-30hm) ($19.99) as of 2026-11-08.
+
+| File | What | Drive file id / source |
+|---|---|---|
+| `Hiwonder_HX-10HM_Bus_Servo_User_Manual.pdf` | User manual (15 pp), specs in §1.2 | `1r8-5q75AFSIZkm-RlNu23Tm2-OgPBwWD` |
+| `Hiwonder_HX-30HM_Bus_Servo_User_Manual.pdf` | User manual (15 pp) | `1emO0-YrLZDXkTnQLWU82sqV6oQ5JpbP9` |
+| `Hiwonder_HX-30HM_Register_List_and_Parameters.xlsx` | Register map V3.7 (the "memory table" the protocol doc refers to) | `1IUT5fimFYT1l70BRHpmrZHuxPOGX1jWH` |
+| `cad/HX-30HM_10HM.stp` | Servo STEP. Same file in both servos' folders, because they share one body | `1LS3cizvNKFOIIMLmUDeMT0-VcW8TMGUd` |
+| `cad/Servo_Bracket_and_Horn.stp` | Brackets + horn STEP | `1_G9rTeujNCA0BhDlBWFsojOa9U4fKScV` |
+| `drawings/HX-30HM_HX-10HM_dimension_drawing.jpg` | Dimension drawing (product pages) | Hiwonder Shopify CDN |
+| `drawings/HX-30HM_bracket_installation_screws.jpg` | Bracket/screw assembly diagram | Hiwonder Shopify CDN |
+| `drawings/HX-30HM_packing_list.jpg` | Packing list, horn, screws | Hiwonder Shopify CDN |
+
+### Key specs (quoted; [M] = servo manual §1.2, [SO] = SO-ARM101 manual §1.4)
+
+| | HX-10HM | HX-30HM | STS3215-C001 (for comparison) |
+|---|---|---|---|
+| Voltage | **rated 11.1V, range 9–12.6V** [M] | same | 4–7.4V |
+| Stall torque | 10 kg·cm @ 11.1V | 30 kg·cm @ 11.1V | 16.5 @6V / 19.5 @7.4V |
+| No-load speed | 0.10 s/60° @ 11.1V | 0.19 s/60° @ 11.1V | 0.238 s/60° @6V |
+| Gear ratio | 1:147 [SO] | 1:345 [SO] | 1/345 |
+| Encoder | 12-bit magnetic, 0–4095 = 0–360° | same; multi-turn ±~7.5 turns (lost at power-off) | 12-bit |
+| Stall / no-load current | 3A / 100 mA | 3A / 100 mA (xlsx says 150 mA) | 2–2.5A / 130–150 mA |
+| Weight | 52 g | 52 g | 55 g |
+| Size | 45.2 × 24.7 × 35 mm | same | 45.2 × 24.7 × 35 mm |
+| Connector | 5264-3P, 20 cm; GND / VIN / SIG | same | 5264-3P; GND / Vcc / Signal |
+| Default baud | 1 Mbps (register 6: 0–7 = 1M…38400) | same | 1 Mbps |
+
+- **Same body as the STS3215, by the numbers.** Measured from `cad/HX-30HM_10HM.stp`, the main body is
+  45.23 × 24.73 mm, against 45.4 × 24.8 mm for upstream's `sts3215_03a_v1.stl`. The horn spline count isn't
+  documented, and the horn/mounting-hole positions haven't been checked to 0.1 mm.
+  **Test fit with upstream `STL/Gauges/Gauge_0.STL` before printing arms.**
+- **Registers follow the Feetech STS layout:** 5 ID, 6 baud, 33 mode, 40 torque enable, 41 accel, 42 goal position,
+  46 speed, 55 lock, 56 present position, 62 voltage, 63 temp, 69 current. Current is in **1 mA** units (Feetech: 6.5 mA).
+- **Inconsistencies in Hiwonder's docs:**
+  - The manual intros say 115200 baud, but the spec tables say 1 Mbps.
+  - The xlsx default voltage limits (8.0V/4.0V) don't fit a 9–12.6V servo.
+  - The xlsx gives the overcurrent default as 6000 but its maximum as 511.
+- **Not documented anywhere official:** rated torque, idle current, horn spline count.
+
 ## Raspberry Pi Camera Module 3 Wide: `raspberry-pi-camera-module-3/`
 
 Our fixed scene cameras (PiShop SKU 527-1, MPN SC1224; IMX708 sensor).
