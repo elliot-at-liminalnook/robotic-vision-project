@@ -69,3 +69,14 @@ Newest at the bottom. Dates are 2026.
 | T2 | Cartesian control by default (IK, fingers-down best effort) + joint mode | Cartesian is what you want for picking; joint mode for recovery and reaching odd poses |
 | T3 | Click-to-move: ray from a fixed camera pixel onto the table plane | Uses the calibrated camera model directly; works in both fixed views |
 | T4 | `--selftest` drives the window headless with synthetic events | Verifiable without a screen (CI, the VM) |
+
+## Servo load / weight (2026-11-08)
+
+| # | Decision | Why |
+|---|---|---|
+| L1 | Keep the wrist camera assembly as designed (46 g, board on the wrist) | Worst-case static holding torque +4–5 % of stall (shoulder 28 → 32 % with 30 g payload); far from the 80 % overload trigger; droop +0.3–2 mm |
+| L2 | Realistic servo model (`servo_model.py`) with unknown stiffness swept (0.5 / 2 / 5 deg) | HX P-gain units are undocumented; conclusions must not hinge on a guess |
+| L3 | Control software commands a gentle profile: 2.75 rad/s, 8 rad/s² | Commanding the no-load speed saturates every joint even without the camera (100 % peaks, 85–340 mm lag, 10–12 A); gentle: ≤ 75 % peaks, ≤ 50 mm lag, ~4 A |
+| L4 | Gripper torque limit 50 % (register 16 = 500) | The only overload trips were the gripper squeezing at stall for > 2 s; a lower limit means less heat and squeeze, and the grasp works even after a trip |
+| L5 | Power supply ≥ 10 A at 12 V if full-speed motion is ever used; 5 A OK with the gentle profile | Simulated current peaks |
+| L6 | Measure real servo stiffness, overload semantics, temperature before trusting droop numbers | Model assumptions (see SERVO_LOAD_FINDINGS.md) |

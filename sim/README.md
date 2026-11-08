@@ -86,6 +86,19 @@ Newton's ray-traced renders have flatter lighting, but the geometry agrees to ab
 The MuJoCo Warp path is the GPU code running on Warp's CPU device (about 0.02× real time). Its speed on the GPU
 PC is not measured yet.
 
+## Servo load study: can the HX-30HM carry the wrist camera?
+
+**Yes, with large margins.** See [docs/SERVO_LOAD_FINDINGS.md](docs/SERVO_LOAD_FINDINGS.md), plus the full tables
+in [docs/SERVO_LOAD_STUDY.md](docs/SERVO_LOAD_STUDY.md) (`scripts/servo_load_study.py`, ~15 min).
+- **Static load:** the 46 g mount raises worst-case holding torque by about 4–5 % of stall (shoulder: 28 → 32 %
+  with a 30 g payload). It never reaches the 80 % overload trigger.
+- **Real limits:** motion speed, grip torque and the power supply matter more than the camera. `teleop.py` now
+  commands a gentle trapezoidal profile (2.75 rad/s, 8 rad/s²), and the sim gripper is limited to 50 % torque.
+- **Servo model:** `so101sim/servo_model.py` is a realistic torque-controlled HX-30HM (voltage saturation,
+  back-EMF, overload protection, current) for studies like this.
+
+![static workspace](docs/servo_static_workspace.png)
+
 ## What changed vs upstream (tools/build_model.py)
 
 Upstream: `third_party/SO-ARM100/Simulation/SO101/so101_new_calib.xml`.
@@ -97,7 +110,7 @@ Upstream: `third_party/SO-ARM100/Simulation/SO101/so101_new_calib.xml`.
 2. **Finger pads.** The jaws' inner faces are stepped: flat lands at x = ∓7.9 / 9.9 / 11.6–11.9 mm, measured by
    ray casting. Each land gets a thin box pad, 0.5 mm proud, with friction 1.0 and torsional friction. That
    friction assumes rubber/TPU grip pads on the real jaws too; bare PLA is ~0.3–0.4.
-3. **Actuators.** Torque limit ±2.94 N·m (HX-30HM stall). Gains and joint damping/friction/armature stay
+3. **Actuators.** Torque limit ±2.94 N·m (HX-30HM stall); gripper ±1.47 N·m (50 % torque-limit register). Gains and joint damping/friction/armature stay
    upstream's STS3215 values (same 1:345 ratio, near-identical speed) until fitted to real servos.
 4. **Wrist camera assembly.** The bracket, camera holder, Camera Module 3 and ESP32-P4 board from
    `hardware/wrist_mount` are a welded child body of the gripper:

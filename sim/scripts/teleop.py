@@ -20,7 +20,8 @@ Joint mode (toggle J): 1-6 select a joint; Left/Right or the wheel move it.
   H home   Backspace reset scene   P pause physics   F12 screenshot   Esc quit
 
 Always enforced: joint limits, the camera-safe wrist roll range (see
-hardware/wrist_mount/place_camera.py), the servo speed limit (SlewLimiter) and
+hardware/wrist_mount/place_camera.py), a gentle speed/acceleration profile
+(config/servos.toml; see sim/docs/SERVO_LOAD_FINDINGS.md) and
 a minimum tip height above the table. Unreachable targets are refused.
 """
 from __future__ import annotations
@@ -35,7 +36,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from so101sim import JOINTS, SlewLimiter, load_backend  # noqa: E402
+from so101sim import JOINTS, load_backend  # noqa: E402
+from so101sim.config import load_servos  # noqa: E402
+from so101sim.servo import ProfileLimiter  # noqa: E402
 from so101sim.config import look_at_axes, wrist_roll_range  # noqa: E402
 from so101sim.ik import ArmIK  # noqa: E402
 
@@ -75,7 +78,8 @@ class Teleop:
         q, _ = self.ik.solve(HOME_TIP, [0, 0, 0, 0, self._roll_default(), GRIP_OPEN])
         self.sim.reset(q)
         self.goal = q.copy()
-        self.slew = SlewLimiter(q)
+        f = load_servos()["follower"]   # gentle trapezoidal profile (see SERVO_LOAD_FINDINGS.md)
+        self.slew = ProfileLimiter(q, f["profile_speed_rad_s"], f["profile_accel_rad_s2"])
         self.target = np.array(HOME_TIP, float)
         self.roll = q[4]
         self.grip = GRIP_OPEN

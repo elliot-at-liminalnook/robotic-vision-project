@@ -103,4 +103,7 @@ Options:
 - [ ] Print + test: camera holder snap fit, bracket fit on the gripper, wobble; design the ESP32-P4 cradle on the holder's back.
 - [ ] Fixed scene-camera stand for the holder (2× M3 holes), then measure its pose into `cameras.toml`.
 - [ ] Real-robot backend for `teleop.py` (HX servos over the bus, `ServoMap` ticks↔rad, UVC cameras).
+- [ ] On the real HX-30HM: measure position error under a known load (stiffness), check whether overload protection is relative to the torque-limit register, and log temperature after a 10-min far-reach hold; update `ServoSpec` and rerun `servo_load_study.py`.
+- [ ] Set servo registers: goal speed/acceleration to match the gentle profile; gripper torque limit 500.
+- [ ] Power supply: ≥ 10 A at 12 V if full-speed motion is ever wanted (the kit's 5 A is fine for the gentle profile).
 - [ ] Power: servo supply voltage for HX servos; BusLinker vs Waveshare board.

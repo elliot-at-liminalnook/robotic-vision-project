@@ -342,9 +342,11 @@ def main() -> int:
     for el in root.iter():
         if el.get("class") == "sts3215":
             el.set("class", "hx30hm")
+    gl = servos["follower"]["gripper_torque_limit_nm"]
     for act in root.find("actuator"):
-        act.set("forcerange", f"{-tl} {tl}")
-    report.append(f"actuators: forcerange +/-{tl} N.m (HX-30HM stall)")
+        lim = gl if act.get("name") == "gripper" else tl
+        act.set("forcerange", f"{-lim} {lim}")
+    report.append(f"actuators: forcerange +/-{tl} N.m (HX-30HM stall); gripper +/-{gl} N.m (torque-limit register)")
 
     # 4. Wrist camera on the gripper body.
     def cam_element(name, spec):

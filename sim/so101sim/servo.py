@@ -33,6 +33,32 @@ class ServoMap:
         return np.clip(np.rint(t), 0, self.ticks_per_rev - 1).astype(int)
 
 
+class ProfileLimiter:
+    """Trapezoidal motion profile: speed AND acceleration limited, per joint.
+
+    Like a bus servo's goal-speed + acceleration registers. Decelerates in time
+    to stop at the goal (v <= sqrt(2 a |remaining|)).
+    """
+
+    def __init__(self, initial, max_speed_rad_s: float, max_accel_rad_s2: float):
+        self.max_speed = float(max_speed_rad_s)
+        self.max_accel = float(max_accel_rad_s2)
+        self.current = np.array(initial, float)
+        self.vel = np.zeros_like(self.current)
+
+    def update(self, goal, dt: float) -> np.ndarray:
+        err = np.asarray(goal, float) - self.current
+        v_des = np.sign(err) * np.minimum(self.max_speed, np.sqrt(2 * self.max_accel * np.abs(err)))
+        dv = np.clip(v_des - self.vel, -self.max_accel * dt, self.max_accel * dt)
+        self.vel = self.vel + dv
+        step = self.vel * dt
+        # don't overshoot
+        step = np.where(np.abs(step) > np.abs(err), err, step)
+        self.current = self.current + step
+        self.vel = np.where(np.abs(err) < 1e-6, 0.0, self.vel)
+        return self.current.copy()
+
+
 class SlewLimiter:
     """Moves a commanded position toward the goal at no more than max_speed."""
 

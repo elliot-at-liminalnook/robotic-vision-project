@@ -12,6 +12,17 @@
 torque_limit_nm = 2.94
 max_speed_rad_s = 5.51
 ticks_per_rev = 4096
+# Gripper torque limit (servo register 16 "maximum torque limit" = 500 -> 50 %):
+# less squeeze, less heat. A sustained grip at the limit still trips overload
+# protection after 2 s if the 80 % threshold is relative to this limit (likely,
+# unverified); the sim grasp survives that either way
+# (sim/docs/SERVO_LOAD_FINDINGS.md).
+gripper_torque_limit_nm = 1.47
+# Motion profile the control software commands (trapezoidal, per joint). The
+# servo's no-load speed is not reachable under load; commanding it saturates
+# every joint and the arm lags far behind the target.
+profile_speed_rad_s = 2.75
+profile_accel_rad_s2 = 8.0
 
 # Joint <-> servo mapping. Sim angle 0 = middle of the joint's range (upstream
 # "new calibration"). rad = direction * (ticks - zero_ticks) * 2*pi / 4096.
