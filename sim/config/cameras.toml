@@ -27,18 +27,17 @@ k3 = 0.0
 p1 = 0.0
 p2 = 0.0
 
-# Wrist camera: rides on the follower's gripper body. PLACEHOLDER pose taken from
-# upstream's SO101 wrist camera mount (third_party/.../so101_new_calib_camera.xml)
-# until our Camera Module 3 mount is designed; then use the lens pose from its CAD.
-# pos/look_at/up are in the gripper body frame [m]. look_at = between the jaw tips.
+# Wrist camera: in the single camera holder (hardware/camera_mount) on the
+# wrist bracket (hardware/wrist_mount), on the gripper's +y side, looking at the
+# point between the jaw tips. Its pose (gripper frame) comes from the placement
+# study: hardware/wrist_mount/wrist_mount_pose.json (place_camera.py). Image up =
+# the holder's top band (toward the wrist); match the real sensor's readout with
+# the firmware's hflip/vflip after mounting.
 [cameras.wrist]
-parent_body = "gripper"
+pose_from = "hardware/wrist_mount/wrist_mount_pose.json"
 intrinsics = "cm3_wide_1080p"
 render_width = 640
 render_height = 360
-pos = [0.0025, 0.0734, 0.0066]
-look_at = [-0.0079, -0.0002, -0.0981]
-up = [0.0, 0.0, 1.0]
 
 # Main fixed scene camera: in front of the robot, looking back at the workspace.
 [cameras.scene_front]

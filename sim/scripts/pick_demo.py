@@ -48,10 +48,17 @@ def fixed_pad_face(ik: ArmIK) -> np.ndarray:
     return c + n * ik.m.geom_size[pad][0]
 
 
-def solve_grasp(ik: ArmIK, object_center, width: float, q_seed, dz: float = 0.0):
-    """IK so the object's centre lands width/2 in from the fixed jaw's pad.
+GRASP_CLEARANCE = 0.004   # descend with the fixed jaw this far off the object's face
 
-    The fixed jaw doesn't move; the moving jaw closes the object onto it. The IK
+
+def solve_grasp(ik: ArmIK, object_center, width: float, q_seed, dz: float = 0.0,
+                clearance: float = GRASP_CLEARANCE):
+    """IK so the object's centre lands width/2 + clearance in from the fixed jaw's pad.
+
+    The fixed jaw doesn't move; the moving jaw closes the object onto it,
+    sliding it the last few mm. The clearance keeps the fixed jaw from landing
+    on the object's edge on the way down (with zero clearance, any small error
+    pushes the object before the grasp). The IK
     target is the 'gripperframe' site, so convert: site = point - R @ offset,
     where offset is (pad face + width/2 along the closing axis) - site, in the
     gripper frame. Iterated because R depends on the solution.
@@ -63,7 +70,7 @@ def solve_grasp(ik: ArmIK, object_center, width: float, q_seed, dz: float = 0.0)
     g = ik.gripper
     Rg0, pg0 = ik.d.xmat[g].reshape(3, 3), ik.d.xpos[g]
     site_local = Rg0.T @ (ik.d.site_xpos[ik.site] - pg0)
-    offset = face + np.array([0.5 * width, 0.0, 0.0]) - site_local
+    offset = face + np.array([0.5 * width + clearance, 0.0, 0.0]) - site_local
     offset[2] = 0.0          # keep the tip height as given by dz
     target = np.asarray(object_center, float) + [0.0, 0.0, dz]
     q, err = np.array(q_seed, float), np.inf
@@ -76,10 +83,16 @@ def solve_grasp(ik: ArmIK, object_center, width: float, q_seed, dz: float = 0.0)
 
 
 def square_roll(ik: ArmIK, q: np.ndarray) -> np.ndarray:
-    """Pick wrist_roll so the jaws close along a world axis (cube faces)."""
+    """Pick wrist_roll so the jaws close along a world axis (cube faces).
+
+    Searches only the camera-safe roll range (it spans pi, so every jaw
+    orientation is available; see hardware/wrist_mount/place_camera.py).
+    """
     import mujoco
+    from so101sim.config import wrist_roll_range
+    lo, hi = wrist_roll_range()
     best, best_cost = q[4], np.inf
-    for roll in np.linspace(-np.pi / 2, np.pi / 2, 181):
+    for roll in np.linspace(max(lo, hi - np.pi), hi, 181):
         ik.d.qpos[:6] = q
         ik.d.qpos[4] = roll
         mujoco.mj_forward(ik.m, ik.d)

@@ -1,0 +1,19 @@
+{
+  "solids": 1,
+  "volume_mm3": 28206.2,
+  "mass_g_pla_100pct": 35.0,
+  "overlap_mm3": {
+    "holder": 0.0,
+    "board_envelope": 0.0,
+    "inside_gripper_face_y_lt_24_excluding_key": 0.0
+  },
+  "bbox_mm": [
+    -32.0,
+    36.0,
+    22.0,
+    59.1,
+    -28.0,
+    3.9
+  ],
+  "in_wrist_camera_view_vertices": 0
+}

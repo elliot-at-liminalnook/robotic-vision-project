@@ -1,0 +1,513 @@
+{
+  "frame": "gripper body (sim/model/so101_follower.xml), metres",
+  "holder_rotation": [
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      -0.7124032369112033,
+      -0.7017703527782003
+    ],
+    [
+      0.0,
+      0.7017703527782005,
+      -0.7124032369112033
+    ]
+  ],
+  "holder_origin": [
+    0.002,
+    0.0737194738805602,
+    -0.017163564393976767
+  ],
+  "camera": {
+    "parent_body": "gripper",
+    "pos": [
+      0.002,
+      0.066,
+      -0.025
+    ],
+    "look_at": [
+      0.002,
+      0.0,
+      -0.092
+    ],
+    "up": [
+      0.0,
+      -0.7124032369112033,
+      0.7017703527782005
+    ]
+  },
+  "screws_xz": [
+    [
+      -0.005,
+      -0.02335
+    ],
+    [
+      0.0031,
+      -0.02335
+    ]
+  ],
+  "gripper_face_y": 0.024,
+  "wrist_roll_range_rad": [
+    -2.74385,
+    0.8
+  ],
+  "board_box_holder_frame": [
+    [
+      -0.0105,
+      0.0105
+    ],
+    [
+      -0.054,
+      0.017
+    ],
+    [
+      -0.024,
+      -0.009
+    ]
+  ],
+  "holder_box_holder_frame": [
+    [
+      -0.034,
+      0.034
+    ],
+    [
+      -0.0525,
+      0.033
+    ],
+    [
+      -0.006,
+      0.0158
+    ]
+  ],
+  "masses_kg": {
+    "holder": 0.016,
+    "camera": 0.004,
+    "board": 0.012
+  },
+  "metrics": {
+    "lens_pos_mm": [
+      2.0,
+      66.0,
+      -25.0
+    ],
+    "tips_uv_px": [
+      [
+        354.6,
+        194.6
+      ],
+      [
+        274.0,
+        198.0
+      ],
+      [
+        354.6,
+        194.6
+      ],
+      [
+        199.9,
+        193.6
+      ],
+      [
+        320.0,
+        180.0
+      ]
+    ],
+    "visibility_margin_px": 162.0,
+    "gripper_overlap_points": 0,
+    "table_clearance_mm": 43.9,
+    "self_collision_task_poses": 0.0,
+    "self_collision_full_range_info": 0.0475,
+    "ok": true
+  },
+  "candidates": [
+    {
+      "lens_pos_mm": [
+        2.0,
+        50.0,
+        -5.0
+      ],
+      "tips_uv_px": [
+        [
+          352.2,
+          189.6
+        ],
+        [
+          277.2,
+          191.9
+        ],
+        [
+          352.2,
+          189.6
+        ],
+        [
+          208.1,
+          189.0
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 168.1,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 73.8,
+      "self_collision_task_poses": 0.775,
+      "self_collision_full_range_info": 0.7025,
+      "ok": false
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        50.0,
+        -15.0
+      ],
+      "tips_uv_px": [
+        [
+          355.1,
+          191.5
+        ],
+        [
+          273.4,
+          194.1
+        ],
+        [
+          355.1,
+          191.5
+        ],
+        [
+          198.0,
+          190.7
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 165.9,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 61.5,
+      "self_collision_task_poses": 0.74,
+      "self_collision_full_range_info": 0.55,
+      "ok": false
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        50.0,
+        -25.0
+      ],
+      "tips_uv_px": [
+        [
+          358.4,
+          193.8
+        ],
+        [
+          269.0,
+          197.0
+        ],
+        [
+          358.4,
+          193.8
+        ],
+        [
+          186.4,
+          192.9
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 163.0,
+      "gripper_overlap_points": 8626,
+      "table_clearance_mm": 48.9,
+      "self_collision_task_poses": 0.655,
+      "self_collision_full_range_info": 0.4725,
+      "ok": false
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        58.0,
+        -5.0
+      ],
+      "tips_uv_px": [
+        [
+          351.0,
+          190.3
+        ],
+        [
+          278.7,
+          192.8
+        ],
+        [
+          351.0,
+          190.3
+        ],
+        [
+          212.2,
+          189.6
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 167.2,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 71.0,
+      "self_collision_task_poses": 0.64,
+      "self_collision_full_range_info": 0.465,
+      "ok": false
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        58.0,
+        -15.0
+      ],
+      "tips_uv_px": [
+        [
+          353.6,
+          192.1
+        ],
+        [
+          275.3,
+          195.0
+        ],
+        [
+          353.6,
+          192.1
+        ],
+        [
+          203.3,
+          191.3
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 165.0,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 58.7,
+      "self_collision_task_poses": 0.625,
+      "self_collision_full_range_info": 0.45,
+      "ok": false
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        58.0,
+        -25.0
+      ],
+      "tips_uv_px": [
+        [
+          356.5,
+          194.3
+        ],
+        [
+          271.5,
+          197.7
+        ],
+        [
+          356.5,
+          194.3
+        ],
+        [
+          193.2,
+          193.4
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 162.3,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 46.1,
+      "self_collision_task_poses": 0.5,
+      "self_collision_full_range_info": 0.315,
+      "ok": false
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        66.0,
+        -5.0
+      ],
+      "tips_uv_px": [
+        [
+          349.8,
+          190.8
+        ],
+        [
+          280.3,
+          193.4
+        ],
+        [
+          349.8,
+          190.8
+        ],
+        [
+          216.4,
+          190.1
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 166.6,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 68.6,
+      "self_collision_task_poses": 0.32,
+      "self_collision_full_range_info": 0.2275,
+      "ok": false
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        66.0,
+        -15.0
+      ],
+      "tips_uv_px": [
+        [
+          352.1,
+          192.5
+        ],
+        [
+          277.3,
+          195.5
+        ],
+        [
+          352.1,
+          192.5
+        ],
+        [
+          208.5,
+          191.7
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 164.5,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 56.3,
+      "self_collision_task_poses": 0.12,
+      "self_collision_full_range_info": 0.1275,
+      "ok": false
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        66.0,
+        -25.0
+      ],
+      "tips_uv_px": [
+        [
+          354.6,
+          194.6
+        ],
+        [
+          274.0,
+          198.0
+        ],
+        [
+          354.6,
+          194.6
+        ],
+        [
+          199.9,
+          193.6
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 162.0,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 43.9,
+      "self_collision_task_poses": 0.0,
+      "self_collision_full_range_info": 0.0475,
+      "ok": true
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        66.0,
+        -35.0
+      ],
+      "tips_uv_px": [
+        [
+          357.3,
+          197.0
+        ],
+        [
+          270.3,
+          200.9
+        ],
+        [
+          357.3,
+          197.0
+        ],
+        [
+          190.4,
+          195.8
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 159.1,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 31.3,
+      "self_collision_task_poses": 0.0,
+      "self_collision_full_range_info": 0.0375,
+      "ok": true
+    },
+    {
+      "lens_pos_mm": [
+        2.0,
+        74.0,
+        -25.0
+      ],
+      "tips_uv_px": [
+        [
+          352.7,
+          194.6
+        ],
+        [
+          276.4,
+          198.0
+        ],
+        [
+          352.7,
+          194.6
+        ],
+        [
+          206.3,
+          193.6
+        ],
+        [
+          320.0,
+          180.0
+        ]
+      ],
+      "visibility_margin_px": 162.0,
+      "gripper_overlap_points": 0,
+      "table_clearance_mm": 42.0,
+      "self_collision_task_poses": 0.0,
+      "self_collision_full_range_info": 0.0375,
+      "ok": true
+    }
+  ]
+}

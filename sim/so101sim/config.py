@@ -1,6 +1,7 @@
 """Configuration: paths, camera specs (config/cameras.toml), servos (config/servos.toml)."""
 from __future__ import annotations
 
+import json
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,12 +58,36 @@ class CameraSpec:
         return float(np.degrees(2 * np.arctan(0.5 * i["calib_height"] / i["fy"])))
 
 
+def resolve_camera_entry(c: dict) -> dict:
+    """cameras.toml entry with 'pose_from' replaced by the pose it points to."""
+    if "pose_from" not in c:
+        return c
+    pose = json.loads((ROOT / c["pose_from"]).read_text())["camera"]
+    return {**c, "parent_body": pose["parent_body"], "pos": pose["pos"],
+            "look_at": pose["look_at"], "up": pose["up"]}
+
+
+def load_wrist_mount() -> dict:
+    """The wrist camera mount placement (hardware/wrist_mount/wrist_mount_pose.json)."""
+    return json.loads((ROOT / "hardware/wrist_mount/wrist_mount_pose.json").read_text())
+
+
+def wrist_roll_range() -> tuple[float, float]:
+    """Wrist roll range that keeps the side-mounted camera clear of the arm.
+
+    Spans pi, so every top-down jaw orientation is still reachable.
+    """
+    lo, hi = load_wrist_mount()["wrist_roll_range_rad"]
+    return float(lo), float(hi)
+
+
 def load_cameras(include_disabled: bool = False) -> dict[str, CameraSpec]:
     cfg = _load("cameras.toml")
     out = {}
     for name, c in cfg["cameras"].items():
         if not include_disabled and c.get("enabled", True) is False:
             continue
+        c = resolve_camera_entry(c)
         out[name] = CameraSpec(
             name=name, parent_body=c["parent_body"], pos=tuple(c["pos"]),
             look_at=tuple(c["look_at"]), up=tuple(c["up"]),

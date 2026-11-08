@@ -10,3 +10,4 @@ firmware/**/sdkconfig.old
 sim/.cache/
 sim/out/
 venv/
+hardware/wrist_mount/upstream_mount_stepframe.stl

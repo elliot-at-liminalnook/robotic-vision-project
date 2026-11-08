@@ -38,3 +38,34 @@ Newest at the bottom. Dates are 2026.
 | C3 | Outer reinforcement only on the outside of rails; solid top band with 2× M3 holes (56 mm apart) replaces the stereo carrier latch | Keep the camera opening and spring channels unchanged |
 | C4 | Board-edge collar: guide walls 0.3 mm outside the PCB (to z 7.5), back ledges flush with the pads, bottom edge left open | Supports the board's edges; the FFC connector/ribbon is at the bottom edge |
 | C5 | Build checks: springs swept over 4 mm release vs added material; holder vs camera model | Catch any interference with the snap mechanism or the camera |
+
+## Wrist camera mount (2026-11-08)
+
+| # | Decision | Why |
+|---|---|---|
+| W1 | Camera on the gripper's **+y side** (perpendicular to the jaws' swing plane), lens aimed between the jaw tips | Sees both jaws side-on with the object between them; the moving jaw never sweeps into it (as upstream's wrist cam) |
+| W2 | **ESP32-P4 board on the holder's back** (on the gripper) | The flat camera ribbon then crosses no joints (FFC through a ±150° roll would fail); only the round USB cable runs down the arm. Costs ~12 g at the wrist |
+| W3 | Placement chosen by a scored study in MuJoCo (`place_camera.py`): visibility, gripper overlap, table clearance, self-collision on **grasp-like poses** | Uniform joint samples include folded poses no task uses; grasp poses are what matter |
+| W4 | Lens at (2, 66, −25) mm in the gripper frame | Same height as the gripper screws, so the bracket goes straight out (shortest, stiffest); 44 mm table clearance. Closer-in options hit the wrist link in 47–97 % of grasp poses |
+| W5 | **Wrist roll capped at +0.80 rad** (range −2.74…0.80) | Positive roll near the base swings the holder into the shoulder; top-down jaw orientation repeats every π, so no grasp orientation is lost |
+| W6 | Bracket reuses **upstream's wrist-camera flange** (2× M3 into the gripper's hex-nut recesses + locating key), registered from its STEP to the gripper frame (0.06 mm RMS) | Proven fit to the real gripper; no new holes in the arm |
+| W7 | Holder bolts to a pad on the **front** of its top band via **M3 heat-set inserts** | The flange is in front of the holder; a back pad forced the arm through the holder, and nut traps under the arm would be unreachable |
+| W8 | Assembly masses at typical print settings (~40 % of solid PLA): bracket 14 g, holder 16 g; camera 4 g, board 12 g (estimates) | Realistic wrist inertia in the sim; refine by weighing printed parts |
+| W9 | Image "up" = holder top band (toward the wrist) | Sim convention; match the real sensor with the firmware's hflip/vflip after mounting |
+
+## Simulation follow-ups (2026-11-08)
+
+| # | Decision | Why |
+|---|---|---|
+| S12 | Wrist camera pose read from `wrist_mount_pose.json` (`pose_from` in cameras.toml) | CAD placement and sim camera can't drift apart |
+| S13 | Grasp with **4 mm clearance** from the fixed jaw on descent | 0 mm made the fixed jaw land on the cube edge (held 0.6 s); 2–6 mm held 3 s at both rolls |
+| S14 | Vision check = colour-mask centroid vs independent pinhole projection, per camera, per backend | Catches mis-posed, mirrored, flipped or wrongly-scaled cameras in either engine |
+
+## Control software (2026-11-08)
+
+| # | Decision | Why |
+|---|---|---|
+| T1 | pygame app (`sim/scripts/teleop.py`), same code for both backends | Runs on the Intel Mac (MuJoCo) and Linux (Newton); simple keyboard + mouse handling |
+| T2 | Cartesian control by default (IK, fingers-down best effort) + joint mode | Cartesian is what you want for picking; joint mode for recovery and reaching odd poses |
+| T3 | Click-to-move: ray from a fixed camera pixel onto the table plane | Uses the calibrated camera model directly; works in both fixed views |
+| T4 | `--selftest` drives the window headless with synthetic events | Verifiable without a screen (CI, the VM) |

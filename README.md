@@ -13,8 +13,9 @@ to use components we already have, and running the arms in simulation.
 | `docs/datasheets/` | Datasheets + official CAD: servos, servo driver board, Camera Module 3, ESP32-P4 board/chip | No, reference only |
 | `firmware/p4-uvc-camera/` | ESP32-P4 + Camera Module 3 → USB UVC webcam firmware (ESP-IDF) | Yes |
 | `firmware/components/` | Vendored IMX708 camera driver (Apache-2.0) used by the firmware | Carefully |
-| `hardware/` | *(to come)* Our modified CAD / print files | Yes |
-| `sim/` | Simulation: generated SO-101 follower MJCF (fixed jaw collision, finger pads, cameras), workcell, Newton/MuJoCo runtime, scripted pick demo. See `sim/README.md` | Yes (not `sim/model/`, which is generated) |
+| `hardware/camera_mount/` | Single Camera Module 3 holder (from the stereo V9 beam, reinforced): STEP/STL + CadQuery build | Yes |
+| `hardware/wrist_mount/` | Wrist bracket + camera placement study (gripper +y side, lens between the jaw tips) | Yes |
+| `sim/` | Simulation (Newton/MuJoCo Warp + MuJoCo): follower with the mounted wrist camera, workcell, 3 cameras, keyboard/mouse **teleop**, pick demo, vision check. See `sim/README.md` | Yes (not `sim/model/`, which is generated) |
 | `scripts/` | `sync_so_arm100.sh`: re-sync the upstream mirror | |
 
 Keep `third_party/` and `docs/datasheets/` pristine so we can always diff our
@@ -32,7 +33,16 @@ git clone https://github.com/elliot-at-liminalnook/robotic-vision-project.git
 
 Without LFS you get small pointer files instead of meshes, and simulation won't load.
 
-## Quick start: view the arm in simulation
+## Quick start: drive the simulated arm
+
+```bash
+python sim/scripts/teleop.py                    # keyboard + mouse, all three cameras (MuJoCo backend)
+python sim/scripts/teleop.py --backend newton   # Linux: Newton / MuJoCo Warp
+```
+
+Details, verified results and backend notes: `sim/README.md`. Decisions so far: `docs/DECISIONS.md`.
+
+## View the upstream arm
 
 Our simulation lives in `sim/` (see `sim/README.md`). The upstream model can still be viewed directly:
 

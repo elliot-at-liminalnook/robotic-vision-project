@@ -107,8 +107,17 @@
                 <geom name="pad_fixed_0" type="box" class="collision" pos="-0.0084 0 -0.09825" quat="1 0 0 0" size="0.001 0.0055 0.00325" friction="1.0 0.02 0.0005" condim="4" rgba="0.9 0.3 0.2 1" />
                 <geom name="pad_fixed_1" type="box" class="collision" pos="-0.0104 0 -0.08925" quat="1 0 0 0" size="0.001 0.0055 0.00425" friction="1.0 0.02 0.0005" condim="4" rgba="0.9 0.3 0.2 1" />
                 <geom name="pad_fixed_2" type="box" class="collision" pos="-0.0121 0 -0.0745" quat="1 0 0 0" size="0.001 0.0055 0.009" friction="1.0 0.02 0.0005" condim="4" rgba="0.9 0.3 0.2 1" />
-                <camera name="wrist" pos="0.0025 0.0734 0.0066" xyaxes="-0.990164 0.139914 0 -0.114087 -0.807384 0.578892" fovy="57.608" />
-                <geom name="wrist_camera_board" type="box" class="visual" pos="0.00298597 0.0768392 0.0114924" quat="0.0668151 0.0213058 0.303057 0.950388" size="0.0125 0.012 0.00575" rgba="0.1 0.4 0.2 1" />
+                <camera name="wrist" pos="0.002 0.066 -0.025" xyaxes="-1 -0 0 0 -0.712403 0.70177" fovy="57.608" />
+                <body name="wrist_camera_assembly" pos="0 0 0">
+                  <inertial pos="0.002 0.0723324 -0.0181885" mass="0.0460" diaginertia="6.12735e-05 3.50853e-05 6.16389e-05" />
+                  <geom name="wm_bracket_visual" type="mesh" class="visual" mesh="wm_bracket" rgba="0.25 0.5 0.9 1" />
+                  <geom name="wm_holder_visual" type="mesh" class="visual" mesh="wm_holder" rgba="0.95 0.56 0.2 1" />
+                  <geom name="wm_board_visual" type="mesh" class="visual" mesh="wm_board" rgba="0.1 0.45 0.2 1" />
+                  <geom name="wm_camera_module3_visual" type="mesh" class="visual" mesh="wm_camera_module3" rgba="0.2 0.2 0.25 1" />
+                  <geom name="wm_bracket_collision" type="mesh" class="collision" mesh="wm_bracket" />
+                  <geom name="wm_holder_collision" type="box" class="collision" pos="0.002 0.0772267 -0.0274966" quat="0.379208 0.925312 0 0" size="0.034 0.04275 0.0109" />
+                  <geom name="wm_board_collision" type="box" class="collision" pos="0.002 0.0984781 -0.0183917" quat="0.379208 0.925312 0 0" size="0.0105 0.0355 0.0075" />
+                </body>
               </body>
             </body>
           </body>
@@ -169,7 +178,14 @@
     <mesh name="moving_jaw_so101_v1_hull07" file="collision/moving_jaw_so101_v1_hull07.stl" />
     <mesh name="moving_jaw_so101_v1_hull08" file="collision/moving_jaw_so101_v1_hull08.stl" />
     <mesh name="moving_jaw_so101_v1_hull09" file="collision/moving_jaw_so101_v1_hull09.stl" />
+    <mesh name="wm_bracket" file="wrist_mount/bracket.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_holder" file="wrist_mount/holder.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_board" file="wrist_mount/board.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_camera_module3" file="wrist_mount/camera_module3.stl" scale="0.001 0.001 0.001" />
   </asset>
+  <contact>
+    <exclude body1="wrist_camera_assembly" body2="moving_jaw_so101_v1" />
+  </contact>
   <actuator>
     <position class="hx30hm" name="shoulder_pan" joint="shoulder_pan" forcerange="-2.94 2.94" ctrlrange="-1.91986 1.91986" />
     <position class="hx30hm" name="shoulder_lift" joint="shoulder_lift" forcerange="-2.94 2.94" ctrlrange="-1.74533 1.74533" />

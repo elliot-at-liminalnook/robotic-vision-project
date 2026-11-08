@@ -15,8 +15,10 @@ reproducible from this script:
 3. Actuators. Torque limit = HX-30HM stall torque (config/servos.toml). Gains
    and joint damping/friction/armature stay upstream's STS3215 values (same
    1:345 gear ratio, near-identical speed).
-4. Wrist camera. A <camera> on the gripper body plus a visual-only stand-in
-   for the Camera Module 3 board, from config/cameras.toml.
+4. Wrist camera. A <camera> on the gripper body (pose from
+   hardware/wrist_mount/wrist_mount_pose.json via config/cameras.toml) and the
+   wrist camera assembly (bracket, holder, Camera Module 3, ESP32-P4 board) as
+   a welded child body with its mass and collision shapes.
 5. Fixed cameras. cameras_world.xml, included by workcell.xml.
 
 Run (needs mujoco, trimesh, coacd, numpy):  python sim/tools/build_model.py
@@ -34,7 +36,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "sim"))
-from so101sim.config import look_at_axes  # noqa: E402  (shared with the runtime cameras)
+from so101sim.config import load_wrist_mount, look_at_axes, resolve_camera_entry  # noqa: E402  (shared with the runtime)
 UPSTREAM = ROOT / "third_party/SO-ARM100/Simulation/SO101"
 SIM = ROOT / "sim"
 OUT = SIM / "model"
@@ -202,6 +204,68 @@ def gap_intrusions(model, data):
     return int(inside.sum()), len(probes)
 
 
+WRIST_MOUNT = ROOT / "hardware/wrist_mount"
+# Printed-part masses at typical settings (3 walls, ~20% infill): about 40-45 %
+# of the solid-PLA mass from the CAD reports. Camera and board are datasheet-ish.
+BRACKET_MASS = 0.014
+
+
+def add_wrist_assembly(root, asset) -> str:
+    """Add the wrist camera assembly as a welded child body of the gripper."""
+    import trimesh
+    pose = load_wrist_mount()
+    R = np.array(pose["holder_rotation"])
+    o = np.array(pose["holder_origin"])
+    out = ASSETS / "wrist_mount"
+    out.mkdir(exist_ok=True)
+    asm = WRIST_MOUNT / "assembly"
+    shutil.copy2(asm / "bracket_gripper_frame.stl", out / "bracket.stl")
+    shutil.copy2(asm / "holder_gripper_frame.stl", out / "holder.stl")
+    shutil.copy2(asm / "board_envelope_gripper_frame.stl", out / "board.stl")
+    cam = trimesh.load(ROOT / "hardware/camera_mount/preview_camera_module3.stl")   # holder frame, mm
+    cam.apply_transform(np.block([[R, (o * 1000)[:, None]], [np.zeros((1, 3)), np.ones((1, 1))]]))
+    cam.export(out / "camera_module3.stl")
+    for n in ("bracket", "holder", "board", "camera_module3"):
+        ET.SubElement(asset, "mesh", name=f"wm_{n}", file=f"wrist_mount/{n}.stl", scale="0.001 0.001 0.001")
+
+    masses = dict(pose["masses_kg"], bracket=BRACKET_MASS)
+    parts = {k: trimesh.load(out / f"{k}.stl") for k in ("bracket", "holder", "board")}
+    parts["camera"] = cam
+    total = sum(masses.values())
+    com = sum(masses[k] * parts[k].bounding_box.centroid / 1000 for k in masses) / total
+    allv = np.vstack([p.vertices for p in parts.values()]) / 1000
+    ext = allv.max(0) - allv.min(0)
+    inertia = total / 12 * np.array([ext[1] ** 2 + ext[2] ** 2, ext[0] ** 2 + ext[2] ** 2, ext[0] ** 2 + ext[1] ** 2])
+
+    gripper = next(b for b in root.iter("body") if b.get("name") == "gripper")
+    body = ET.SubElement(gripper, "body", name="wrist_camera_assembly", pos="0 0 0")
+    ET.SubElement(body, "inertial", pos=fmt(com), mass=f"{total:.4f}", diaginertia=fmt(inertia))
+    colours = {"bracket": "0.25 0.5 0.9 1", "holder": "0.95 0.56 0.2 1", "board": "0.1 0.45 0.2 1",
+               "camera_module3": "0.2 0.2 0.25 1"}
+    for n, rgba in colours.items():
+        ET.SubElement(body, "geom", {"name": f"wm_{n}_visual", "type": "mesh", "class": "visual",
+                                     "mesh": f"wm_{n}", "rgba": rgba})
+    # Collision: bracket hull (all outside the gripper's +y face) + holder and board boxes.
+    ET.SubElement(body, "geom", {"name": "wm_bracket_collision", "type": "mesh", "class": "collision",
+                                 "mesh": "wm_bracket"})
+    q = mat_to_quat(R)
+    for n, box in (("holder", pose["holder_box_holder_frame"]), ("board", pose["board_box_holder_frame"])):
+        c_local = np.array([(b[0] + b[1]) / 2 for b in box])
+        half = [(b[1] - b[0]) / 2 for b in box]
+        ET.SubElement(body, "geom", {"name": f"wm_{n}_collision", "type": "box", "class": "collision",
+                                     "pos": fmt(R @ c_local + o), "quat": fmt(q), "size": fmt(half)})
+    # The moving jaw is a sibling body (not filtered as parent/child); the mount
+    # sits outside its swing anyway (y > 24 mm vs <= 23.9 mm), but be explicit.
+    contact = root.find("contact")
+    if contact is None:
+        contact = ET.Element("contact")
+        root.insert(list(root).index(root.find("actuator")), contact)
+    ET.SubElement(contact, "exclude", body1="wrist_camera_assembly", body2="moving_jaw_so101_v1")
+    return (f"wrist camera assembly: {total * 1000:.0f} g (bracket {BRACKET_MASS * 1000:.0f}, "
+            f"holder {masses['holder'] * 1000:.0f}, camera {masses['camera'] * 1000:.0f}, "
+            f"board {masses['board'] * 1000:.0f}), COM {np.round(com * 1000, 1).tolist()} mm")
+
+
 def main() -> int:
     import mujoco
 
@@ -291,20 +355,17 @@ def main() -> int:
                                      "xyaxes": fmt(np.concatenate([x, y])), "fovy": f"{fovy:.3f}"})
 
     for name, spec in cams["cameras"].items():
+        spec = resolve_camera_entry(spec)
         if spec.get("enabled", True) is False or spec["parent_body"] == "world":
             continue
         body = next(bd for bd in root.iter("body") if bd.get("name") == spec["parent_body"])
         cam = cam_element(name, spec)
         body.append(cam)
-        # Visual-only stand-in for the Camera Module 3 board (25 x 24 x 11.5 mm),
-        # so it shows up in the fixed cameras. Not a collider, no mass.
-        x, y, z = look_at_axes(spec["pos"], spec["look_at"], spec["up"])
-        center = np.asarray(spec["pos"]) + z * 0.006   # board sits behind the lens
-        body.append(ET.Element("geom", {
-            "name": f"{name}_camera_board", "type": "box", "class": "visual",
-            "pos": fmt(center), "quat": fmt(mat_to_quat(np.column_stack([x, y, z]))),
-            "size": "0.0125 0.012 0.00575", "rgba": "0.1 0.4 0.2 1"}))
         report.append(f"camera {name}: on {spec['parent_body']}, fovy {cam.get('fovy')} deg")
+
+    # 4b. Wrist camera assembly (bracket + holder + Camera Module 3 + ESP32-P4)
+    # from hardware/wrist_mount; a welded child body of the gripper.
+    report.append(add_wrist_assembly(root, asset))
 
     ET.indent(tree, space="  ")
     header = ("<!-- GENERATED by sim/tools/build_model.py from "
@@ -315,6 +376,7 @@ def main() -> int:
     # 5. Fixed cameras for the workcell.
     world = ET.Element("mujoco")
     for name, spec in cams["cameras"].items():
+        spec = resolve_camera_entry(spec)
         if spec.get("enabled", True) is False or spec["parent_body"] != "world":
             continue
         world.append(cam_element(name, spec))

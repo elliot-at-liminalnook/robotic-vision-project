@@ -99,5 +99,8 @@ Options:
 - [ ] Camera intrinsics/extrinsics calibration for each fixed view.
 - [x] Sim cameras (wrist + 2 fixed) in `sim/config/cameras.toml`; replace placeholder poses/intrinsics with measured ones.
 - [ ] Verify the sim on the Linux GPU PC with `--solver warp` (MuJoCo Warp); only the CPU path has been run so far.
-- [ ] Design the Camera Module 3 wrist mount + forearm cradle for the ESP32-P4 board; update the wrist pose in `cameras.toml`.
+- [x] Wrist camera mount designed (`hardware/wrist_mount`): bracket on the gripper's +y side, board on the holder's back; pose feeds the sim.
+- [ ] Print + test: camera holder snap fit, bracket fit on the gripper, wobble; design the ESP32-P4 cradle on the holder's back.
+- [ ] Fixed scene-camera stand for the holder (2× M3 holes), then measure its pose into `cameras.toml`.
+- [ ] Real-robot backend for `teleop.py` (HX servos over the bus, `ServoMap` ticks↔rad, UVC cameras).
 - [ ] Power: servo supply voltage for HX servos; BusLinker vs Waveshare board.
