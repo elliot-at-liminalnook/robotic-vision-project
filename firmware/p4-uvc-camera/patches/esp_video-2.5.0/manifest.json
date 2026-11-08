@@ -1,0 +1,20 @@
+[
+  {
+    "file": "src/device/esp_video_device_common.c",
+    "before_sha256": "943a3b36ee3e3883ff94eada9ad64dcb058626493d6c3d73c0f9f25a9ebc922f",
+    "after_sha256": "5387d2e7199db33826b4ca2ad314c4cc5b6a01db816fedd64047e5e04e4c38bb",
+    "replacement": "esp_video_device_common.c"
+  },
+  {
+    "file": "src/device/esp_video_isp_device.c",
+    "before_sha256": "c1ed292a605ae083f22e80a2a3f601654f50c0d5c8678782a416ba53798569f3",
+    "after_sha256": "b7a880d1a74923ea126d7dea74a471e0751a8c9a19400adc2b03699f86366eac",
+    "replacement": "esp_video_isp_device.c"
+  },
+  {
+    "file": "src/device/esp_video_csi_device.c",
+    "before_sha256": "7ed5a6fe643a7d655b28f338a0262b03a90f3a569013424b857d2f74939c2f66",
+    "after_sha256": "24e7a6f9a60520be65ca807726aa9aef6ce147d8061612ec6ed68c874b57df01",
+    "replacement": "esp_video_csi_device.c"
+  }
+]

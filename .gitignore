@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 .venv/
+# ESP-IDF build output
+firmware/**/build/
+firmware/**/managed_components/
+firmware/**/sdkconfig
+firmware/**/sdkconfig.old

@@ -10,7 +10,8 @@ Decisions as of 2026-11-08. Update this file when a decision changes.
 | Servos | Hiwonder **HX-10HM / HX-30HM** bus servos (to buy). Feetech-STS-compatible protocol, so stock LeRobot `sts3215` drives them (see `third_party/hiwonder-so-arm101/README.md`). |
 | Servo driver | Hiwonder BusLinker V3.0 or Waveshare Bus Servo Adapter (A). Either one is USB to half-duplex TTL at 1 Mbps. |
 | Cameras | 2× Raspberry Pi **Camera Module 3 Wide** (IMX708) in **two fixed views**, nothing on the arm. |
-| Camera boards | 2× Waveshare **ESP32-P4-WIFI6-M**, one per camera, running the existing firmware from `~/Projects/esp32-stereo-camera` (see below). |
+| Camera boards | 2× Waveshare **ESP32-P4-WIFI6-M**, one per camera. |
+| Camera transport | **USB UVC webcam** (decided 2026-11-08): new firmware `firmware/p4-uvc-camera/`, so each board appears to the Linux PC as a standard webcam. Wi-Fi Camera Lab firmware remains the fallback. |
 | LeRobot host | Linux PC with GPU (teleop, recording, training, inference). |
 | Simulation | MuJoCo. Start from upstream `Simulation/SO101`, then rebuild geometry/inertia/actuators for the HX-servo arm. |
 
@@ -48,7 +49,7 @@ Oddities already resolved or documented there:
 - **`VIDIOC_G_FMT` reports `sizeimage = 0`:** derive buffer sizes from width × height instead.
 - **No frame timestamps or sensor-level sync between boards.** The two views are not exposure-synchronized.
 
-## LeRobot integration: camera input (to build)
+## LeRobot integration: camera input
 
 Stock LeRobot can't use these streams directly (checked against `huggingface/lerobot@d490e47`):
 - `OpenCVCameraConfig.index_or_path` is `int | Path`. From the CLI, a URL becomes a `Path`, and
@@ -56,23 +57,36 @@ Stock LeRobot can't use these streams directly (checked against `huggingface/ler
 - On connect it calls `VideoCapture.set(CAP_PROP_FPS)` and validates the result. Network streams generally can't honor that.
 
 Options:
-1. **Custom LeRobot camera class** (recommended): `ESP32MjpegCameraConfig` registered as a
+1. **Custom LeRobot camera class** (fallback if UVC fails): `ESP32MjpegCameraConfig` registered as a
    `CameraConfig` subclass. It reads the HTTP MJPEG stream in a background thread, keeps the latest frame,
    timestamps on receipt, reconnects, and pushes fixed exposure/focus via the `:80` API on connect.
 2. **Virtual webcam on the Linux host:** `ffmpeg` → `v4l2loopback` `/dev/videoN`, then stock OpenCVCamera
    with `fps` unset. No LeRobot code, but more moving parts and the FPS check still needs care.
-3. **USB UVC webcam firmware** on the P4 (wired, no Wi-Fi). Feasible, but not tried yet:
+3. **USB UVC webcam firmware** on the P4 (wired, no Wi-Fi). **Chosen.** Built in `firmware/p4-uvc-camera/`
+   (compiles; not yet flashed or tested). Background:
    - **Software:** Espressif's `esp_video` `examples/uvc` (create it with `idf.py create-project-from-example "espressif/esp_video:uvc"`) on top of esp-iot-solution `usb_device_uvc` (TinyUSB, defaults to the P4's HS port). Supports MJPEG or H.264; use MJPEG for OpenCV.
    - **Defaults:** the example's default is SC2336 @ 720p30, so it needs porting to our IMX708 driver and RAW10 fix.
    - **Expected rate:** hardware allows up to 1080p (JPEG 1080p@40). 1080p MJPEG over USB 2.0 HS at ~25–30 fps is an estimate, not measured.
    - **Cabling catch:** the board's USB-C port is a CH343P serial bridge, not the P4's USB. UVC needs the
      4-pin MX1.25 "USB" header wired to a USB male plug. **Our USB-C cables can't carry it as-is.**
+   - **Power over the header** (schematic page 1, verified 2026-11-08):
+     - The `P1` "MX1.25 4pin" header is 1 = `VCC_5V`, 2 = `USBD_N`, 3 = `USBD_P`, 4 = GND.
+     - `VCC_5V` is the main 5V rail; it feeds the MP1658 3.3V buck. So **a single header-to-PC cable powers the board.**
+     - The USB-C `USB0_5V` reaches `VCC_5V` through an ideal-diode circuit (Q2 AO3401 P-FET + U2 MMDT3906 mirror),
+       so nothing flows back out of the USB-C port.
+     - The header has **no** such protection. With both USB-C and the header plugged in, USB-C's 5V can
+       push into the PC port's VBUS. **For development with both connected, wire only D−/D+/GND on the
+       header cable (leave pin 1 open)** and power from USB-C.
+     - Current draw at full camera + JPEG load hasn't been measured. Check it against a USB 2.0 port's 500 mA budget.
    - **One board per camera** (P4 has one CSI). Set a unique `CONFIG_TUSB_SERIAL_NUM` per board.
      Both default to VID 0x303A / PID 0x8000 / serial "12345678"; unique serials give stable `/dev/v4l/by-id` names.
    - **Advantages over Wi-Fi:** stock LeRobot `OpenCVCamera` with no custom code, deterministic bandwidth,
      and full field of view at 1080p if the rate holds.
 
 ## Open items
+
+- [ ] Make the MX1.25-4P → USB-A male cable (pinout in `firmware/p4-uvc-camera/README.md`), flash, verify UVC on Linux.
+- [ ] Lock exposure / white balance / focus for dataset recording (UVC controls or fixed firmware settings).
 
 - [ ] HX-10HM / HX-30HM datasheets: torque, speed, voltage, dimensions, horn spline. Needed for CAD and sim actuator params.
 - [ ] HX servo memory table (Hiwonder protocol doc references an "HX-35HM memory table" not in their Drive folder).

@@ -1,0 +1,85 @@
+--- a/src/device/esp_video_device_common.c
++++ b/src/device/esp_video_device_common.c
+@@ -665,7 +665,7 @@
+     esp_err_t ret;
+     format_update_pending_t pending;
+     esp_video_device_common_t *common = VIDEO_DEVICE_COMMON(video);
+-    const esp_cam_sensor_format_t *prev = common->sensor_format;
++    const esp_cam_sensor_format_t *prev = resolve_sensor_format(common->cam.sensor, common->sensor_format);
+     const esp_cam_sensor_format_t *resolved = resolve_sensor_format(common->cam.sensor, format);
+ 
+     /* Validate adapter and compute common state before touching the sensor. */
+@@ -673,7 +673,9 @@
+ 
+     ESP_RETURN_ON_ERROR(esp_cam_sensor_set_format(common->cam.sensor, resolved), TAG, "failed to set sensor format");
+ 
+-    ret = commit_format_config(common, &pending);
++    /* Sensor may update orientation-dependent Bayer phase in cur_format. */
++    ret = prepare_format_config(common, common->cam.sensor->cur_format, &pending);
++    if (ret == ESP_OK) ret = commit_format_config(common, &pending);
+     if (ret != ESP_OK) {
+         ESP_LOGE(TAG, "failed to initialize sensor format");
+         if (prev && esp_cam_sensor_set_format(common->cam.sensor, prev) != ESP_OK) {
+--- a/src/device/esp_video_isp_device.c
++++ b/src/device/esp_video_isp_device.c
+@@ -1963,14 +1963,32 @@
+         case V4L2_CID_USER_ESP_ISP_AWB: {
+             const esp_video_isp_awb_t *awb = (const esp_video_isp_awb_t *)ctrl->p_u8;
+ 
+-            if (awb->rg_min > awb->rg_max || awb->bg_min > awb->bg_max) {
+-                ESP_LOGE(TAG, "Invalid ratio range");
+-                break;
+-            }
+-            if (awb->green_min > awb->green_max) {
+-                ESP_LOGE(TAG, "Invalid green value range");
+-                break;
+-            }
++            /* Validate before touching cached state or claiming the hardware ISR.
++             * IDF 5.5.5 does not unwind the AWB ISR after invalid HW config. */
++            if (awb->enable) {
++                const float ratio_max = (1U << ISP_LL_AWB_RGB_RATIO_INT_BITS) -
++                                        1.0f / (1U << ISP_LL_AWB_RGB_RATIO_FRAC_BITS);
++                ESP_GOTO_ON_FALSE(isfinite(awb->rg_min) && isfinite(awb->rg_max) &&
++                                  isfinite(awb->bg_min) && isfinite(awb->bg_max) &&
++                                  awb->rg_min >= 0 && awb->bg_min >= 0 &&
++                                  awb->rg_min <= awb->rg_max && awb->bg_min <= awb->bg_max &&
++                                  awb->rg_max <= ratio_max && awb->bg_max <= ratio_max &&
++                                  awb->green_min <= awb->green_max &&
++                                  (float)awb->green_max * (1 + awb->rg_max + awb->bg_max) <= ISP_LL_AWB_LUM_MAX_RANGE,
++                                  ESP_ERR_INVALID_ARG, exit, TAG, "invalid AWB thresholds");
++                for (unsigned i = 0; i < ISP_AWB_WINDOW_NUM; i++) {
++                    /* esp_video's IPA caller uses bottom-right (0,0) as the
++                     * default-window sentinel; it does not initialize top-left. */
++                    const isp_window_t *w = (i == 0 && awb->windows[i].btm_right.x == 0 &&
++                                               awb->windows[i].btm_right.y == 0)
++                                              ? &isp_video->awb.windows[i] : &awb->windows[i];
++                    ESP_GOTO_ON_FALSE(w->top_left.x <= w->btm_right.x && w->top_left.y <= w->btm_right.y &&
++                                      w->btm_right.x <= ISP_LL_AWB_WINDOW_MAX_RANGE &&
++                                      w->btm_right.y <= ISP_LL_AWB_WINDOW_MAX_RANGE,
++                                      ESP_ERR_INVALID_ARG, exit, TAG, "invalid AWB window");
++                }
++            }
++            esp_video_isp_awb_t previous_awb = isp_video->awb;
+ 
+             if (awb->windows->btm_right.x == 0 && awb->windows->btm_right.y == 0) {
+                 ESP_LOGD(TAG, "Window is not set, use default window");
+@@ -1982,13 +2000,12 @@
+                 isp_video->awb = *awb;
+             }
+ 
+-            if (awb->enable) {
+-                if (ISP_STARTED(isp_video)) {
+-                    ESP_GOTO_ON_ERROR(isp_reconfigure_awb(isp_video), exit, TAG, "failed to reconfigure AWB");
+-                }
+-            } else {
+-                if (ISP_STARTED(isp_video)) {
+-                    ESP_GOTO_ON_ERROR(isp_stop_awb(isp_video), exit, TAG, "failed to reconfigure AWB");
++            if (ISP_STARTED(isp_video)) {
++                ret = awb->enable ? isp_reconfigure_awb(isp_video) : isp_stop_awb(isp_video);
++                if (ret != ESP_OK) {
++                    isp_video->awb = previous_awb;
++                    ESP_LOGE(TAG, "failed to configure AWB: %s", esp_err_to_name(ret));
++                    goto exit;
+                 }
+             }
+             break;

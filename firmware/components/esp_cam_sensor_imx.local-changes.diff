@@ -1,0 +1,285 @@
+diff --git a/components/esp_cam_sensor_imx/sensors/imx708/cfg/imx708_default.json b/components/esp_cam_sensor_imx/sensors/imx708/cfg/imx708_default.json
+index 062234c..3f5e39f 100644
+--- a/components/esp_cam_sensor_imx/sensors/imx708/cfg/imx708_default.json
++++ b/components/esp_cam_sensor_imx/sensors/imx708/cfg/imx708_default.json
+@@ -240,12 +240,13 @@
+                 "table":
+                 [
+                     {
++                        "//": "Neutral fallback until this camera variant is calibrated. The previous cross-channel seed produced magenta clipped highlights on an ESP32-P4 rev 1.0. Keep sensor white balance active; do not substitute an unmeasured saturation matrix for a color calibration.",
+                         "color_temp": 0,
+                         "matrix":
+                         [
+-                             1.6000, -0.4000, -0.2000,
+-                            -0.3000,  1.5500, -0.2500,
+-                            -0.1500, -0.5500,  1.7000
++                             1.0000,  0.0000,  0.0000,
++                             0.0000,  1.0000,  0.0000,
++                             0.0000,  0.0000,  1.0000
+                         ]
+                     }
+                 ]
+diff --git a/components/esp_cam_sensor_imx/sensors/imx708/imx708.c b/components/esp_cam_sensor_imx/sensors/imx708/imx708.c
+index e78d00a..76ac505 100644
+--- a/components/esp_cam_sensor_imx/sensors/imx708/imx708.c
++++ b/components/esp_cam_sensor_imx/sensors/imx708/imx708.c
+@@ -915,7 +915,10 @@ static esp_err_t imx708_set_analog_gain(esp_cam_sensor_device_t *dev, uint32_t c
+     if (code > IMX708_ANA_GAIN_MAX) {
+         code = IMX708_ANA_GAIN_MAX;
+     }
+-    return imx708_write16(dev->sccb_handle, IMX708_REG_ANALOG_GAIN_H, (uint16_t)code);
++    imx708_lock(dev);
++    esp_err_t ret = imx708_write16(dev->sccb_handle, IMX708_REG_ANALOG_GAIN_H, (uint16_t)code);
++    imx708_unlock(dev);
++    return ret;
+ }
+ 
+ /* Total gain by menu index - what the ISP's AE actually calls. */
+@@ -924,11 +927,13 @@ static esp_err_t imx708_set_gain_index(esp_cam_sensor_device_t *dev, uint32_t in
+     if (index >= ARRAY_SIZE(imx708_ana_gain_code_map)) {
+         index = ARRAY_SIZE(imx708_ana_gain_code_map) - 1;
+     }
++    imx708_lock(dev);
+     esp_err_t ret = imx708_write16(dev->sccb_handle, IMX708_REG_ANALOG_GAIN_H,
+                                    imx708_ana_gain_code_map[index]);
+     if (ret == ESP_OK && dev->priv) {
+         ((imx708_para_t *)dev->priv)->gain_index = index;
+     }
++    imx708_unlock(dev);
+     return ret;
+ }
+ 
+@@ -941,7 +946,10 @@ static esp_err_t imx708_set_digital_gain(esp_cam_sensor_device_t *dev, uint32_t
+     if (val > IMX708_DGTL_GAIN_MAX) {
+         val = IMX708_DGTL_GAIN_MAX;
+     }
+-    return imx708_write16(dev->sccb_handle, IMX708_REG_DIGITAL_GAIN_H, (uint16_t)val);
++    imx708_lock(dev);
++    esp_err_t ret = imx708_write16(dev->sccb_handle, IMX708_REG_DIGITAL_GAIN_H, (uint16_t)val);
++    imx708_unlock(dev);
++    return ret;
+ }
+ 
+ /* V4L2 menu index (imx708_test_pattern_t) -> 0x0600 value. The two orders
+@@ -1057,6 +1065,7 @@ static esp_err_t imx708_set_link_freq_index(esp_cam_sensor_device_t *dev, uint32
+ 
+ static esp_err_t imx708_query_para_desc(esp_cam_sensor_device_t *dev, esp_cam_sensor_param_desc_t *qdesc)
+ {
++    if (!dev || !dev->priv || !qdesc) return ESP_ERR_INVALID_ARG;
+     esp_err_t ret = ESP_OK;
+     switch (qdesc->id) {
+     case ESP_CAM_SENSOR_VFLIP:
+@@ -1075,7 +1084,15 @@ static esp_err_t imx708_query_para_desc(esp_cam_sensor_device_t *dev, esp_cam_se
+         qdesc->number.minimum = imx708_exposure_min(dev);
+         qdesc->number.maximum = imx708_exposure_max(dev);
+         qdesc->number.step = imx708_exposure_step(dev);
+-        qdesc->default_value = imx708_quantize_exposure(dev, 1288);
++        qdesc->default_value = imx708_quantize_exposure(dev, dev->cur_format && dev->cur_format->isp_info ? dev->cur_format->isp_info->isp_v1_info.exp_def : 1288);
++        break;
++    case ESP_CAM_SENSOR_EXPOSURE_US:
++        qdesc->type = ESP_CAM_SENSOR_PARAM_TYPE_NUMBER;
++        qdesc->number.minimum = (uint32_t)(((uint64_t)imx708_exposure_min(dev) * IMX708_HTS * 1000000 + IMX708_PIXEL_RATE - 1) / IMX708_PIXEL_RATE);
++        qdesc->number.maximum = (uint32_t)(((uint64_t)imx708_exposure_max(dev) * IMX708_HTS * 1000000 + IMX708_PIXEL_RATE - 1) / IMX708_PIXEL_RATE);
++        /* Requests are in integer microseconds; hardware is quantized in lines. */
++        qdesc->number.step = 1;
++        qdesc->default_value = (uint32_t)(((uint64_t)(dev->cur_format && dev->cur_format->isp_info ? dev->cur_format->isp_info->isp_v1_info.exp_def : 1288) * IMX708_HTS * 1000000 + IMX708_PIXEL_RATE - 1) / IMX708_PIXEL_RATE);
+         break;
+     case IMX708_CID_FRAME_LENGTH:
+         qdesc->type = ESP_CAM_SENSOR_PARAM_TYPE_NUMBER;
+@@ -1136,6 +1153,7 @@ static esp_err_t imx708_query_para_desc(esp_cam_sensor_device_t *dev, esp_cam_se
+ 
+ static esp_err_t imx708_get_para_value(esp_cam_sensor_device_t *dev, uint32_t id, void *arg, size_t size)
+ {
++    if (!dev || !dev->priv || !arg || size < sizeof(uint32_t)) return ESP_ERR_INVALID_ARG;
+     imx708_para_t *para = (imx708_para_t *)dev->priv;
+ 
+     if (para == NULL || arg == NULL || size < sizeof(uint32_t)) {
+@@ -1146,6 +1164,21 @@ static esp_err_t imx708_get_para_value(esp_cam_sensor_device_t *dev, uint32_t id
+     case ESP_CAM_SENSOR_EXPOSURE_VAL:
+         *(uint32_t *)arg = para->exposure_val;
+         break;
++    case ESP_CAM_SENSOR_EXPOSURE_US:
++        *(uint32_t *)arg = (uint32_t)(((uint64_t)para->exposure_val * IMX708_HTS * 1000000 + IMX708_PIXEL_RATE - 1) / IMX708_PIXEL_RATE);
++        break;
++    case ESP_CAM_SENSOR_ANGAIN:
++    case ESP_CAM_SENSOR_DGAIN: {
++        uint8_t hi = 0, lo = 0;
++        uint16_t reg = id == ESP_CAM_SENSOR_ANGAIN ? IMX708_REG_ANALOG_GAIN_H : IMX708_REG_DIGITAL_GAIN_H;
++        imx708_lock(dev);
++        esp_err_t ret = imx708_read(dev->sccb_handle, reg, &hi);
++        if (ret == ESP_OK) ret = imx708_read(dev->sccb_handle, reg + 1, &lo);
++        imx708_unlock(dev);
++        if (ret != ESP_OK) return ret;
++        *(uint32_t *)arg = ((uint32_t)hi << 8) | lo;
++        break;
++    }
+     case ESP_CAM_SENSOR_GAIN:
+         *(uint32_t *)arg = para->gain_index;
+         break;
+@@ -1175,6 +1208,10 @@ static esp_err_t imx708_get_para_value(esp_cam_sensor_device_t *dev, uint32_t id
+ 
+ static esp_err_t imx708_set_para_value(esp_cam_sensor_device_t *dev, uint32_t id, const void *arg, size_t size)
+ {
++    if (!dev || !dev->priv || !arg ||
++        size < (id == ESP_CAM_SENSOR_GROUP_EXP_GAIN ? sizeof(esp_cam_sensor_gh_exp_gain_t) : sizeof(uint32_t))) {
++        return ESP_ERR_INVALID_ARG;
++    }
+     esp_err_t ret = ESP_OK;
+     switch (id) {
+     case ESP_CAM_SENSOR_VFLIP: {
+@@ -1192,7 +1229,7 @@ static esp_err_t imx708_set_para_value(esp_cam_sensor_device_t *dev, uint32_t id
+         break;
+     case ESP_CAM_SENSOR_EXPOSURE_US: {
+         uint32_t us = *(const uint32_t *)arg;
+-        uint32_t lines = (uint32_t)(((uint64_t)us * 1000) / IMX708_TLINE_NS);
++        uint32_t lines = (uint32_t)(((uint64_t)us * IMX708_PIXEL_RATE) / ((uint64_t)IMX708_HTS * 1000000));
+         ret = imx708_set_exposure(dev, lines);
+         break;
+     }
+@@ -1203,14 +1240,14 @@ static esp_err_t imx708_set_para_value(esp_cam_sensor_device_t *dev, uint32_t id
+         ret = imx708_set_analog_gain(dev, *(const uint32_t *)arg);
+         break;
+     case ESP_CAM_SENSOR_GROUP_EXP_GAIN: {
+-        /* The ISP prefers this: exposure and gain applied together, so a frame
+-           never lands with one updated and the other not. */
++        /* Sequential convenience operation. No verified hardware group hold:
++           callers must discard transition frames; this is not frame-atomic. */
+         const esp_cam_sensor_gh_exp_gain_t *g = (const esp_cam_sensor_gh_exp_gain_t *)arg;
+         uint32_t lines;
+         if (g->exposure_val != 0) {
+             lines = g->exposure_val;
+         } else if (g->exposure_us != 0) {
+-            lines = (uint32_t)(((uint64_t)g->exposure_us * 1000) / IMX708_TLINE_NS);
++            lines = (uint32_t)(((uint64_t)g->exposure_us * IMX708_PIXEL_RATE) / ((uint64_t)IMX708_HTS * 1000000));
+         } else {
+             ret = ESP_ERR_INVALID_ARG;
+             break;
+@@ -1559,6 +1596,7 @@ static esp_err_t imx708_power_off(esp_cam_sensor_device_t *dev)
+  * there is one of these at most.
+  */
+ static esp_cam_sensor_device_t *s_imx708_dev;
++/* Temporary diagnostics accessor, removed before final release. */
+ 
+ static void imx708_free(esp_cam_sensor_device_t *dev)
+ {
+@@ -1581,6 +1619,26 @@ static esp_err_t imx708_delete(esp_cam_sensor_device_t *dev)
+     return ESP_OK;
+ }
+ 
++/* Same singleton lifecycle as the public frame/pattern helpers. Callers must
++ * serialize controls with mode changes and esp_video_deinit(). */
++esp_err_t imx708_parameter_set(uint32_t id, const void *value, size_t size)
++{
++    if (!s_imx708_dev) return ESP_ERR_INVALID_STATE;
++    return imx708_set_para_value(s_imx708_dev, id, value, size);
++}
++
++esp_err_t imx708_parameter_get(uint32_t id, void *value, size_t size)
++{
++    if (!s_imx708_dev) return ESP_ERR_INVALID_STATE;
++    return imx708_get_para_value(s_imx708_dev, id, value, size);
++}
++
++esp_err_t imx708_parameter_query(esp_cam_sensor_param_desc_t *desc)
++{
++    if (!s_imx708_dev) return ESP_ERR_INVALID_STATE;
++    return imx708_query_para_desc(s_imx708_dev, desc);
++}
++
+ esp_err_t imx708_set_frame_length(uint32_t lines)
+ {
+     if (s_imx708_dev == NULL) {
+diff --git a/components/esp_cam_sensor_imx/sensors/imx708/include/imx708.h b/components/esp_cam_sensor_imx/sensors/imx708/include/imx708.h
+index 08f9cc9..88d3962 100644
+--- a/components/esp_cam_sensor_imx/sensors/imx708/include/imx708.h
++++ b/components/esp_cam_sensor_imx/sensors/imx708/include/imx708.h
+@@ -78,6 +78,21 @@ const esp_cam_sensor_format_t *imx708_format_by_index(size_t index);
+  */
+ const esp_cam_sensor_format_t *imx708_format_by_size(uint16_t width, uint16_t height);
+ 
++/**
++ * Access supported parameters of the singleton detected by esp_video.
++ * Use uint32_t payloads, except GROUP_EXP_GAIN (esp_cam_sensor_gh_exp_gain_t).
++ * Analog gain is a register code, digital gain is fixed-point /256,
++ * exposure is effective lines or integer microseconds as selected by id.
++ * Unsupported ids return an error. Query ranges after changing frame length.
++ * Returns ESP_ERR_INVALID_STATE before detection/after deinit. Serialize these
++ * calls with mode changes/deinit; suspend IPA before persistent manual control.
++ * Getters for analog/digital gain read hardware; other getters return cached
++ * driver state and do not detect out-of-band register writes.
++ */
++esp_err_t imx708_parameter_set(uint32_t id, const void *value, size_t size);
++esp_err_t imx708_parameter_get(uint32_t id, void *value, size_t size);
++esp_err_t imx708_parameter_query(esp_cam_sensor_param_desc_t *desc);
++
+ /**
+  * @brief Frame length, in lines, as an esp_cam_sensor parameter.
+  *
+@@ -109,18 +124,19 @@ const esp_cam_sensor_format_t *imx708_format_by_size(uint16_t width, uint16_t he
+  *    (n = 2) exposure runs from 16 lines in steps of 8. esp_video rejects an
+  *    off-step value, so re-query the range after changing the frame length.
+  *  - Crossing a 2^n boundary rewrites three interdependent registers with no
+- *    group hold, so the frame at the switch can have mixed timing. Discard it.
++ *    group hold, so transition frames can have mixed timing. Discard buffers until stable.
+  * VIDIOC_G_PARM's frame rate bottoms out at 1 fps, since it counts whole
+  * frames per second; below that the frame length is the real figure.
+  *
+- * The sensor delivers every rate in that range. The P4 pipeline behind it,
+- * measured with imx708_snapshot: every mode is clean at 56 fps except
+- * 640x480, whose frames tear from 48 fps up (clean at 40) with nothing logged.
++ * Source range is not a qualification of every physical rate. Captures tested
++ * selected rates through 56 fps, long frame periods near two seconds, and
++ * integrations near one/two seconds. Longer settings remain unverified.
++ * Earlier VGA JPEG tearing was traced to staging alignment and fixed with
++ * 128-byte alignment; it must not be described as a sensor frame-rate limit.
+  *
+- * It is live: safe mid-stream, effective from the next frame. It also moves
+- * the exposure ceiling (frame length - 48 lines), and V4L2_CID_EXPOSURE's
+- * advertised maximum follows at once. Shortening the frame clamps an exposure
+- * that no longer fits.
++ * It is live, but effect at a particular sensor frame is not guaranteed.
++ * It moves the exposure ceiling (frame length - 48 lines); the descriptor
++ * follows at once. Shortening a frame clamps integration that no longer fits.
+  *
+  * Two things it does not do:
+  *  - Raise AE's ceiling. The ISP pipeline reads the exposure range once, at
+@@ -181,7 +197,7 @@ typedef enum {
+  *        parameters.
+  *
+  * Linux's V4L2_CID_TEST_PATTERN_RED / GREENR / BLUE / GREENB: a uint32_t each,
+- * 0 .. 0xfff (12 bits), default 0xfff - so the solid pattern is white until
++ * 0 .. 0x3ff (10 bits), default 0x3ff - so the solid pattern is white until
+  * told otherwise. For callers holding the sensor handle; esp_video maps no V4L2
+  * control onto them, so an esp_video application uses
+  * imx708_set_test_pattern_colour() instead.
+@@ -197,9 +213,9 @@ typedef enum {
+  * Takes effect at once if the solid pattern is showing, and is kept for when it
+  * next is. Pick the pattern itself with V4L2_CID_TEST_PATTERN.
+  *
+- * @param r, gr, b, gb 12-bit levels for the red, green-on-red-row, blue and
++ * @param r, gr, b, gb 10-bit levels for the red, green-on-red-row, blue and
+  *                     green-on-blue-row pixels.
+- * @return ESP_OK; ESP_ERR_INVALID_ARG if any level exceeds 0xfff (nothing is
++ * @return ESP_OK; ESP_ERR_INVALID_ARG if any level exceeds 0x3ff (nothing is
+  *         written); ESP_ERR_INVALID_STATE if no IMX708 has been detected; an
+  *         SCCB error if the write failed.
+  */
+diff --git a/components/esp_cam_sensor_imx/sensors/imx708/private_include/imx708_regs.h b/components/esp_cam_sensor_imx/sensors/imx708/private_include/imx708_regs.h
+index d81c21f..c69761f 100644
+--- a/components/esp_cam_sensor_imx/sensors/imx708/private_include/imx708_regs.h
++++ b/components/esp_cam_sensor_imx/sensors/imx708/private_include/imx708_regs.h
+@@ -216,12 +216,12 @@ extern "C" {
+ #define IMX708_TP_REG_GREY_BARS     0x0003
+ #define IMX708_TP_REG_PN9           0x0004
+ 
+-/* Solid-colour pattern, one 12-bit level per Bayer channel, 16-bit registers */
++/* Solid-colour pattern, one 10-bit level per Bayer channel, 16-bit registers */
+ #define IMX708_REG_TEST_PATTERN_R   0x0602
+ #define IMX708_REG_TEST_PATTERN_GR  0x0604
+ #define IMX708_REG_TEST_PATTERN_B   0x0606
+ #define IMX708_REG_TEST_PATTERN_GB  0x0608
+-#define IMX708_TEST_PATTERN_COLOUR_MAX 0x0fff
++#define IMX708_TEST_PATTERN_COLOUR_MAX 0x03ff /* measured 10-bit registers/output in current RAW10 modes */
+ 
+ /* External input clock */
+ #define IMX708_INCLK_FREQ_HZ        24000000
