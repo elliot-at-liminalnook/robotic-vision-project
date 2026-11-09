@@ -19,6 +19,7 @@ to straight down as the arm allows.
 Joint mode (toggle J): 1-6 select a joint; Left/Right or the wheel move it.
   G          FAST (torque governor, default) / GENTLE (fixed profile)
   [ / ]      tilt cone for load-aware IK, 0..25 deg (default 0 = fingers straight down)
+  V          servo feed-forward on/off (default on; off shows the droop it removes)
   H home   Backspace reset scene   P pause physics   F12 screenshot   Esc quit
 
 Motion (sim/docs/FAST_TELEOP_FINDINGS.md):
@@ -35,6 +36,11 @@ Motion (sim/docs/FAST_TELEOP_FINDINGS.md):
     table, so grasps are always straight down.
   * The panel shows each joint's predicted torque (% of stall, tick = the
     overload-protection threshold) and heat (RMS torque vs continuous rating).
+  * Servo compensation (so101sim/command.py): every arm command gets gravity +
+    back-EMF feed-forward, because a real servo position loop is soft (stall
+    torque only at ~9 deg of error) and would otherwise droop and lag. Closing
+    the gripper stops a few degrees past contact (grip-by-offset) instead of
+    stalling the servo into its overload protection.
 
 Always enforced: joint limits, the camera-safe wrist roll range (see
 hardware/wrist_mount/place_camera.py) and a minimum tip height above the
@@ -56,6 +62,7 @@ from so101sim import JOINTS, load_backend  # noqa: E402
 from so101sim.config import load_servos  # noqa: E402
 from so101sim.servo import GoalInterpolator, ProfileLimiter  # noqa: E402
 from so101sim.config import look_at_axes, wrist_roll_range  # noqa: E402
+from so101sim.command import CommandFeedforward, GripOffset  # noqa: E402
 from so101sim.dynamics import ArmDynamics  # noqa: E402
 from so101sim.governor import TorqueGovernor  # noqa: E402
 from so101sim.ik import ArmIK  # noqa: E402
@@ -99,6 +106,9 @@ class Teleop:
         self.spec = ServoSpec.from_config()
         self.dyn = ArmDynamics()
         self.gov_cfg = load_servos()["follower"]["governor"]
+        self.ff = CommandFeedforward(dyn=self.dyn)
+        self.ff_on = True
+        self.grip_latch = GripOffset()
         self.reset_scene()
 
     # ---- state -------------------------------------------------------------
@@ -108,6 +118,8 @@ class Teleop:
         self.goal = q.copy()
         self.interp = GoalInterpolator(q, 1.0 / FRAME_HZ)
         self._make_generator(q)
+        self.ff.reset()
+        self.grip_latch.reset()
         self.move = None                # active straight-line CartesianMove
         self.target = np.array(HOME_TIP, float)
         self.roll = q[4]
@@ -251,12 +263,19 @@ class Teleop:
         n = max(1, int(round(min(dt_wall, 0.1) / dt)))
         self.interp.set(self.goal)
         q_meas = self.sim.q()              # once per frame (the real arm: position registers)
+        # Grip-by-offset: once the jaws stall on an object, hold a few degrees past contact.
+        latched = self.grip_latch.update(float(self.gen.current[5]), float(q_meas[5]), n * dt)
         for _ in range(n):
             g = self.interp.advance(dt)
             if isinstance(self.gen, TorqueGovernor):
                 cmd = self.gen.update(g, dt, q_meas=q_meas)
             else:
                 cmd = self.gen.update(g, dt)
+            cmd = np.array(cmd, float)
+            if self.grip_latch.holding:
+                cmd[5] = latched
+            if self.ff_on:
+                cmd = self.ff.apply(cmd, dt)
             self.sim.set_targets(cmd)
             self.sim.step(1)
         if not isinstance(self.gen, TorqueGovernor):
@@ -302,6 +321,10 @@ class Teleop:
                 self.move_to(HOME_TIP, "home", roll=self._roll_default())
             elif k == pg.K_g:
                 self.toggle_speed()
+            elif k == pg.K_v:
+                self.ff_on = not self.ff_on
+                self.ff.reset()
+                self.say("servo feed-forward " + ("ON" if self.ff_on else "OFF (watch the droop)"))
             elif k in (pg.K_LEFTBRACKET, pg.K_RIGHTBRACKET):
                 step = TILT_STEP if k == pg.K_RIGHTBRACKET else -TILT_STEP
                 self.tilt_tol = float(np.clip(self.tilt_tol + step, 0.0, TILT_MAX))
@@ -366,6 +389,7 @@ class Teleop:
             f"   fingers tilt {self.ik.tilt_deg(q):4.1f} deg",
             f"motion {'FAST (torque governor)' if self.fast else 'GENTLE (fixed profile)'}   "
             f"tilt cone {self.tilt_tol:.0f} deg (now {self.effective_tilt(self.target[2]):.0f})"
+            f"   ff {'on' if self.ff_on else 'OFF'}" + ("   grip HOLD" if self.grip_latch.holding else "")
             + (f"   limited by {JOINTS[self.gen.limiting]}" if isinstance(self.gen, TorqueGovernor)
                and self.gen.limiting is not None and self.gen.scale < 0.99 else ""),
         ]
@@ -397,7 +421,7 @@ class Teleop:
             screen.blit(small.render(txt, True, col), (lx + lw + 6, yy))
         help_ = ["WASD/arrows move  R/F/wheel up-down  Q/E roll  Space/right-click grip  Shift fine",
                  "click table in a scene view: go there   J joint mode (1-6, L/R)   G fast/gentle",
-                 "[ ] tilt cone   H home   Backspace reset   P pause   F12 screenshot   Esc quit"]
+                 "[ ] tilt cone  V feed-fwd  H home  Backspace reset  P pause  F12 shot  Esc quit"]
         for k, ln in enumerate(help_):
             screen.blit(small.render(ln, True, (150, 150, 160)), (x0 + 12, y0 + 246 + 18 * k))
         if time.time() - self.message_t < 3.0:
@@ -537,6 +561,15 @@ def selftest_script(app: Teleop, pg):
     for _ in range(45):
         yield
     results["fast_after_toggles"] = float(app.fast)
+    # V toggles servo feed-forward: without it the soft servo loop droops under gravity.
+    key(pg.K_v, "v")
+    for _ in range(45):
+        yield
+    results["droop_ff_off_mm"] = float(np.linalg.norm(app.tip_pos() - app.tip_pos(app.goal))) * 1000
+    key(pg.K_v, "v")
+    for _ in range(45):
+        yield
+    results["droop_ff_on_mm"] = float(np.linalg.norm(app.tip_pos() - app.tip_pos(app.goal))) * 1000
     results["tilt_strict_at_home_deg"] = tilt_strict
     results["effective_cone_deg"] = app.effective_tilt(app.target[2])
     shot = app.save_screenshot(pg, Path(__file__).resolve().parents[1] / "out" / "teleop_selftest.png")
@@ -551,6 +584,7 @@ def selftest_script(app: Teleop, pg):
         "] widens the tilt cone to 15 deg": results["tilt_cone_deg"] == 15.0,
         "H travels home (<10 mm)": results["home_err_m"] < 0.010,
         "cone applies above 10 cm": results["effective_cone_deg"] > 14.9,
+        "feed-forward removes droop (V)": results["droop_ff_on_mm"] < 3.0 and results["droop_ff_off_mm"] > 2 * results["droop_ff_on_mm"],
     }
     for k, v in results.items():
         print(f"  {k}: {v:+.4f}")

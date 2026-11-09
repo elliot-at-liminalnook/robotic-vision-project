@@ -12,9 +12,11 @@ reproducible from this script:
 2. Finger pads. A thin box on each jaw's inner face, fitted to the measured
    jaw surface, with higher friction and torsional friction (condim 4), so
    grasp contact is stable and its friction is tunable in one place.
-3. Actuators. Torque limit = HX-30HM stall torque at the supply voltage (config/servos.toml). Gains
-   and joint damping/friction/armature stay upstream's STS3215 values (same
-   1:345 gear ratio, near-identical speed).
+3. Actuators. Torque limit = HX-30HM stall torque at the supply voltage; a
+   realistic position-loop stiffness (kp = stall / sat_error) with no actuator
+   kv, and the motor's back-EMF as joint damping (config/servos.toml
+   [follower.position_loop]). Friction loss and armature stay upstream's
+   STS3215 values (same 1:345 gear ratio, near-identical speed).
 4. Wrist camera. A <camera> on the gripper body (pose from
    hardware/wrist_mount/wrist_mount_pose.json via config/cameras.toml) and the
    wrist camera assembly (bracket, holder, Camera Module 3, ESP32-P4 board) as
@@ -36,7 +38,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "sim"))
-from so101sim.config import load_wrist_mount, look_at_axes, resolve_camera_entry, servo_limits  # noqa: E402  (shared with the runtime)
+from so101sim.config import load_wrist_mount, look_at_axes, position_loop, resolve_camera_entry, servo_limits  # noqa: E402  (shared with the runtime)
 UPSTREAM = ROOT / "third_party/SO-ARM100/Simulation/SO101"
 SIM = ROOT / "sim"
 OUT = SIM / "model"
@@ -332,14 +334,29 @@ def main() -> int:
                 "friction": PAD["friction"], "condim": PAD["condim"], "rgba": "0.9 0.3 0.2 1"}))
             report.append(f"{prefix}_{k}: land x = {x_face * 1000:+.2f} mm, z {z_lo * 1000:.1f}..{z_hi * 1000:.1f} mm")
 
-    # 3. Actuator torque limit = HX-30HM stall torque at the supply voltage.
+    # 3. Actuators: HX-30HM at the supply voltage, with a realistic position loop.
+    #    Upstream's kp = 998.22 / kv = 2.731 came from treating the servo's P
+    #    register as volts per degree with R = 1 ohm; an identified servo of
+    #    this family reaches stall torque only at ~9-14 deg of error. So:
+    #    kp = stall / sat_error, kv = 0, and the motor's back-EMF (stall /
+    #    no-load speed) as joint damping. Friction loss and armature stay
+    #    upstream's. (config/servos.toml [follower.position_loop];
+    #    docs/POLICY_TRAINING_IDEAS.md B0.)
     lim_cfg = servo_limits()
+    loop = position_loop()
     tl = round(lim_cfg["stall_torque_nm"], 3)
+    kp = round(loop["stiffness_nm_per_rad"], 3)
+    kv = float(loop["actuator_kv"])
+    damping = round(loop["back_emf_nm_s_per_rad"], 4)
     for d in root.iter("default"):
         if d.get("class") == "sts3215":
             d.set("class", "hx30hm")
             pos_el = d.find("position")
             pos_el.set("forcerange", f"{-tl} {tl}")
+            pos_el.set("kp", f"{kp}")
+            pos_el.set("kv", f"{kv}")
+            if loop.get("back_emf_as_joint_damping", True):
+                d.find("joint").set("damping", f"{damping}")
     for el in root.iter():
         if el.get("class") == "sts3215":
             el.set("class", "hx30hm")
@@ -349,6 +366,8 @@ def main() -> int:
         act.set("forcerange", f"{-lim} {lim}")
     report.append(f"actuators: forcerange +/-{tl} N.m (HX-30HM stall at {lim_cfg['supply_voltage_v']} V); "
                   f"gripper +/-{gl} N.m (torque-limit register)")
+    report.append(f"position loop: kp {kp} N.m/rad (stall at {loop['sat_error_deg']} deg), kv {kv}, "
+                  f"joint damping {damping} N.m.s/rad (back-EMF)")
 
     # 4. Wrist camera on the gripper body.
     def cam_element(name, spec):

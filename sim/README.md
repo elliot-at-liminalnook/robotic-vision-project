@@ -61,6 +61,7 @@ The window shows the wrist, scene_front and scene_side cameras plus a status pan
 | `Space` or right-click | open / close the gripper | same |
 | `Shift` | fine (×0.2) motion | same |
 | `G` | FAST (torque governor, default) / GENTLE (fixed profile) | same |
+| `V` | servo feed-forward on (default) / off | same |
 | `[` / `]` | tilt cone for load-aware IK, 0–25° (default 0°) | — |
 | `H` / `Backspace` / `P` / `F12` / `Esc` | home / reset scene / pause / screenshot / quit | same |
 
@@ -73,6 +74,11 @@ The window shows the wrist, scene_front and scene_side cameras plus a status pan
     angles could drive the gripper into the table.
 - **IK:** keeps the fingers as close to straight down as the arm allows. With a tilt cone, they may tilt that
   much (above 10 cm only) to lower holding torque. Unreachable targets are refused, with a message.
+- **Servo compensation** (`so101sim/command.py`, also used by `pick_demo`):
+  - **Feed-forward:** every arm command gets q + (gravity torque + back-EMF × commanded speed) ÷ servo
+    stiffness. `V` toggles it, to show the droop it removes (≈5 mm at home).
+  - **Grip-by-offset:** when the jaws stall on an object, the gripper holds 3° past contact (≈33 % of stall)
+    instead of stalling fully closed into the servo's overload protection. The panel shows "grip HOLD".
 - **Newton on CPU:** add `--render-every 5` (or more), since ray-traced cameras are slow without a GPU.
 
 `--selftest` runs the window headless with scripted keys and mouse events, and checks that:
@@ -85,15 +91,17 @@ The window shows the wrist, scene_front and scene_side cameras plus a status pan
 - `G` toggles the speed mode;
 - `]` widens the tilt cone;
 - `H` travels home;
-- the cone applies above 10 cm.
+- the cone applies above 10 cm;
+- feed-forward removes droop (`V`).
 
 ## Verified results (2026-11-08)
 
 | Check | MuJoCo 3.10 (Mac) | Newton, MuJoCo C (VM) | Newton, MuJoCo Warp on CPU (VM) |
 |---|---|---|---|
-| `pick_demo`: cube lifted 10 cm and held | ✅ 0.1044 m | ✅ 0.1043 m | ✅ 0.1044 m (0 contact overflows) |
-| `vision_check`: cube where predicted, all cameras × 3 poses | ✅ ≤ 1.0 px | ✅ ≤ 1.1 px | ✅ ≤ 1.1 px |
-| `teleop --selftest` | ✅ 10/10 | ✅ 10/10 (`--render-every 5`) | not run (too slow on CPU) |
+| `pick_demo`: cube lifted 10 cm and held (realistic servo loop + feed-forward) | ✅ 0.1026 m | ✅ 0.1026 m | ✅ 0.1026 m |
+| `pick_demo --no-feedforward` (same servos, no compensation) | ❌ not lifted | ❌ not lifted | not run |
+| `vision_check`: cube where predicted, all cameras × 3 poses | ✅ ≤ 1.0 px | ✅ ≤ 1.1 px | ✅ ≤ 1.1 px (before the servo-loop change; not rerun) |
+| `teleop --selftest` | ✅ 11/11 | ✅ 11/11 (`--render-every 5`) | not run (too slow on CPU) |
 
 ![vision check across backends](docs/vision_compare.png)
 
@@ -144,8 +152,17 @@ Upstream: `third_party/SO-ARM100/Simulation/SO101/so101_new_calib.xml`.
 2. **Finger pads.** The jaws' inner faces are stepped: flat lands at x = ∓7.9 / 9.9 / 11.6–11.9 mm, measured by
    ray casting. Each land gets a thin box pad, 0.5 mm proud, with friction 1.0 and torsional friction. That
    friction assumes rubber/TPU grip pads on the real jaws too; bare PLA is ~0.3–0.4.
-3. **Actuators.** Torque limit ±2.94 N·m (HX-30HM stall); gripper ±1.47 N·m (50 % torque-limit register). Gains and joint damping/friction/armature stay
-   upstream's STS3215 values (same 1:345 ratio, near-identical speed) until fitted to real servos.
+3. **Actuators.** Torque limit ±3.18 N·m (HX-30HM stall at the 12 V supply); gripper ±1.59 N·m (50 % torque-limit
+   register).
+   - **Position loop: realistic, not upstream's.** Upstream SO-101 (and MuJoCo Menagerie) use kp 998 / kv 2.73,
+     derived by treating the servo's P register as volts per degree with an assumed 1 Ω winding. That's
+     ~20× stiffer than an identified servo of this family.
+   - We use kp = stall / 9° = 20.2 N·m/rad and kv 0, with the motor's back-EMF as joint damping
+     (0.534 N·m·s/rad), from `config/servos.toml [follower.position_loop]`.
+   - 9° is a prior (BAM's STS3215 fit ≈9–10°, Open Duck Mini ≈14°) until the HX servos are measured.
+   - Friction loss and armature stay upstream's.
+   - At this stiffness the arm droops under gravity, so every command gets feed-forward (below).
+   - See [../docs/POLICY_TRAINING_IDEAS.md](../docs/POLICY_TRAINING_IDEAS.md) B0/B7.
 4. **Wrist camera assembly.** The bracket, camera holder, Camera Module 3 and ESP32-P4 board from
    `hardware/wrist_mount` are a welded child body of the gripper:
    - 46 g, with collision shapes;

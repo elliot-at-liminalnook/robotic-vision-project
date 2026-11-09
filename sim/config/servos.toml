@@ -32,6 +32,32 @@ gripper_torque_limit_frac = 0.5
 profile_speed_rad_s = 2.75
 profile_accel_rad_s2 = 8.0
 
+# Servo position loop as seen from the joint, and the command-side compensation
+# for it (so101sim/command.py; docs/POLICY_TRAINING_IDEAS.md B0/B7).
+#
+# The real servo is a saturating P(D) loop: full voltage (stall torque) is only
+# reached at a few degrees of position error, so it droops under gravity and
+# lags at speed. Upstream SO-101 / MuJoCo Menagerie use kp = 998 N.m/rad (full
+# torque at ~0.17 deg), derived assuming the P register is volts per degree and
+# R = 1 ohm. Identified STS-family servos are far softer: BAM's STS3215 fit
+# saturates at ~9-10 deg; Open Duck Mini uses kp 13.4 (~14 deg). Until our HX
+# servos are measured on the bench, the prior is 9 deg.
+[follower.position_loop]
+sat_error_deg = 9.0           # position error that gives stall torque (sim kp = stall / this)
+actuator_kv = 0.0             # no extra actuator damping: the motor's damping is back-EMF ...
+back_emf_as_joint_damping = true  # ... modeled as joint damping = stall torque / no-load speed
+# Command feed-forward (applied to every arm command, sim and real):
+#   q_target = q_cmd + (gravity_torque(q_cmd) + k_emf * qdot_cmd) * sat_error / stall_torque
+feedforward_gravity = true
+feedforward_back_emf = true
+feedforward_payload_kg = 0.0  # add a held object's mass here when known
+# Grip by position offset: close until the gripper stalls on the object, then hold
+# this far past the contact angle instead of driving "fully closed" (which stalls
+# the servo into its overload protection). Squeeze = stiffness x offset.
+grip_offset_deg = 3.0           # 3 deg x stiffness (stall at 9 deg) ~= 33 % of stall: under the gripper's 50 % limit and its 80 %-of-limit overload threshold
+grip_stall_speed_rad_s = 0.15 # gripper slower than this ...
+grip_stall_time_s = 0.08      # ... for this long while closing = contact
+
 # Torque governor for fast teleop (so101sim/governor.py). Instead of a fixed
 # speed/acceleration, every control tick it predicts each joint's torque with
 # the arm's dynamics model and commands the fastest motion the servos can

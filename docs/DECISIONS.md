@@ -97,3 +97,15 @@ See `sim/docs/FAST_TELEOP_FINDINGS.md`.
 | F7 | Don't flip wrist roll by 180° for load | Twin roll is inside the camera-safe range for only 23 % of rolls and saves ≤ 4 %; it would flip the wrist view |
 | F8 | Teleop panel shows each joint's predicted torque (tick = overload threshold) and heat | Same numbers the governor uses; on the real arm compare them with present current (register 69) |
 
+
+## Servo position loop and command compensation (2026-11-08)
+
+See `docs/POLICY_TRAINING_IDEAS.md` (B0, B4, B7, B9).
+
+| # | Decision | Why |
+|---|---|---|
+| P1 | Sim actuators use a realistic position loop: kp = stall / 9° (20.2 N·m/rad), kv 0, motor back-EMF as joint damping (0.534 N·m·s/rad) | Upstream / Menagerie kp 998 & kv 2.73 come from treating the P register as volts per degree with an assumed R = 1 Ω (~20× too stiff). Identified servos of this family reach stall only at ≈9–14° (BAM's STS3215 fit; Open Duck Mini). With the stiff model the scripted pick "worked" only because droop was hidden |
+| P2 | 9° is a prior, set in one place (`servos.toml [follower.position_loop] sat_error_deg`) | Unmeasured until the HX bench test; the model generator and the feed-forward both read it |
+| P3 | Every arm command gets gravity + back-EMF feed-forward (`so101sim/command.py`), in teleop (`V` toggles) and `pick_demo` | At realistic stiffness the pick fails without it (cube not lifted, MuJoCo and Newton) and succeeds with it; at home, droop drops from 4.9 to 0.2 mm. Study: robust to ±20 % mass error; fast-teleop lag 30 → 10 mm. Needs stiffness within ~±20 % |
+| P4 | Grip by offset: after the jaws stall on an object, hold 3° past contact (≈33 % of stall) | "Fully closed" stalls the servo into overload protection (80 % for 2 s); in the study the offset grip removed every trip and still lifted. 3° keeps the squeeze under the gripper's 50 % limit |
+| P5 | Verify the HX register map before any register write (incl. stock LeRobot `connect()`) | The vendor's "STS-compatible" claim and the HX register table v3.7 disagree on P/D/I, torque limit and torque-enable addresses; a wrong map could set the under-voltage threshold or a goal position |

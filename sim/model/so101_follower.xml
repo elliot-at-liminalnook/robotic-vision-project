@@ -16,8 +16,8 @@
   <default>
     <default class="hx30hm">
       <geom contype="0" conaffinity="0" />
-      <joint damping="0.60" frictionloss="0.052" armature="0.028" />
-      <position kp="998.22" kv="2.731" forcerange="-3.178 3.178" />
+      <joint damping="0.5336" frictionloss="0.052" armature="0.028" />
+      <position kp="20.234" kv="0.0" forcerange="-3.178 3.178" />
     </default>
     <default class="backlash">
       <joint damping="0.01" frictionloss="0" armature="0.01" limited="true" range="-0.008726646259971648 0.008726646259971648" />

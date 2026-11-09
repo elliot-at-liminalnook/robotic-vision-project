@@ -23,6 +23,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from so101sim import JOINTS, SlewLimiter, load_backend  # noqa: E402
+from so101sim.command import CommandFeedforward, GripOffset  # noqa: E402
 from so101sim.ik import ArmIK  # noqa: E402
 
 CUBE_SIZE = 0.030
@@ -111,6 +112,8 @@ def main() -> int:
     ap.add_argument("--solver", choices=("warp", "cpu"), default=None, help="Newton only")
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--no-render", action="store_true")
+    ap.add_argument("--no-feedforward", action="store_true", help="send raw commands (no gravity/back-EMF feed-forward)")
+    ap.add_argument("--no-grip-offset", action="store_true", help="drive the gripper fully closed (no grip-by-offset)")
     args = ap.parse_args()
 
     kw = {"solver": args.solver} if args.backend == "newton" else {}
@@ -145,19 +148,35 @@ def main() -> int:
     ik_err = max(e1, e2, e3)
 
     slew = SlewLimiter(sim.q())
+    ff = None if args.no_feedforward else CommandFeedforward()
+    grip = None if args.no_grip_offset else GripOffset()
     frames = {}
     t_sim0 = time.perf_counter()
     sim_steps = 0
+    CHUNK = 5                      # update feed-forward / grip latch every 5 physics steps (10 ms)
+
+    def send(cmd, dt):
+        cmd = np.array(cmd, float)
+        if grip is not None:
+            cmd[5] = grip.update(cmd[5], float(sim.q()[5]), dt)
+        if ff is not None:
+            cmd = ff.apply(cmd, dt)
+        sim.set_targets(cmd)
+
     for phase, goal, settle in phases:
         # Move at servo speed, then let it settle.
         while np.abs(slew.current - goal).max() > 1e-4:
-            sim.set_targets(slew.update(goal, sim.dt))
-            sim.step(1)
-            sim_steps += 1
+            cmd = None
+            for _ in range(CHUNK):
+                cmd = slew.update(goal, sim.dt)
+            send(cmd, CHUNK * sim.dt)
+            sim.step(CHUNK)
+            sim_steps += CHUNK
         n = int(settle / sim.dt)
-        sim.set_targets(goal)
-        sim.step(n)
-        sim_steps += n
+        for _ in range(0, n, CHUNK):
+            send(goal, CHUNK * sim.dt)
+            sim.step(CHUNK)
+            sim_steps += CHUNK
         if not args.no_render:
             frames[phase] = sim.render()
     t_sim = time.perf_counter() - t_sim0
@@ -179,6 +198,8 @@ def main() -> int:
         "backend": label, "success": bool(success),
         "cube_lift_m": round(lifted, 4), "cube_to_tip_m": None if tip is None else round(float(np.linalg.norm(cube1 - tip)), 4),
         "ik_max_error_m": round(ik_err, 5), "gripper_open_rad": round(q_open, 3),
+        "feedforward": ff is not None, "grip_offset": grip is not None,
+        "grip_latched_rad": None if grip is None or grip.latched is None else round(float(grip.latched), 3),
         "tilt_deg": {"above": round(ik.tilt_deg(above), 1), "grasp": round(ik.tilt_deg(grasp), 1),
                      "lift": round(ik.tilt_deg(lift), 1)},
         "final_q": dict(zip(JOINTS, [round(float(v), 4) for v in sim.q()])),

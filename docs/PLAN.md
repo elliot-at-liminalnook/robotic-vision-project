@@ -103,8 +103,11 @@ Options:
 - [ ] Print + test: camera holder snap fit, bracket fit on the gripper, wobble; design the ESP32-P4 cradle on the holder's back.
 - [ ] Fixed scene-camera stand for the holder (2× M3 holes), then measure its pose into `cameras.toml`.
 - [ ] Real-robot backend for `teleop.py` (HX servos over the bus, `ServoMap` ticks↔rad, UVC cameras).
+- [ ] **Before any register writes (incl. stock LeRobot `connect()`):** verify which control table the HX-30HM firmware uses. The STS3215 map (P 21, D 22, I 23, Max_Torque_Limit 16, Torque_Enable 40) conflicts with the HX register table v3.7 (16 = under-voltage threshold, 21 = LED alarm, 22–24 = P/D/I, 40 = target position). Read model and firmware, dump registers, test with a harmless write. See `docs/POLICY_TRAINING_IDEAS.md` B9.
 - [ ] On the real HX-30HM: measure position error under a known load (stiffness), a step response (D term, loop ringing frequency), whether overload protection is relative to the torque-limit register, and temperature after a 10-min far-reach hold; update `ServoSpec` (`sat_error_deg`, `d_time_s`) and the governor's `bandwidth_rad_s`, rerun `servo_load_study.py` and `fast_teleop_study.py`.
 - [ ] Real-robot teleop: stream governor commands as goal positions (servo goal speed = max, acceleration off), feed measured positions back for the lag guard and path pacing, log present current (register 69) against the governor's predicted torque. Gripper torque limit 500.
 - [x] Power supply: 12.0 V bench supply sized for ~20 A (DECISIONS F1).
 - [x] Fast teleop: torque governor, straight-line clicks, load-aware IK (default 0°): `sim/docs/FAST_TELEOP_FINDINGS.md`.
+- [x] Realistic servo position loop in the sim + gravity/back-EMF feed-forward + grip-by-offset (`so101sim/command.py`, DECISIONS P1–P4).
+- [ ] Policy training: research notes, recipe and phased plan in `docs/POLICY_TRAINING_IDEAS.md`. Next: benchmark the MuJoCo Warp renderer on the GPU PC, pick mjlab vs Newton for RL, build the state-based pick teacher.
 - [ ] Power: servo supply voltage for HX servos; BusLinker vs Waveshare board.

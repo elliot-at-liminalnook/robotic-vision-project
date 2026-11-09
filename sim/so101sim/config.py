@@ -114,3 +114,19 @@ def servo_limits(arm: str = "follower") -> dict:
                 rated_stall_torque_nm=float(f["torque_limit_nm"]), rated_speed_rad_s=float(f["max_speed_rad_s"]),
                 supply_voltage_v=float(f["supply_voltage_v"]), rated_voltage_v=float(f["rated_voltage_v"]),
                 voltage_scale=k)
+
+
+def position_loop(arm: str = "follower") -> dict:
+    """Servo position-loop model + command compensation settings, with derived stiffness.
+
+    Adds stiffness_nm_per_rad (stall torque / sat_error) and back_emf_nm_s_per_rad
+    (stall torque / no-load speed), both at the supply voltage.
+    """
+    import math
+    cfg = dict(load_servos()[arm]["position_loop"])
+    lim = servo_limits(arm)
+    cfg["sat_error_rad"] = math.radians(float(cfg["sat_error_deg"]))
+    cfg["stiffness_nm_per_rad"] = lim["stall_torque_nm"] / cfg["sat_error_rad"]
+    cfg["back_emf_nm_s_per_rad"] = lim["stall_torque_nm"] / lim["no_load_speed_rad_s"]
+    return cfg
+
