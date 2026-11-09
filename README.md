@@ -3,6 +3,36 @@
 Modifying the open-source **SO-101** leader/follower robot arm (LeRobot ecosystem)
 to use components we already have, and running the arms in simulation.
 
+![The simulated SO-101 follower with the wrist camera mounted](docs/media/arm_hero.png)
+
+## Pictures
+
+All from the simulation (MuJoCo render of `sim/model/workcell.xml`). Regenerate them with
+`python sim/tools/render_media.py`.
+
+| | |
+|---|---|
+| ![Arm orbit](docs/media/arm_orbit.gif) | ![Each joint in turn](docs/media/arm_joints.gif) |
+| The follower, reaching while the camera circles it. | Each of the six servos in turn: pan, shoulder, elbow, wrist flex, wrist roll, gripper. |
+
+**Scripted pick**, with the free camera on the left and the simulated wrist camera on the right. It uses the realistic
+(soft) servo model with gravity/back-EMF feed-forward and grip-by-offset (`sim/scripts/pick_demo.py`):
+
+![Pick demo: free view and wrist camera](docs/media/pick_demo.gif)
+
+| | |
+|---|---|
+| ![Wrist close-up](docs/media/wrist_closeup.png) | ![Camera holder](hardware/camera_mount/render_single_holder.png) |
+| Gripper and wrist camera. The blue part is the wrist bracket, the orange part the camera holder, and the green part the ESP32-P4 board. | The single Camera Module 3 holder (`hardware/camera_mount/`). |
+
+What the three simulated cameras see (two fixed scene cameras and the wrist camera):
+
+![Scene front, scene side and wrist camera views](docs/media/camera_views.png)
+
+The keyboard/mouse teleop window (`sim/scripts/teleop.py`):
+
+![Teleop](sim/docs/teleop.png)
+
 ## Layout
 
 | Path | What | Edit? |
