@@ -204,6 +204,6 @@ direct_dependencies:
 - espressif/esp_video
 - espressif/usb_device_uvc
 - idf
-manifest_hash: e1950a70720c9000b9997987fd1aa32c2159933e199b4c2bb6385201dfa255ee
+manifest_hash: bc7f5822d2945ce143a1bd144635072afd709ed1a453eaf02afa966fdd696ec5
 target: esp32p4
 version: 2.0.0

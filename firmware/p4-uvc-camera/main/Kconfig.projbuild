@@ -1,0 +1,79 @@
+menu "P4 UVC camera"
+
+    config P4CAM_JPEG_QUALITY
+        int "JPEG quality (1-100)"
+        range 1 100
+        default 80
+        help
+            Hardware JPEG encoder quality. Lower values give smaller frames,
+            which matters if 1080p frames do not fit the USB bandwidth.
+
+    config P4CAM_HFLIP
+        bool "Mirror the image horizontally"
+        default n
+        help
+            Sets the IMX708 horizontal mirror bit (V4L2_CID_HFLIP) before the
+            sensor mode is selected, so the ISP demosaics with the matching
+            Bayer phase.
+
+    config P4CAM_VFLIP
+        bool "Flip the image vertically"
+        default n
+        help
+            Sets the IMX708 vertical flip bit (V4L2_CID_VFLIP). Enable both
+            flips for a camera mounted upside down (180 degree rotation).
+
+    config P4CAM_FIXED_EXPOSURE
+        bool "Fixed exposure and gain (disable auto exposure)"
+        default n
+        help
+            Switches the ISP pipeline's auto exposure/gain loop off and sets
+            the exposure time and analog gain below on every stream start.
+            Auto white balance keeps running: esp_video 2.5.0 / esp_ipa 2.4.0
+            offer no run-time way to hold it.
+
+    config P4CAM_EXPOSURE_US
+        int "Exposure time (microseconds)"
+        depends on P4CAM_FIXED_EXPOSURE
+        range 30 1000000
+        default 10000
+        help
+            Clamped at run time to what the selected mode allows (about 35 ms
+            at the default 28 fps frame length). The sensor rounds it down to
+            whole lines of 13.4 us.
+
+    config P4CAM_GAIN_INDEX
+        int "Analog gain table index (0-46)"
+        depends on P4CAM_FIXED_EXPOSURE
+        range 0 46
+        default 0
+        help
+            Index into the IMX708 driver's gain table (V4L2_CID_GAIN), about
+            1/12 stop per step: 0 = 1.12x, 10 = 2x, 22 = 4x, 34 = 8x, 46 = 16x.
+
+    comment "Fixed focus needs ESP_VIDEO_ISP_PIPELINE_CONTROL_CAMERA_MOTOR=n (autofocus would override it)"
+        depends on ESP_VIDEO_ISP_PIPELINE_CONTROL_CAMERA_MOTOR
+
+    config P4CAM_FIXED_FOCUS
+        bool "Fixed focus position (no autofocus)"
+        depends on ESP_VIDEO_ENABLE_CAMERA_MOTOR_CONTROLLER && !ESP_VIDEO_ISP_PIPELINE_CONTROL_CAMERA_MOTOR
+        default n
+        help
+            Moves the DW9807 lens motor to a fixed position
+            (V4L2_CID_FOCUS_ABSOLUTE) on every stream start. Only available
+            with CONFIG_ESP_VIDEO_ISP_PIPELINE_CONTROL_CAMERA_MOTOR=n, because
+            the autofocus algorithm cannot be paused at run time and would
+            move the lens again.
+
+    config P4CAM_FOCUS_POSITION
+        int "Lens position (DW9807 DAC code, 0-1023)"
+        depends on P4CAM_FIXED_FOCUS
+        range 0 1023
+        default 512
+        help
+            Raw DAC code; which end is near focus and how much of the range is
+            usable varies per module (see the notes on
+            CAM_MOTOR_DW9807_INIT_POS in the vendored driver). Find the value
+            by trial on the real camera.
+
+endmenu

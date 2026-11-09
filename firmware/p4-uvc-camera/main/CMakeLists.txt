@@ -1,7 +1,10 @@
 idf_component_register(
     SRCS "uvc_camera_main.c"
     INCLUDE_DIRS "."
-    REQUIRES esp_video esp_cam_sensor_imx usb_device_uvc espressif__tinyusb esp_timer esp_mm esp_hw_support
+    # espressif__esp_ipa: esp_video_isp_pipeline.h includes esp_ipa.h, but
+    # esp_video only lists esp_ipa as a private requirement.
+    REQUIRES esp_video espressif__esp_ipa esp_cam_sensor_imx usb_device_uvc espressif__tinyusb
+             esp_timer esp_mm esp_hw_support
 )
 
 # Fail the build if the IMX708 ISP tuning file didn't resolve (esp_ipa only warns).

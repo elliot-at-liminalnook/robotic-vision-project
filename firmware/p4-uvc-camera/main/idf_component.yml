@@ -3,8 +3,11 @@ dependencies:
   # Pinned exactly: patches/esp_video-2.5.0 replaces files by checksum and
   # refuses any other version.
   espressif/esp_video: "==2.5.0"
-  # Same series as the esp_video 2.5.0 uvc example.
-  espressif/usb_device_uvc: "1.2.*"
+  # Pinned exactly (the version in dependencies.lock): uvc_camera_main.c sets
+  # the USB serial number through this component's string_desc_arr[], which
+  # is not in a public header and may change in any release. Re-check
+  # tusb/usb_descriptors.c before bumping.
+  espressif/usb_device_uvc: "==1.2.0~1"
   # Vendored driver in ../../components (EXTRA_COMPONENT_DIRS); no registry fetch.
   esp_cam_sensor_imx:
     path: "../../components/esp_cam_sensor_imx"

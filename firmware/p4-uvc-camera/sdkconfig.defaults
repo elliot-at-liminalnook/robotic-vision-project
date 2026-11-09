@@ -58,3 +58,15 @@ CONFIG_UVC_MULTI_FRAME_HEIGHT_3=480
 CONFIG_UVC_MULTI_FRAME_FPS_3=30
 
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Image options live in "P4 UVC camera" (main/Kconfig.projbuild); defaults are
+# auto exposure/focus, no flips, JPEG quality 80. Examples:
+# CONFIG_P4CAM_HFLIP=y
+# CONFIG_P4CAM_VFLIP=y
+# CONFIG_P4CAM_FIXED_EXPOSURE=y
+# CONFIG_P4CAM_EXPOSURE_US=10000
+# CONFIG_P4CAM_GAIN_INDEX=10
+# Fixed focus also needs the autofocus loop's motor control switched off:
+# CONFIG_ESP_VIDEO_ISP_PIPELINE_CONTROL_CAMERA_MOTOR=n
+# CONFIG_P4CAM_FIXED_FOCUS=y
+# CONFIG_P4CAM_FOCUS_POSITION=512
