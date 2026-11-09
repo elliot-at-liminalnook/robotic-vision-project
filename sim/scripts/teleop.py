@@ -44,7 +44,10 @@ Motion (sim/docs/FAST_TELEOP_FINDINGS.md):
 
 Always enforced: joint limits, the camera-safe wrist roll range (see
 hardware/wrist_mount/place_camera.py) and a minimum tip height above the
-table. Unreachable targets are refused.
+table (in joint mode: a jog that would take the tip below it is refused).
+Unreachable targets are refused. Stall guard: if an arm joint stays more than
+12 deg behind its command for 0.4 s (blocked by the table, an object or the
+arm itself), the goal is pulled back to where the arm is.
 """
 from __future__ import annotations
 
@@ -80,6 +83,9 @@ TILT_STEP, TILT_MAX = 5.0, 25.0  # deg, load-aware IK cone ([ / ])
 TILT_RAMP = (0.05, 0.10)        # m: cone is 0 below 5 cm tip height, full above 10 cm
 WHEEL_STEP = 0.01               # m per wheel notch (joint mode: rad)
 MIN_TIP_Z = 0.004               # m above the table
+IK_TOL = 0.005                  # m: a target the IK misses by more is refused
+BLOCK_ERR = math.radians(12.0)  # an arm joint this far behind its command (the servo is at full torque) ...
+BLOCK_TIME = 0.4                # ... for this long is blocked: by the table, an object or the arm itself
 GRIP_OPEN, GRIP_CLOSED = 0.9, -0.17
 HOME_TIP = (0.20, 0.0, 0.16)
 
@@ -121,6 +127,7 @@ class Teleop:
         self.ff.reset()
         self.grip_latch.reset()
         self.move = None                # active straight-line CartesianMove
+        self._blocked_t = 0.0
         self.target = np.array(HOME_TIP, float)
         self.roll = q[4]
         self.grip = GRIP_OPEN
@@ -135,7 +142,6 @@ class Teleop:
         else:
             f = load_servos()["follower"]
             self.gen = ProfileLimiter(q, f["profile_speed_rad_s"], f["profile_accel_rad_s2"])
-        self._prev_vel = np.zeros(len(JOINTS))
         self.tau_pred = np.zeros(len(JOINTS))
 
     def toggle_speed(self):
@@ -182,7 +188,7 @@ class Teleop:
             q, err = self.ik.solve(target, seed, iters=30, tilt_tol_deg=tilt, payload_kg=payload)
         else:
             q, err = self.ik.solve(target, seed, iters=120)
-        if err > 0.005:
+        if not (err <= IK_TOL and np.isfinite(q).all()):     # also catches NaN
             self.say(f"unreachable ({err * 1000:.0f} mm off)")
             return False
         self.goal = np.clip(q, self.lo, self.hi)
@@ -193,6 +199,10 @@ class Teleop:
         self.move = None
         g = self.goal.copy()
         g[j] = np.clip(g[j] + delta, self.lo[j], self.hi[j])
+        z = self.tip_pos(g)[2]
+        if z < MIN_TIP_Z and z < self.tip_pos(self.goal)[2]:    # may still back out from below
+            self.say("refused: the tip would go into the table")
+            return
         self.goal = g
         # Keep the Cartesian target in sync, so switching modes doesn't jump.
         self.target, self.roll, self.grip = self.tip_pos(g), g[4], g[5]
@@ -223,12 +233,19 @@ class Teleop:
         hit = np.asarray(spec.pos) + t * ray
         self.move_to([hit[0], hit[1], self.target[2]], f"moving above ({hit[0]:.3f}, {hit[1]:.3f})")
 
+    def set_mode(self, mode: str):
+        if mode != self.mode:
+            self.move = None            # a straight-line move never outlives a mode switch
+            self.mode = mode
+            self.say(f"{mode} mode")
+
     def move_to(self, end, msg: str, roll=None):
-        """Start a straight-line tip move (click-to-move, home)."""
+        """Start a straight-line tip move (click-to-move, home). Always runs in Cartesian mode."""
+        self.set_mode("cartesian")
         end = np.array(end, float)
         end[2] = max(end[2], MIN_TIP_Z)
         q, err = self.ik.solve(end, self.goal, iters=200)      # check the end is reachable first
-        if err > 0.005:
+        if not (err <= IK_TOL and np.isfinite(q).all()):
             self.say(f"unreachable ({err * 1000:.0f} mm off)")
             return False
         g = self.gov_cfg
@@ -261,30 +278,62 @@ class Teleop:
             return
         dt = self.sim.dt
         n = max(1, int(round(min(dt_wall, 0.1) / dt)))
+        frame_dt = n * dt
         self.interp.set(self.goal)
         q_meas = self.sim.q()              # once per frame (the real arm: position registers)
+        if self._blocked(q_meas, frame_dt):
+            return
+        governed = isinstance(self.gen, TorqueGovernor)
+        if governed:
+            self.gen.observe(q_meas)       # lag vs the command as it is now, not as it advances below
         # Grip-by-offset: once the jaws stall on an object, hold a few degrees past contact.
-        latched = self.grip_latch.update(float(self.gen.current[5]), float(q_meas[5]), n * dt)
+        latched = self.grip_latch.update(float(self.gen.current[5]), float(q_meas[5]), frame_dt)
+        if self.grip_latch.holding and self.gen.current[5] < latched:
+            # Park the gripper's command generator at the held target, so opening starts from there.
+            self.gen.current[5], self.gen.vel[5] = latched, 0.0
+        vel0 = self.gen.vel.copy()
         for _ in range(n):
             g = self.interp.advance(dt)
-            if isinstance(self.gen, TorqueGovernor):
-                cmd = self.gen.update(g, dt, q_meas=q_meas)
-            else:
-                cmd = self.gen.update(g, dt)
-            cmd = np.array(cmd, float)
+            cmd = np.array(self.gen.update(g, dt), float)
             if self.grip_latch.holding:
-                cmd[5] = latched
+                cmd[5] = max(cmd[5], latched)
             if self.ff_on:
                 cmd = self.ff.apply(cmd, dt)
             self.sim.set_targets(cmd)
             self.sim.step(1)
-        if not isinstance(self.gen, TorqueGovernor):
-            acc = (self.gen.vel - self._prev_vel) / dt
-            self._prev_vel = self.gen.vel.copy()
-            self.tau_pred = self.dyn.torque(self.gen.current, self.gen.vel, acc,
+        if not governed:                   # GENTLE: predicted torque for the load panel
+            self.tau_pred = self.dyn.torque(self.gen.current, self.gen.vel, (self.gen.vel - vel0) / frame_dt,
                                             float(self.gov_cfg["assumed_payload_kg"]))
 
+    def _blocked(self, q_meas, frame_dt: float) -> bool:
+        """Stall guard: if the arm can't follow its command, stop pushing.
+
+        A servo more than its saturation error (9 deg) behind is already at
+        full torque; if it stays there, something is in the way (the tip-height
+        limit only covers the tip: the jaws can meet the shoulder, the camera
+        the table). Holding that would trip the servo's overload protection, so
+        the goal is pulled back to where the arm is.
+        """
+        behind = np.abs(self.gen.current[:5] - q_meas[:5])
+        self._blocked_t = self._blocked_t + frame_dt if behind.max() > BLOCK_ERR else 0.0
+        if self._blocked_t < BLOCK_TIME:
+            return False
+        j = int(behind.argmax())
+        self._blocked_t = 0.0
+        self.move = None
+        hold = self.goal.copy()
+        hold[:5] = q_meas[:5]
+        self.goal = np.clip(hold, self.lo, self.hi)
+        self.interp = GoalInterpolator(self.goal, 1.0 / FRAME_HZ)
+        self._make_generator(np.r_[q_meas[:5], self.gen.current[5]])
+        self.ff.reset()
+        self.target, self.roll = self.tip_pos(self.goal), self.goal[4]
+        self.say(f"blocked at {JOINTS[j]}: stopped pushing")
+        return True
+
     def handle_held_keys(self, keys, dt: float, pg):
+        if self.paused:                  # the target must not run ahead of a frozen arm
+            return
         fine = 0.2 if (keys[pg.K_LSHIFT] or keys[pg.K_RSHIFT]) else 1.0
         if self.mode == "cartesian":
             v = np.zeros(3)
@@ -313,11 +362,8 @@ class Teleop:
             if k == pg.K_SPACE:
                 self.toggle_grip()
             elif k == pg.K_j:
-                self.mode = "joint" if self.mode == "cartesian" else "cartesian"
-                self.say(f"{self.mode} mode")
+                self.set_mode("joint" if self.mode == "cartesian" else "cartesian")
             elif k == pg.K_h:
-                if self.mode == "joint":
-                    self.mode = "cartesian"
                 self.move_to(HOME_TIP, "home", roll=self._roll_default())
             elif k == pg.K_g:
                 self.toggle_speed()
@@ -341,6 +387,9 @@ class Teleop:
             elif pg.K_1 <= k <= pg.K_6:
                 self.sel_joint = k - pg.K_1
                 self.say(f"selected {JOINTS[self.sel_joint]}")
+        if self.paused and e.type in (pg.MOUSEWHEEL, pg.MOUSEBUTTONDOWN):
+            self.say("paused (P to resume)")
+            return True
         if e.type == pg.MOUSEWHEEL:
             if self.mode == "cartesian":
                 self.move = None
@@ -602,8 +651,9 @@ def main() -> int:
                     help="render cameras every N frames (default 1; 10 for Newton on CPU)")
     ap.add_argument("--selftest", action="store_true", help="headless scripted check")
     a = ap.parse_args()
-    render_every = a.render_every or (10 if (a.backend == "newton" and a.solver == "cpu") else 1)
-    app = Teleop(a.backend, a.solver, render_every)
+    app = Teleop(a.backend, a.solver, a.render_every or 1)
+    if a.render_every is None and getattr(app.sim, "solver_kind", None) == "cpu":
+        app.render_every = 10            # ray-traced cameras are slow without a GPU (also when cpu was auto-selected)
     app.selftest_ok = True
     app.run(selftest=a.selftest)
     return 0 if app.selftest_ok else 1

@@ -1,5 +1,10 @@
 # Fast teleop: torque governor + load-aware IK. Findings (2026-11-08)
 
+> **Note (2026-11-09).** These numbers were measured with the servo loop at 2° stiffness and no feed-forward.
+> The sim now uses 9° with gravity + back-EMF feed-forward (DECISIONS P1–P3), the governor brakes in full and
+> takes its lag from the moment of measurement (A3, A4), and the camera-safe roll range is narrower (A5). The
+> conclusions should hold; rerun `fast_teleop_study.py` before quoting the figures.
+
 The question: with a plugged-in bench supply (no current limit), how fast can teleop safely move the arm, and does
 **load-aware IK** (letting the fingers tilt to take load off the servos) help?
 

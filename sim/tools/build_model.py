@@ -263,12 +263,30 @@ def add_wrist_assembly(root, asset) -> str:
         contact = ET.Element("contact")
         root.insert(list(root).index(root.find("actuator")), contact)
     ET.SubElement(contact, "exclude", body1="wrist_camera_assembly", body2="moving_jaw_so101_v1")
+    # The assembly is welded to the gripper, so the engine treats it as part of
+    # the gripper and skips its contacts with the gripper's parent, the wrist
+    # link. That is the one collision the placement study had to rule out
+    # (place_camera.py turns the filter off), so name those pairs explicitly:
+    # explicit pairs are exempt from the parent filter.
+    wrist = next(b for b in root.iter("body") if any(j.get("name") == "wrist_flex" for j in b.findall("joint")))
+    k = 0
+    for g in wrist.findall("geom"):
+        if g.get("class") != "collision":
+            continue
+        g.set("name", g.get("name") or f"wrist_link_collision_{k}")
+        k += 1
+        for n in ("bracket", "holder", "board"):
+            ET.SubElement(contact, "pair", geom1=f"wm_{n}_collision", geom2=g.get("name"))
+    assert k, "no collision geom found on the wrist link"
     return (f"wrist camera assembly: {total * 1000:.0f} g (bracket {BRACKET_MASS * 1000:.0f}, "
             f"holder {masses['holder'] * 1000:.0f}, camera {masses['camera'] * 1000:.0f}, "
             f"board {masses['board'] * 1000:.0f}), COM {np.round(com * 1000, 1).tolist()} mm")
 
 
 def main() -> int:
+    import argparse
+    # No options, but --help must explain the script and a typo must not start a run that rewrites files.
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     import mujoco
 
     cams = load_toml(SIM / "config/cameras.toml")
@@ -368,6 +386,17 @@ def main() -> int:
                   f"gripper +/-{gl} N.m (torque-limit register)")
     report.append(f"position loop: kp {kp} N.m/rad (stall at {loop['sat_error_deg']} deg), kv {kv}, "
                   f"joint damping {damping} N.m.s/rad (back-EMF)")
+
+    # 3b. Camera-safe wrist roll: limit the joint and its actuator, so nothing
+    #     (a policy, a new script, the real-robot backend) can command a roll
+    #     that swings the side-mounted camera into the arm.
+    roll_lo, roll_hi = load_wrist_mount()["wrist_roll_range_rad"]
+    joint = next(j for j in root.iter("joint") if j.get("name") == "wrist_roll")
+    j_lo, j_hi = (float(v) for v in joint.get("range").split())
+    roll_lo, roll_hi = max(roll_lo, j_lo), min(roll_hi, j_hi)
+    joint.set("range", f"{roll_lo} {roll_hi}")
+    next(a for a in root.find("actuator") if a.get("name") == "wrist_roll").set("ctrlrange", f"{roll_lo} {roll_hi}")
+    report.append(f"wrist_roll limited to {roll_lo:.4f} .. {roll_hi:.4f} rad (camera-safe, hardware/wrist_mount)")
 
     # 4. Wrist camera on the gripper body.
     def cam_element(name, spec):

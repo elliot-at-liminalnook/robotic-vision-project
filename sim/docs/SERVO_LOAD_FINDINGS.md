@@ -1,5 +1,10 @@
 # Can the servos carry the wrist camera? Findings (2026-11-08)
 
+> **Note (2026-11-09).** This study ran at 11.1 V, with the gripper at 100 % torque and the servo stiffness swept
+> over 0.5 / 2 / 5°. The sim now uses 12 V, a 50 % gripper limit and 9° stiffness with feed-forward (DECISIONS
+> F1, L4, P1–P3). The static holding-torque margins don't depend on those; rerun `servo_load_study.py` before
+> quoting the dynamic figures.
+
 Question: the wrist camera assembly (bracket + holder + Camera Module 3 + ESP32-P4) adds **46 g** about 72 mm
 out from the gripper's centreline. Do the follower's **HX-30HM** servos cope?
 

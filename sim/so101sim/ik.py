@@ -192,7 +192,9 @@ class ArmIK:
             seed[4] = r
             qq, err = self.solve(target_pos, seed, **kw)
             cost = self.load_cost(qq, payload_kg)
-            if best is None or (err < 0.003 and cost < best[2]) or best[1] >= 0.003:
+            ok, best_ok = err < 0.003, best is not None and best[1] < 0.003
+            # A candidate that reaches the target beats one that doesn't; among equals, less torque (or less error).
+            if best is None or (ok and not best_ok) or (ok and cost < best[2]) or (not ok and not best_ok and err < best[1]):
                 best = (qq, err, cost)
         return best
 

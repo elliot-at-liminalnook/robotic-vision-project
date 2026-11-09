@@ -16,7 +16,7 @@ import newton
 from newton.sensors import SensorCamera
 
 from . import JOINTS
-from .config import WORKCELL, load_cameras
+from .config import WORKCELL, load_cameras, model_timestep
 
 
 def _mat_to_quat_xyzw(R: np.ndarray) -> np.ndarray:
@@ -82,7 +82,7 @@ class NewtonBackend:
         self.state_0 = self.model.state()
         self.state_1 = self.model.state()
         self.control = self.model.control()
-        self.dt = 0.002   # matches <option timestep> in workcell.xml
+        self.dt = model_timestep(model_path)
         self._time = 0.0
 
         labels = list(self.model.joint_label)
@@ -120,9 +120,9 @@ class NewtonBackend:
             st.joint_q.assign(joint_q)
             st.joint_qd.zero_()
             newton.eval_fk(self.model, st.joint_q, st.joint_qd, st)
+        # Targets = the reset pose, as in MujocoBackend (a stale target would yank the arm).
         targets = self.control.joint_target_q.numpy()
-        if q is not None:
-            targets[self.dofadr] = q
+        targets[self.dofadr] = joint_q[self.qadr]
         self.control.joint_target_q.assign(targets)
         self._time = 0.0
 

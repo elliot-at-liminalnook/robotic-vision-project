@@ -4,8 +4,9 @@
 #   gear ratio 1:345 (same as the STS3215-C001 the upstream sim was tuned for)
 #   12-bit magnetic encoder: 4096 ticks per revolution
 #
-# Actuator gains and joint damping/friction/armature are upstream's STS3215
-# values (same ratio and nearly the same speed); refit them from real step
+# The actuator stiffness and joint damping are derived below
+# ([follower.position_loop]); friction loss and armature are upstream's
+# STS3215 values (same gear ratio). Refit all of them from real step
 # responses once the servos arrive (system identification).
 
 [follower]
@@ -56,7 +57,8 @@ feedforward_payload_kg = 0.0  # add a held object's mass here when known
 # the servo into its overload protection). Squeeze = stiffness x offset.
 grip_offset_deg = 3.0           # 3 deg x stiffness (stall at 9 deg) ~= 33 % of stall: under the gripper's 50 % limit and its 80 %-of-limit overload threshold
 grip_stall_speed_rad_s = 0.15 # gripper slower than this ...
-grip_stall_time_s = 0.08      # ... for this long while closing = contact
+grip_stall_time_s = 0.08      # ... for this long while commanded more than grip_offset past the jaw = contact
+grip_settle_time_s = 0.3      # after latching, keep re-measuring the contact angle this long (the squeeze relaxes)
 
 # Torque governor for fast teleop (so101sim/governor.py). Instead of a fixed
 # speed/acceleration, every control tick it predicts each joint's torque with

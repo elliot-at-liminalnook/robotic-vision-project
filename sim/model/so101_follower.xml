@@ -60,11 +60,11 @@
               <joint axis="0 0 1" name="wrist_flex" type="hinge" range="-1.6580628494556928 1.6580627293335335" class="hx30hm" />
               <inertial pos="-0.000103312 -0.0386143 0.0281156" mass="0.079" fullinertia="3.68263e-05 2.5391e-05 2.1e-05 1.7893e-08 -5.28128e-08 3.6412e-06" />
               <geom type="mesh" class="visual" pos="8.32667e-17 -0.0424 0.0306" quat="0.5 0.5 0.5 -0.5" mesh="sts3215_03a_no_horn_v1" material="sts3215_03a_no_horn_v1_material" />
-              <geom type="mesh" class="collision" pos="8.32667e-17 -0.0424 0.0306" quat="0.5 0.5 0.5 -0.5" mesh="sts3215_03a_no_horn_v1" material="sts3215_03a_no_horn_v1_material" />
+              <geom type="mesh" class="collision" pos="8.32667e-17 -0.0424 0.0306" quat="0.5 0.5 0.5 -0.5" mesh="sts3215_03a_no_horn_v1" material="sts3215_03a_no_horn_v1_material" name="wrist_link_collision_0" />
               <geom type="mesh" class="visual" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" mesh="wrist_roll_pitch_so101_v2" material="wrist_roll_pitch_so101_v2_material" />
-              <geom type="mesh" class="collision" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" mesh="wrist_roll_pitch_so101_v2" material="wrist_roll_pitch_so101_v2_material" />
+              <geom type="mesh" class="collision" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" mesh="wrist_roll_pitch_so101_v2" material="wrist_roll_pitch_so101_v2_material" name="wrist_link_collision_1" />
               <body name="gripper" pos="5.55112e-17 -0.0611 0.0181" quat="0.0172091 -0.0172091 0.706897 0.706897">
-                <joint axis="0 0 1" name="wrist_roll" type="hinge" range="-2.7438472969992493 2.841206309382605" class="hx30hm" />
+                <joint axis="0 0 1" name="wrist_roll" type="hinge" range="-2.34159 0.8" class="hx30hm" />
                 <inertial pos="0.000213627 0.000245138 -0.025187" mass="0.087" fullinertia="2.75087e-05 4.33657e-05 3.45059e-05 -3.35241e-07 -5.7352e-06 -5.17847e-08" />
                 <geom type="mesh" class="visual" pos="0.0077 0.0001 -0.0234" quat="0.707107 -0.707107 1.66015e-15 6.45094e-15" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material" />
                 <geom type="mesh" class="collision" pos="0.0077 0.0001 -0.0234" quat="0.707107 -0.707107 1.66015e-15 6.45094e-15" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material" />
@@ -185,13 +185,19 @@
   </asset>
   <contact>
     <exclude body1="wrist_camera_assembly" body2="moving_jaw_so101_v1" />
+    <pair geom1="wm_bracket_collision" geom2="wrist_link_collision_0" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_0" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_0" />
+    <pair geom1="wm_bracket_collision" geom2="wrist_link_collision_1" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_1" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_1" />
   </contact>
   <actuator>
     <position class="hx30hm" name="shoulder_pan" joint="shoulder_pan" forcerange="-3.178 3.178" ctrlrange="-1.91986 1.91986" />
     <position class="hx30hm" name="shoulder_lift" joint="shoulder_lift" forcerange="-3.178 3.178" ctrlrange="-1.74533 1.74533" />
     <position class="hx30hm" name="elbow_flex" joint="elbow_flex" forcerange="-3.178 3.178" ctrlrange="-1.69 1.69" />
     <position class="hx30hm" name="wrist_flex" joint="wrist_flex" forcerange="-3.178 3.178" ctrlrange="-1.65806 1.65806" />
-    <position class="hx30hm" name="wrist_roll" joint="wrist_roll" forcerange="-3.178 3.178" ctrlrange="-2.74385 2.84121" />
+    <position class="hx30hm" name="wrist_roll" joint="wrist_roll" forcerange="-3.178 3.178" ctrlrange="-2.34159 0.8" />
     <position class="hx30hm" name="gripper" joint="gripper" forcerange="-1.589 1.589" ctrlrange="-0.17453 1.74533" />
   </actuator>
   <equality />

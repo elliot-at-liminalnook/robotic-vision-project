@@ -25,6 +25,10 @@ Hiwonder's kit replaces the Feetech STS3215 servos with its own
   `software/hiwonder-lerobot-882c80d.patch`: sync read/write `num_retry` 0 → 1,
   failed-sync log messages raised from debug to info, and an added `so101.mdx` doc.
   The retry suggests the HX servos occasionally drop sync packets.
+  **Caution (2026-11-09):** this is Hiwonder's claim, not something we have verified. Their HX register
+  table v3.7 (`docs/datasheets/hiwonder-hx-servos/`) disagrees with the STS3215 map on the P/D/I,
+  torque-limit and torque-enable addresses, so check which map the servo firmware uses before any
+  register write (`docs/DECISIONS.md` P5). We don't use LeRobot (H5).
 - **Print files are Hiwonder's own.** `print/*.3mf` (Bambu Studio projects, 2 plates each) and
   `cad/*.3dm` (Rhino) are Hiwonder's arm geometry. However, the HX servos share the STS3215's outer
   body (45.2 × 24.7 × 35 mm per both datasheets; 45.23 × 24.73 measured from the HX STEP), so the

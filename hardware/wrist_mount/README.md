@@ -12,15 +12,17 @@ object between them.
 | Holder orientation | Top band toward the wrist; lens axis tilted ~45° toward the jaws |
 | ESP32-P4 board | On the holder's back, so the camera ribbon crosses **no** joints; only the round USB cable runs down the arm |
 | Added mass | ~46 g (bracket 14, holder 16, camera 4, board 12) |
-| Camera-safe wrist roll | −2.74 … +0.80 rad (spans π, so every top-down jaw orientation stays available) |
+| Camera-safe wrist roll | −2.34 … +0.80 rad (exactly π wide, so every top-down jaw orientation stays available). The generated sim model limits the joint to it; set the real servo's angle limits to match |
 
 Scored in MuJoCo on the generated follower model. The chosen pose:
 - has the tips and grasp centre ≥ 162 px inside the 640×360 wrist image (jaws open and closed);
 - doesn't overlap the gripper or the moving jaw anywhere in the jaw's range;
 - clears the table by 44 mm at a straight-down grasp;
-- has zero self-collisions over 200 random reachable grasp poses within the roll range.
+- has zero self-collisions over 200 random reachable grasp poses within the roll range (one random seed). Over
+  uniformly random joint angles it still collides in about 5 % of poses, so the sim model has explicit contact
+  pairs between the assembly and the wrist link (the engine would otherwise skip them).
 
-Closer-in placements collided with the wrist link in 47–97 % of grasp poses. Large positive wrist roll near
+Closer-in placements collided with the wrist link in 12–78 % of grasp poses. Large positive wrist roll near
 the base swings the holder into the shoulder, which is why the roll range is capped.
 
 ## Bracket (build_wrist_mount.py → wrist_bracket.step/.stl)
@@ -61,4 +63,7 @@ python sim/tools/build_model.py      # puts the assembly + camera into the sim
   mass.
 - USB cable routing down the arm; check it with the arm moving.
 - Printed fit, stiffness (wobble at the camera), and the real sensor's image orientation. Set the firmware's
-  hflip/vflip so that image-up = the holder's top band, as in the sim.
+  `P4CAM_HFLIP` / `P4CAM_VFLIP` build options so that image-up = the holder's top band, as in the sim.
+- The collision and clearance checks cover the holder, board and bracket only: not the USB plug and cable, the
+  ribbon loop or the cradle. The 44 mm table clearance is for a straight-down grasp; a tilted one has less.
+- Masses are estimates (46 g in total, with no cable, screws, inserts or cradle). Weigh the printed parts.

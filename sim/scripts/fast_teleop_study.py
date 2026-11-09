@@ -486,6 +486,9 @@ def write_report(rows, smap, roll, files, hazard):
 
 
 def main() -> int:
+    import argparse
+    # No options, but --help must explain the script and a typo must not start a run that rewrites files.
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     t0 = time.perf_counter()
     rows = []
     for gen in ("gentle", "max", "governor"):

@@ -1,7 +1,7 @@
 # Robotic Vision Project
 
-Modifying the open-source **SO-101** leader/follower robot arm (LeRobot ecosystem)
-to use components we already have, and running the arms in simulation.
+Modifying the open-source **SO-101** robot arm to use components we already have, and running it in
+simulation (Newton / MuJoCo, not LeRobot).
 
 ![The simulated SO-101 follower with the wrist camera mounted](docs/media/arm_hero.png)
 
@@ -39,7 +39,7 @@ The keyboard/mouse teleop window (`sim/scripts/teleop.py`):
 |---|---|---|
 | `third_party/SO-ARM100/` | Upstream SO-101 design from [TheRobotStudio/SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) (Apache-2.0): STEP CAD, STL print files, URDF/MuJoCo models, optional mounts, BOM. Pinned commit in `UPSTREAM_COMMIT`. | No, mirror only |
 | `third_party/hiwonder-so-arm101/` | Hiwonder's variant (HX-10HM/HX-30HM servos): manuals, servo protocol, print files, Rhino CAD, LeRobot patch | No, reference only |
-| `docs/PLAN.md` | Build decisions, camera pipeline, LeRobot integration options, open items | Yes |
+| `docs/PLAN.md` | Build decisions, camera pipeline, open items and open decisions | Yes |
 | `docs/datasheets/` | Datasheets + official CAD: servos, servo driver board, Camera Module 3, ESP32-P4 board/chip | No, reference only |
 | `firmware/p4-uvc-camera/` | ESP32-P4 + Camera Module 3 → USB UVC webcam firmware (ESP-IDF) | Yes |
 | `firmware/components/` | Vendored IMX708 camera driver (Apache-2.0) used by the firmware | Carefully |
@@ -72,6 +72,8 @@ python sim/scripts/teleop.py --backend newton   # Linux: Newton / MuJoCo Warp
 
 Details, verified results and backend notes: `sim/README.md`. Decisions so far: `docs/DECISIONS.md`.
 
+Run the tests with `pytest sim/tests` (about 3 minutes).
+
 ## View the upstream arm
 
 Our simulation lives in `sim/` (see `sim/README.md`). The upstream model can still be viewed directly:
@@ -90,7 +92,6 @@ Known gaps for this project:
 - `so101_new_calib_camera.xml` adds the wrist-camera *mesh* but defines **no MuJoCo camera**,
   so there's no simulated camera image yet.
 - The sim uses STS3215 geometry and motor parameters. Hiwonder's HX-servo variant has no sim model.
-- LeRobot's gripper is 0–100 (closed→open); the URDF/MJCF use radians (noted upstream).
 
 ## Licensing
 

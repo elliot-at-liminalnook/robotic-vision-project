@@ -69,6 +69,12 @@ def hpt(R, o, p):
     return R @ np.asarray(p, float) + o
 
 
+def wrist_intrinsics() -> dict:
+    import tomllib
+    cfg = tomllib.loads((Path(__file__).resolve().parents[2] / "sim/config/cameras.toml").read_text())
+    return cfg["intrinsics"][cfg["cameras"]["wrist"]["intrinsics"]]
+
+
 def in_view_count(shape: cq.Shape, pose) -> int:
     """Bracket vertices that project inside the wrist camera image (1080p pinhole)."""
     import tempfile
@@ -92,10 +98,10 @@ def in_view_count(shape: cq.Shape, pose) -> int:
             verts = np.frombuffer(data[84:84 + 50 * n], dtype=np.dtype([("n", "<3f4"), ("v", "<9f4"), ("a", "<u2")]))["v"].reshape(-1, 3)
     d = verts - p
     zc = d @ f
-    fx = fy = 982.1
-    u = 960 + fx * (d @ x) / np.maximum(zc, 1e-9)
-    v = 540 - fy * (d @ y) / np.maximum(zc, 1e-9)
-    inside = (zc > 1.0) & (u >= 0) & (u < 1920) & (v >= 0) & (v < 1080)
+    i = wrist_intrinsics()               # the same intrinsics the sim's wrist camera uses
+    u = i["cx"] + i["fx"] * (d @ x) / np.maximum(zc, 1e-9)
+    v = i["cy"] - i["fy"] * (d @ y) / np.maximum(zc, 1e-9)
+    inside = (zc > 1.0) & (u >= 0) & (u < i["calib_width"]) & (v >= 0) & (v < i["calib_height"])
     return int(inside.sum())
 
 

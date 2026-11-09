@@ -128,7 +128,10 @@ def run(backend: str, solver: str | None):
 def compare():
     """Side-by-side sheet of all saved backend runs: rows = pose x camera."""
     from PIL import Image, ImageDraw
-    runs = sorted(p for p in OUT.iterdir() if (p / "result.json").exists())
+    runs = sorted(p for p in OUT.iterdir() if (p / "result.json").exists()) if OUT.exists() else []
+    if not runs:
+        print(f"no saved runs in {OUT}; run vision_check.py --backend ... first")
+        return 1
     names = [(r["pose"], r["camera"]) for r in json.loads((runs[0] / "result.json").read_text())["checks"]]
     w, h = 640, 360
     sheet = Image.new("RGB", (w * len(runs), (h + 24) * len(names) + 30), (255, 255, 255))
@@ -145,6 +148,7 @@ def compare():
                    fill=(0, 100, 0) if rr.get("pass") else (180, 0, 0))
     sheet.save(OUT / "compare.png")
     print(OUT / "compare.png")
+    return 0
 
 
 def main() -> int:
@@ -154,8 +158,9 @@ def main() -> int:
     ap.add_argument("--compare", action="store_true")
     a = ap.parse_args()
     if a.compare:
-        compare()
-        return 0
+        return compare()
+    if a.backend is None:
+        ap.error("--backend is required (or use --compare)")
     return run(a.backend, a.solver)
 
 

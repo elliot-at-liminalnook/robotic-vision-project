@@ -17,8 +17,11 @@ joints. Every control tick it:
   3. caps each joint's speed so that, at that speed, it still holds gravity with
      reserve_frac of stall torque to spare (to brake and correct);
   4. scales the whole arm's acceleration by one factor so every joint stays
-     inside its limits (braking is never scaled down first, so it doesn't
-     overshoot).
+     inside its limits. Braking is never scaled: stopping matters more than
+     staying inside the torque window (a servo that's asked for more than it
+     has simply saturates and the lag guard slows the command; a command
+     that doesn't brake coasts through its goal);
+  5. never commands a position outside the joint limits.
 
 Feed it a smooth goal: interpolate IK goals between control ticks
 (servo.GoalInterpolator). A goal that jumps every tick makes any generator
@@ -27,7 +30,10 @@ servo loop.
 
 With a measured joint position (the real servo's position register, or the
 sim), it also slows down when the arm lags the command by more than
-max_lag_deg: a guard against model error.
+max_lag_deg: a guard against model error. Call observe(q_meas) when a
+measurement arrives: the lag is taken against the command at that moment, so
+measuring less often than update() runs (once per frame, a slow bus) doesn't
+read the command's own progress since then as lag.
 
 The gripper is not governed (its squeeze is a contact force, not motion): it
 uses the fixed profile. Limits come from config/servos.toml [follower.governor].
@@ -38,6 +44,7 @@ import math
 
 import numpy as np
 
+from . import JOINTS
 from .config import load_servos
 from .dynamics import ArmDynamics
 from .servo_model import ServoSpec
@@ -47,7 +54,8 @@ N_ARM = 5          # shoulder_pan .. wrist_roll; index 5 = gripper
 
 class TorqueGovernor:
     def __init__(self, initial, spec: ServoSpec | None = None, cfg: dict | None = None,
-                 dyn: ArmDynamics | None = None, payload_kg: float | None = None):
+                 dyn: ArmDynamics | None = None, payload_kg: float | None = None, limits=None):
+        """limits: (lo, hi) joint limits for the command; default: the model's joint ranges."""
         f = load_servos()["follower"]
         self.cfg = dict(f["governor"], **(cfg or {}))
         self.spec = spec or ServoSpec.from_config()
@@ -55,6 +63,10 @@ class TorqueGovernor:
         self.payload_kg = float(self.cfg["assumed_payload_kg"] if payload_kg is None else payload_kg)
         self.grip_speed = float(f["profile_speed_rad_s"])
         self.grip_accel = float(f["profile_accel_rad_s2"])
+        if limits is None:
+            jr = self.dyn.m.jnt_range[[self.dyn.m.joint(j).id for j in JOINTS]]
+            limits = (jr[:, 0], jr[:, 1])
+        self.lo, self.hi = (np.array(x, float) for x in limits)
         self.current = np.array(initial, float)
         self.vel = np.zeros_like(self.current)
         self.acc = np.zeros_like(self.current)
@@ -68,8 +80,13 @@ class TorqueGovernor:
         self.limiting = None                # joint index that set the scale, if any
         self.heat_scale = 1.0
         self.lag_scale = 1.0
+        self.lag = 0.0                      # arm behind the command at the last measurement [rad]
 
     # ------------------------------------------------------------------ helpers
+    def observe(self, q_meas) -> None:
+        """A fresh measurement of the joint positions: updates the lag used by the lag guard."""
+        self.lag = float(np.abs(self.current[:N_ARM] - np.asarray(q_meas, float)[:N_ARM]).max())
+
     def heat_frac(self) -> np.ndarray:
         """RMS torque / continuous rating (1/3 stall), per joint."""
         return np.sqrt(self.heat_ms) / self.spec.continuous_hi
@@ -80,11 +97,13 @@ class TorqueGovernor:
 
     # ------------------------------------------------------------------ main
     def update(self, goal, dt: float, q_meas=None) -> np.ndarray:
-        """Next joint command. q_meas: measured joint positions (enables the lag guard)."""
+        """Next joint command. q_meas: joint positions measured just now (same as observe(q_meas) first)."""
+        if q_meas is not None:
+            self.observe(q_meas)
         c, s = self.cfg, self.spec
         n = N_ARM
         q, v = self.current, self.vel
-        goal = np.asarray(goal, float)
+        goal = np.clip(np.asarray(goal, float), self.lo, self.hi)
         err = goal - q
         tau_s, k = s.tau_s, s.tau_s / s.w0
         u_max = float(c["voltage_margin"])
@@ -93,12 +112,8 @@ class TorqueGovernor:
         # Slow-down factors: heat (any joint near its continuous rating) and lag.
         heat = float(self.heat_frac()[:n].max())
         self.heat_scale = float(np.clip((1.25 - heat) / 0.35, 0.2, 1.0))   # full below 0.9, 0.2 at 1.18+
-        self.lag_scale = 1.0
-        if q_meas is not None:
-            lag = float(np.abs(self.current[:n] - np.asarray(q_meas, float)[:n]).max())
-            lim = math.radians(float(c["max_lag_deg"]))
-            if lag > lim:
-                self.lag_scale = max(0.1, lim / lag)
+        lim = math.radians(float(c["max_lag_deg"]))
+        self.lag_scale = max(0.1, lim / self.lag) if self.lag > lim else 1.0
         slow = self.heat_scale * self.lag_scale
 
         # Speed cap: at that speed the joint can still hold gravity with reserve.
@@ -146,15 +161,14 @@ class TorqueGovernor:
         a_acc[n:] = 0
         a_brk[n:] = a_des[n:]
         base = h + M @ a_brk
-        s_brk, j_brk = self._max_scale(h, M @ a_brk, lo, hi, n)
-        if s_brk < 1.0:                       # even braking is too much: scale it, no acceleration
-            a = a_brk * s_brk
-            self.scale, self.limiting = s_brk, j_brk
-            a[n:] = a_des[n:]
-        else:
-            s_acc, j_acc = self._max_scale(base, M @ a_acc, lo, hi, n)
-            a = a_brk + s_acc * a_acc
-            self.scale, self.limiting = s_acc, (j_acc if s_acc < 1.0 else None)
+        # Braking is applied in full, even when it needs more torque than the
+        # window allows. (It used to be scaled like acceleration: one joint
+        # already outside its window, fast and heavily loaded, then scaled every
+        # joint's braking to zero and the arm coasted through its goals.)
+        # Acceleration gets whatever room is left.
+        s_acc, j_acc = self._max_scale(base, M @ a_acc, lo, hi, n)
+        a = a_brk + s_acc * a_acc
+        self.scale, self.limiting = s_acc, (j_acc if s_acc < 1.0 else None)
         self.tau_pred = h + M @ a
         self.acc = a
 
@@ -167,6 +181,12 @@ class TorqueGovernor:
         self.current = np.where(snap, goal, new)
         self.vel = np.where(snap, 0.0, v_new)
         self.acc = np.where(snap, 0.0, self.acc)
+        # Last resort: the command never leaves the joint range.
+        out = (self.current < self.lo) | (self.current > self.hi)
+        if out.any():
+            self.current = np.clip(self.current, self.lo, self.hi)
+            self.vel = np.where(out, 0.0, self.vel)
+            self.acc = np.where(out, 0.0, self.acc)
 
         # Overload timer (mirrors the servo's) and heat budget.
         above = np.abs(self.tau_pred) > ovl

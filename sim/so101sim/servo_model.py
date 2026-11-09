@@ -64,9 +64,13 @@ class ServoSpec:
 
     @classmethod
     def from_config(cls, arm: str = "follower", **kw) -> "ServoSpec":
-        """HX-30HM at the supply voltage in config/servos.toml."""
+        """HX-30HM as configured in config/servos.toml: supply voltage and position-loop stiffness.
+
+        Pass sat_error_deg=... to study a different stiffness.
+        """
         from .config import load_servos
         f = load_servos()[arm]
+        kw.setdefault("sat_error_deg", float(f["position_loop"]["sat_error_deg"]))
         return cls(stall_torque=float(f["torque_limit_nm"]), no_load_speed=float(f["max_speed_rad_s"]),
                    supply_v=float(f["supply_voltage_v"]), rated_v=float(f["rated_voltage_v"]), **kw)
 

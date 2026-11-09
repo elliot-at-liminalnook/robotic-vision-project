@@ -67,6 +67,13 @@ def resolve_camera_entry(c: dict) -> dict:
             "look_at": pose["look_at"], "up": pose["up"]}
 
 
+def model_timestep(model_path=WORKCELL) -> float:
+    """<option timestep> of an MJCF file (MuJoCo's default 2 ms if unset)."""
+    import xml.etree.ElementTree as ET
+    opt = ET.parse(model_path).getroot().find("option")
+    return float(opt.get("timestep", 0.002)) if opt is not None else 0.002
+
+
 def load_wrist_mount() -> dict:
     """The wrist camera mount placement (hardware/wrist_mount/wrist_mount_pose.json)."""
     return json.loads((ROOT / "hardware/wrist_mount/wrist_mount_pose.json").read_text())
@@ -75,7 +82,8 @@ def load_wrist_mount() -> dict:
 def wrist_roll_range() -> tuple[float, float]:
     """Wrist roll range that keeps the side-mounted camera clear of the arm.
 
-    Spans pi, so every top-down jaw orientation is still reachable.
+    Spans pi, so every top-down jaw orientation is still reachable. The
+    generated model's wrist_roll joint and actuator are limited to it too.
     """
     lo, hi = load_wrist_mount()["wrist_roll_range_rad"]
     return float(lo), float(hi)

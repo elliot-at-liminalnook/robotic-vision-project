@@ -4,7 +4,7 @@ ServoMap   : real servo encoder ticks <-> sim joint radians (per-joint zero/dire
 SlewLimiter: caps how fast the commanded position moves, like a real bus servo's
              top speed. MuJoCo/Newton position actuators have no speed limit, so
              without this the sim arm can move far faster than the HX-30HM
-             (~5.5 rad/s no-load) and demonstrations would not transfer.
+             (~6 rad/s no-load at 12 V) and demonstrations would not transfer.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import math
 
 import numpy as np
 
-from .config import load_servos
+from .config import load_servos, servo_limits
 
 
 class ServoMap:
@@ -101,8 +101,8 @@ class SlewLimiter:
     """Moves a commanded position toward the goal at no more than max_speed."""
 
     def __init__(self, initial, max_speed_rad_s: float | None = None, arm: str = "follower"):
-        if max_speed_rad_s is None:
-            max_speed_rad_s = float(load_servos()[arm]["max_speed_rad_s"])
+        if max_speed_rad_s is None:      # the servo's no-load speed at the supply voltage
+            max_speed_rad_s = servo_limits(arm)["no_load_speed_rad_s"]
         self.max_speed = float(max_speed_rad_s)
         self.current = np.array(initial, float)
 

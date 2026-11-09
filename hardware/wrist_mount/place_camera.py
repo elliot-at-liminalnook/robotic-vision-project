@@ -61,8 +61,12 @@ CAMERA_MASS = 0.004
 # The side-mounted holder swings toward the shoulder at large positive wrist
 # roll near the base. Top-down jaw orientation repeats every pi (roll r and
 # r - pi square the jaws the same way), so capping roll here loses no grasp
-# orientation. Software (IK, control app) enforces this range.
-ROLL_RANGE = (-2.74385, 0.8)
+# orientation. The range is exactly pi wide, [hi - pi, hi]: that is the band
+# the grasp-pose collision study below samples, so nothing outside what was
+# tested is allowed. sim/tools/build_model.py limits the wrist_roll joint and
+# actuator to it; set the real servo's angle limits to match.
+ROLL_HI = 0.8
+ROLL_RANGE = (round(ROLL_HI - math.pi, 5), ROLL_HI)
 
 CANDIDATES = [(y, z) for y in (0.050, 0.058, 0.066) for z in (-0.005, -0.015, -0.025)] + [(0.066, -0.035), (0.074, -0.025)]
 

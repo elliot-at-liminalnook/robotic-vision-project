@@ -490,6 +490,9 @@ def write_report(static, rows, files, parts):
 
 
 def main() -> int:
+    import argparse
+    # No options, but --help must explain the script and a typo must not start a run that rewrites files.
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     parts = assembly_parts()
     print({k: (round(v[0] * 1000), np.round(v[1] * 1000, 1).tolist()) for k, v in parts.items()})
     static = static_study(parts)

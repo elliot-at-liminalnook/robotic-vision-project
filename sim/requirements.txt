@@ -4,3 +4,9 @@ newton[sim]==1.7.0
 numpy
 pillow
 scipy        # used by trimesh when Newton loads meshes (else a noisy fallback)
+pygame       # teleop.py window
+pytest       # sim/tests
+# Model generator and studies:
+trimesh      # tools/build_model.py (wrist-mount meshes)
+coacd        # tools/build_model.py (jaw convex decomposition; results are cached in sim/.cache)
+matplotlib   # scripts/*_study.py charts
