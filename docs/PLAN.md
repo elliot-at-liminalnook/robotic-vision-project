@@ -6,9 +6,9 @@ Decisions as of 2026-11-09. Update this file when a decision changes. The reason
 
 | Area | Decision |
 |---|---|
-| Arms | Fully custom follower, printed on our own printer (Bambu). Upstream TheRobotStudio and Hiwonder files are the starting point only. A leader arm was in the original plan; whether to build one is open (see Open decisions). |
-| Servos | Hiwonder **HX-30HM** bus servos on the follower (to buy; HX-10HM only if a leader is built). The packet protocol is Feetech-STS-compatible, but the **register map must be verified before any write** (DECISIONS P5; see `third_party/hiwonder-so-arm101/README.md`). |
-| Servo driver | Hiwonder BusLinker V3.0 or Waveshare Bus Servo Adapter (A). Either one is USB to half-duplex TTL at 1 Mbps. |
+| Arms | Fully custom follower, printed on our own printer (Bambu). Upstream TheRobotStudio and Hiwonder files are the starting point only. **No leader arm** (decided 2026-11-10): teleop is keyboard/mouse. |
+| Servos | Hiwonder **HX-30HM** bus servos on the follower (ordered 2026-11-10, see `BOM.md`; no HX-10HM). The packet protocol is Feetech-STS-compatible, but the **register map must be verified before any write** (DECISIONS P5; see `third_party/hiwonder-so-arm101/README.md`). |
+| Servo driver | Hiwonder **BusLinker V3.0** (chosen 2026-11-10: same store as the servos). USB to half-duplex TTL at 1 Mbps. |
 | Servo power | **12.0 V bench supply, ~20 A** (decided, DECISIONS F1). HX servos: rated 11.1 V, range 9–12.6 V; Hiwonder kit ships 12 V 5 A. Waveshare adapter passes input through unregulated (wiki: 9–12.6 V input). Stall is ~3.2 A per servo at 12 V. |
 | Cameras | Raspberry Pi **Camera Module 3 Wide** (IMX708): **one on the follower's wrist + one fixed scene camera**, optionally a second fixed camera from another angle (decided 2026-11-08). |
 | Camera boards | 2× Waveshare **ESP32-P4-WIFI6-M**, one per camera. |
@@ -16,6 +16,10 @@ Decisions as of 2026-11-09. Update this file when a decision changes. The reason
 | Compute host | Linux PC with GPU (teleop, recording, training, inference, simulation). |
 | Learning stack | **Not LeRobot** (decided 2026-11-08). Simulation in **Newton 1.7 with `SolverMuJoCo` on the MuJoCo Warp backend**; see `sim/`. |
 | Simulation | `sim/`: generated from upstream `Simulation/SO101` with fixed jaw collision, finger pads, HX-30HM torque limit, 3 cameras, workcell. Runs on Newton (Linux) and plain MuJoCo (anywhere). |
+
+## Parts ordered
+
+See `BOM.md` (links, prices, what each part is for, power wiring, what is still to buy locally).
 
 ## Parts on hand
 
@@ -122,11 +126,9 @@ Found by the 2026-11-09 audit. None blocks the sim work; each blocks the step na
 
 | Decision | Options | Blocks |
 |---|---|---|
-| Leader arm | Build one (HX-10HM) for teleop demonstrations, or skip it: policies come from sim, teleop is keyboard/mouse | Buying HX-10HM servos |
 | Wrist camera mode | 1080p downscaled on the host (full field of view, the sim's assumption, probably 12–20 fps) or a cropped mode at ~30 fps (then change the sim intrinsics) | Camera calibration, policy observations |
 | Exposure / focus lock | Fixed at build time (available now) or UVC controls from the host (needs descriptor work); white balance needs a tuning-file change either way | Dataset recording |
 | RL framework | mjlab or Newton, after the GPU renderer benchmark | Policy training |
-| Servo driver board | Hiwonder BusLinker V3.0 or Waveshare Bus Servo Adapter (A) | Buying |
 | Servo control library | Own minimal Feetech-protocol driver, or a patched existing one, once the register map is verified | Real-robot backend |
 | Jaw pads | Add rubber/TPU pads to the real jaws (the sim assumes friction 1.0) or lower the sim's pad friction to bare PLA (~0.35) | Sim-to-real grasping |
 | ESP32-P4 cradle and cable routing | Cradle on the holder's back, USB cable path down the arm, ribbon fold | Printing the wrist mount |

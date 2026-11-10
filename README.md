@@ -40,6 +40,8 @@ The keyboard/mouse teleop window (`sim/scripts/teleop.py`):
 | `third_party/SO-ARM100/` | Upstream SO-101 design from [TheRobotStudio/SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) (Apache-2.0): STEP CAD, STL print files, URDF/MuJoCo models, optional mounts, BOM. Pinned commit in `UPSTREAM_COMMIT`. | No, mirror only |
 | `third_party/hiwonder-so-arm101/` | Hiwonder's variant (HX-10HM/HX-30HM servos): manuals, servo protocol, print files, Rhino CAD, LeRobot patch | No, reference only |
 | `docs/PLAN.md` | Build decisions, camera pipeline, open items and open decisions | Yes |
+| `docs/BOM.md` | Parts ordered and still to buy, with links, prices and the power wiring | Yes |
+| `docs/CONCEPTS.md` | Self-contained lessons on the ideas behind the arm (motors, control, IK, contact, camera) | Yes |
 | `docs/datasheets/` | Datasheets + official CAD: servos, servo driver board, Camera Module 3, ESP32-P4 board/chip | No, reference only |
 | `firmware/p4-uvc-camera/` | ESP32-P4 + Camera Module 3 → USB UVC webcam firmware (ESP-IDF) | Yes |
 | `firmware/components/` | Vendored IMX708 camera driver (Apache-2.0) used by the firmware | Carefully |

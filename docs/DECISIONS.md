@@ -141,3 +141,16 @@ Not yet flashed; these remove the first-flash risks the audit found (`firmware/p
 | U3 | The pipeline stops after 1.5 s without a frame request and restarts on the next one | The stop callback only fires on USB suspend, so the sensor, ISP and lens kept running after the host closed the stream |
 | U4 | The build fails if the three patched `esp_video` files don't match their checksums | A fresh clone re-downloads `managed_components/` unpatched |
 | U5 | Build-time options for h/v flip, fixed exposure + gain, fixed focus, JPEG quality; `usb_device_uvc` pinned to the exact version | Dataset recording needs fixed exposure and focus (white balance can't be fixed yet); the MAC serial number relies on a non-public symbol of that component |
+
+## Buying (2026-11-10)
+
+| # | Decision | Why |
+|---|---|---|
+| B1 | No leader arm; no HX-10HM servos | User's choice. Policies come from sim and teleop is keyboard/mouse |
+| B2 | Servo driver: Hiwonder BusLinker V3.0 | Sold by the same store as the servos; has a screw terminal for the supply |
+| B3 | Two stores, Hiwonder and DigiKey, not Amazon | User's choice: avoid Amazon, use as few sources as possible |
+| B4 | Supply: Mean Well GST280A12-C6P (12 V, 21 A desktop brick) | Meets F1 (~20 A) with no exposed mains wiring. Its 6-pin plug is cut off and wired to the BusLinker's screw terminal |
+| B5 | Camera USB cable = Molex PicoBlade 4-circuit lead spliced to a USB-A lead, plus a USB 2.0 extension | No ready-made MX1.25-to-USB-A cable was found at these stores |
+| B6 | 10 A inline blade fuse on the supply's + lead | The 21 A supply would overheat the thin servo leads in a short. Limits usable current to 10 A |
+
+Parts, links and prices: `BOM.md`.
