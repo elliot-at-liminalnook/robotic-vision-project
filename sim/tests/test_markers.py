@@ -6,13 +6,10 @@ Aimed at classes of bugs:
   * a tag that is mirrored or turned on its plate: each tag alone must give the right pose,
     orientation included, and a tampered one must not yield a trusted wrong answer;
   * a flat tag read tilted the wrong way and believed;
-  * an uncertainty that is not honest: the true error must lie inside what is stated;
-  * the hub knowing something about a place: it may import nothing from the simulation.
+  * an uncertainty that is not honest: the true error must lie inside what is stated.
 """
-import ast
 import copy
 import math
-from pathlib import Path
 
 import cv2
 import mujoco
@@ -228,20 +225,3 @@ def test_a_flat_reading_is_flagged_not_believed():
 def test_no_tag_in_view_is_no_answer():
     s, cam = scene_with_camera([0.55, 0.50, 0.30], [0.65, 0.10, 0.0])       # looking away from the arm
     assert locate_ideal(World(s), cam) is None
-
-
-# ---------------------------------------------------------------- the hub knows no place
-def test_the_hub_imports_nothing_from_the_simulation():
-    hub = ROOT / "hub"
-    allowed = {"hub", "numpy", "cv2", "scipy", "tomllib", "math", "dataclasses", "functools", "pathlib", "typing",
-               "__future__", "collections", "json", "time", "itertools", "http", "urllib", "argparse", "sys", "threading",
-               "io", "base64", "copy", "enum", "abc", "socket", "struct", "queue", "logging", "os", "signal", "re"}
-    for path in hub.rglob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text())):
-            names = []
-            if isinstance(node, ast.Import):
-                names = [a.name for a in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.level == 0:
-                names = [node.module or ""]
-            for n in names:
-                assert n.split(".")[0] in allowed, f"{path.relative_to(ROOT)} imports {n}"

@@ -82,14 +82,14 @@ Plan: [5.10 Keeping the gap small](MULTI_DEVICE_PLAN.md#510-keeping-the-gap-smal
 
 Plan: [5.1](MULTI_DEVICE_PLAN.md#51-four-parts-two-apis-and-one-rule-about-what-may-cross), [5.2 Devices as a logical network of interests](MULTI_DEVICE_PLAN.md#52-devices-as-a-logical-network-of-interests), [5.3 The knowledge rule](MULTI_DEVICE_PLAN.md#53-the-knowledge-rule-nothing-about-the-surroundings), [5.8](MULTI_DEVICE_PLAN.md#58-two-apis)
 
-- [ ] Top-level `hub/` package, started from ports alone, importing nothing from `sim/`
-- [ ] Discovery of devices from the ports
-- [ ] The tree of interests: devices and their parts, the place, groups
-- [ ] Arm and fixed cameras as devices
-- [ ] The model's REST API, with no ground truth and no description of the place
-- [ ] A pick through the hub's API in several scenes
-- [ ] Tests written (import rule, new places, blindfold, a moved camera is followed)
-- [ ] Old `sim_api.py` retired
+- [x] Top-level `hub/` package, started from ports alone, importing nothing from `sim/`
+- [x] Discovery of devices from the ports
+- [x] The tree of interests: devices and their parts, the place, groups
+- [x] Arm and fixed cameras as devices
+- [x] The model's REST API, with no ground truth and no description of the place
+- [x] A pick through the hub's API in several scenes (workcell, open_small, moved_arm, bench, cluttered: smoke-checked)
+- [x] Tests written (import rule, new places, blindfold, a moved camera is followed): `sim/tests/test_hub.py`, not run as a suite
+- [ ] Old `sim_api.py` retired (deferred to step 13: it still carries the bench task's reference solution and the hands-on window; its arm actions already live in the hub and it inherits them)
 
 ## Step 6. Locator
 

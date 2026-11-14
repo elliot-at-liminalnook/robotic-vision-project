@@ -332,6 +332,25 @@ What building it taught, all now in the scene's layout or the API:
 
 A scene is a file in `sim/scene/`; a task is a class in `so101sim/tasks.py` with a description and goals.
 
+## The whole system: a world, the hub on its ports, two APIs (`scripts/run_system.py`)
+
+```bash
+python sim/scripts/run_system.py --scene open_small
+curl http://127.0.0.1:8765/      # the hub's API, for the model (hub/README.md)
+curl http://127.0.0.1:8766/      # the operator's API: scenes, ground truth, scoring. Never for the model
+```
+
+- **The world** (`so101sim/world.py`) runs the loaded scene and offers ports: a serial port per servo bus
+  (emulated HX-30HMs on a simulated wire), a camera port per camera (a full-size picture through that
+  camera's lens and JPEG, costing a frame period plus the transfer on the clock), and the clock.
+- **The hub** ([hub/README.md](../hub/README.md)) is started on those ports and given nothing else. It finds
+  the devices, takes the arm over, works out which camera is on the wrist, and serves the model's API.
+- An arm's servos were left powered and holding its starting pose, so an arm no hub has connected to stays put.
+- Loading another scene over the operator API is, to the hub, everything going quiet (its requests answer
+  503 "did not answer"); `POST /discover` on the hub finds what is there now.
+- `scripts/sim_api.py` is the older single-arm API. Its arm actions are now the hub's (it inherits them), and
+  it will go once the bench task's solution runs through the hub.
+
 ## Scenes as files (`sim/scenes/*.toml`)
 
 A scene is a config file: the surface's outline and lip, fixtures, loose objects, where each device was
@@ -569,6 +588,7 @@ The tests go after classes of bugs, not single cases:
 | `test_operator_api.py` | The operator's API. Scenes are listed and read back as they are; a patch changes only what it names; changing the loaded scene restarts the world. Twenty-four kinds of refused request each say why and change no file and nothing in the world. Fuzzed methods, paths and bodies never get a server error and never leave an invalid scene on disk. Loading another scene leaves nothing of the old one. Every arrangement goal of the bench task follows the things themselves; answers are scored against the truth and the caller is not told; a pose answer is scored in the named device's own frame; a task that swaps scenes is scored in the scene swapped to |
 | `test_markers.py` | Printed tags. The simulated tag is the printed file and the family's bits. The hub's belief about each tag (place, facing, which edge is up, size) is what the model has, and every tag lies flat on a face of the part that carries it. Each tag alone, seen from in front, gives the right pose with orientation. A mirrored or turned tag never yields a trusted wrong fix. Cameras in every scene, and at twelve seeded places no file knows, are located from the picture alone within the stated error, and the stated uncertainty covers the true error. Moving a camera 3 cm moves the estimate 3 cm. A flat reading is flagged, not believed. The hub imports nothing from the simulation |
 | `test_lens.py` | The lens model. Dots at known points come out where OpenCV's own projection puts them with the camera's true values (to 0.35 px). A straight line comes out bowed outward, evenly; the ideal lens leaves it straight. Corners are darker and the middle is not. Noise differs frame to frame and leaves the level alone. Every camera has its own lens, the same every time, and none is the nominal one. Cameras are still located through the lens within what is stated, with honest uncertainty |
+| `test_hub.py` | The hub, started from ports alone. It imports nothing from the simulation and can reach the world only through a port object. No name from the scene file is in any answer; changing what no sensor can tell (masses, friction, the scene's description) changes no answer. In every scene it finds the right devices and picks out the wrist camera; in five scenes, one with the arm turned 225°, a pick through its API lifts the object. `/where` gives an estimate with honest uncertainty or says it cannot tell, and follows a camera moved 3 cm. Stop and torque through the tree. Seventeen kinds of refused request say why and move nothing; fuzzed requests never get a traceback. Devices that vanish when the scene is swapped are said to have vanished and are found again on discover |
 | `test_bus.py` | The servo bus in the loop. Packets: any packet round-trips, every packet is found in fuzzed garbage, no flipped bit is accepted. Register table equals the vendor spreadsheet; every register behaves by its row. No fuzzed instruction stream breaks a servo. Under injected faults the driver returns checked data or raises. Bus time equals the byte counts at three baud rates. Set-up mistakes are caught at connect, before any write. The arm moves the same with the bus as without. Teleop grasps and lifts through a clean bus and a faulty one, under the invariant monitor, without writing any register a servo ignores |
 
 ## Verified results (2026-11-09)

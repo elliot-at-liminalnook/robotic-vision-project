@@ -234,8 +234,8 @@ class ArmActions:
 
     def _need_torque(self):
         if self.app.limp:
-            raise Refused("the servos' torque has been switched off at the window (the arm is limp), so nothing was "
-                           "moved. It is switched back on at the window (key T) or by POST /reset.", 409)
+            raise Refused("the servos' torque is switched off (the arm is limp), so nothing was moved. "
+                          "Switch it back on first (the arm then holds the pose it has sagged to).", 409)
 
     def move_tip(self, x, y, z, roll=None, square_jaws=False, jaws_along_deg=None, timeout_s=6.0, tolerance_m=0.004) -> dict:
         self._need_torque()

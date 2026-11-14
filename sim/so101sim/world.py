@@ -6,23 +6,131 @@
     world.truth()                        # the referee: where everything really is
     world.task_status("fetch_from_shelf")
 
-Everything here is the simulation's side. The hub is given none of it (docs/MULTI_DEVICE_PLAN.md, 5.1):
-what a hub may use will be the world's ports. Until the hub exists (checklist step 5) no device is
-driven: an arm holds its starting pose on its own servos and the rover stands where it was put.
+Everything here is the simulation's side. The hub is given none of it (docs/MULTI_DEVICE_PLAN.md, 5.1),
+only the world's ports:
+
+    ports = world.ports()                # a serial port per servo bus, a camera port per camera, the clock
+    hub = Hub(world.ports)               # the hub asks again whenever it looks for what is plugged in
+
+There is one clock. Bus traffic and taking a picture cost time on it, and the physics runs whenever
+the clock passes a step boundary (as so101sim/bus_backend.py does for the single arm). An arm's
+servos are emulated HX-30HMs on a simulated wire; they were left powered, holding the arm's
+starting pose, so an arm no hub has connected to stays where it is.
 """
 from __future__ import annotations
 
 import copy
 import math
+import zlib
+from dataclasses import dataclass
 
+import cv2
 import mujoco
 import numpy as np
 
+from hub.arm import JOINTS as ARM_JOINTS
+from hub.arm.config import load_servos, position_loop
+from hub.arm.servo import ServoMap
+from hub.arm.servo_model import ServoSpec, zero_joint_damping
+from hub.bus import hx_registers as R
+from hub.ports import Frame, PortError, Ports
+
 from . import scenes
+from .bus.servo_emu import ServoEmulator
+from .bus.wire import VirtualBus
 from .lens import FULL_H, FULL_W, Lens, lens_for
 from .scenes import geometry as G
 from .scenes import tasks as T
 from .scenes.build import JOINTS
+
+
+_WIRE_KEYS = ("baud", "response_delay_s", "usb_tx_latency_s", "usb_rx_latency_s", "echo",
+              "drop_command_prob", "drop_reply_prob", "corrupt_prob", "seed")
+FRAME_PERIOD_S = 1 / 28.0               # the sensor's frame rate (firmware/p4-uvc-camera/README.md)
+USB_BYTES_PER_S = 8.0e6                 # what the camera's USB link carries
+JPEG_QUALITY = 85
+
+
+@dataclass
+class Bus:
+    """One servo bus: emulated servos on a simulated wire, each driving one joint of the model."""
+    wire: VirtualBus
+    servos: list
+    joints: tuple                       # joint names, in the servos' order
+    act: np.ndarray                     # actuator ids
+    qadr: np.ndarray
+    dof: np.ndarray
+    hold: np.ndarray                    # the pose the servos were left holding [rad]
+    smap: ServoMap
+
+
+class WirePort:
+    """A serial port on one of the world's buses. A blocking read advances the clock."""
+
+    def __init__(self, world: "World", index: int):
+        self.world, self.index, self.generation = world, index, world.generation
+
+    def _wire(self):
+        w = self.world
+        if self.generation != w.generation or self.index >= len(w.buses):
+            return None                               # that adapter is not plugged in any more: silence
+        return w.buses[self.index].wire
+
+    def write(self, data: bytes):
+        wire = self._wire()
+        if wire is not None:
+            wire.host_write(data, self.world.t)
+
+    def read(self, n: int, timeout_s: float) -> bytes:
+        w, wire = self.world, self._wire()
+        deadline = w.t + timeout_s
+        if wire is None:
+            w.advance_to(deadline)
+            return b""
+        while wire.available(w.t) < n:
+            nxt = wire.next_event_time(w.t)
+            if nxt is None or nxt > deadline:
+                w.advance_to(deadline)
+                break
+            w.advance_to(nxt)
+        return wire.host_read(n, w.t)
+
+    def reset_input(self):
+        wire = self._wire()
+        if wire is not None:
+            wire.host_discard(self.world.t)
+
+
+class WorldClock:
+    def __init__(self, world: "World"):
+        self.world = world
+
+    def now(self) -> float:
+        return self.world.t
+
+    def sleep_until(self, t: float):
+        self.world.advance_to(t)
+
+
+class WorldCamera:
+    """A camera port: one fresh full-size picture per grab, through the camera's lens and JPEG, costing clock time."""
+
+    def __init__(self, world: "World", camera: str):
+        self.world, self.camera, self.generation = world, camera, world.generation
+        seed = int(world.scene.get("imperfections", {}).get("seed", 0))
+        self.identity = {"serial": f"P4CAM-{zlib.crc32(f'{camera}:{seed}'.encode()) & 0xFFFFFF:06X}",
+                         "product": "ESP32-P4 UVC camera (Camera Module 3 Wide)", "kind": "cm3_wide"}
+
+    def grab(self) -> Frame:
+        w = self.world
+        if self.generation != w.generation:
+            raise PortError(f"camera {self.identity['serial']} is not there any more")
+        w.advance_to(w.t + FRAME_PERIOD_S)                      # the next frame the sensor starts
+        t = w.t
+        image = w.render(self.camera)
+        ok, buf = cv2.imencode(".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+        w.advance_to(w.t + len(buf) / USB_BYTES_PER_S)          # the frame crossing the USB link
+        return Frame(cv2.cvtColor(cv2.imdecode(buf, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB), t)
 
 
 class World:
@@ -48,13 +156,51 @@ class World:
         for r in getattr(self, "_renderers", {}).values():
             r.close()
         self._renderers, self._lenses, self._frames = {}, {}, 0
+        self._attach_devices()
         self.reset()
         for hook in self.on_load:
             hook(self)
 
+    def _attach_devices(self):
+        """Put each device's servos on a bus. The model's position actuators become torque motors
+        driven by emulated servos (as so101sim/bus_backend.py does for the single arm)."""
+        m = self.model
+        self.buses: list[Bus] = []
+        cfg = load_servos().get("bus", {})
+        if self.built.device("arm") is not None:
+            act = np.array([m.actuator(n).id for n in ARM_JOINTS])
+            for a in act:
+                m.actuator_gaintype[a] = mujoco.mjtGain.mjGAIN_FIXED
+                m.actuator_gainprm[a, :] = 0
+                m.actuator_gainprm[a, 0] = 1.0
+                m.actuator_biastype[a] = mujoco.mjtBias.mjBIAS_NONE
+                m.actuator_biasprm[a, :] = 0
+                m.actuator_ctrllimited[a] = 0
+            zero_joint_damping(m, ARM_JOINTS)                    # back-EMF is in the servo's torque-speed line
+            loop = position_loop()
+            spec = ServoSpec.from_config(d_time_s=0.0 if float(loop["actuator_kv"]) == 0.0 else ServoSpec.d_time_s)
+            smap = ServoMap(ARM_JOINTS)
+            servos = [ServoEmulator(i, spec, mount_zero_ticks=z, mount_direction=int(d))
+                      for i, z, d in zip(smap.ids, smap.zero, smap.direction)]
+            wire = VirtualBus(servos, **{k: cfg[k] for k in _WIRE_KEYS if k in cfg})
+            self.buses.append(Bus(wire, servos, ARM_JOINTS, act,
+                                  np.array([m.joint(n).qposadr[0] for n in ARM_JOINTS]),
+                                  np.array([m.joint(n).dofadr[0] for n in ARM_JOINTS]),
+                                  np.array([self.built.start[n] for n in ARM_JOINTS]), smap))
+
     def reset(self):
         """The running scene back to its start. Answers handed in are kept."""
         self.data = self.built.new_data()
+        self.t = 0.0
+        goal, torque = R.BY_NAME["target_position"], R.BY_NAME["torque_switch"]
+        for bus in self.buses:
+            self.data.ctrl[bus.act] = 0.0
+            bus.wire.reset()
+            for s, ticks in zip(bus.servos, bus.smap.rad_to_ticks(bus.hold)):
+                s.power_cycle()
+                s._write(goal.addr, goal.encode(int(ticks)))    # left powered, holding the starting pose
+                s._write(torque.addr, b"\x01")
+        mujoco.mj_forward(self.model, self.data)
 
     @property
     def name(self) -> str:
@@ -62,11 +208,32 @@ class World:
 
     @property
     def time(self) -> float:
-        return float(self.data.time)
+        return float(self.t)
+
+    def advance_to(self, t: float):
+        """Run the wires, the servos and the physics up to time t on the one clock."""
+        m, d = self.model, self.data
+        dt = m.opt.timestep
+        while d.time + dt <= t + 1e-9:
+            for bus in self.buses:
+                bus.wire.process(d.time)
+                q, qd = d.qpos[bus.qadr], d.qvel[bus.dof]
+                for k, s in enumerate(bus.servos):
+                    d.ctrl[bus.act[k]] = s.control(float(q[k]), float(qd[k]), dt)
+                    m.actuator_forcerange[bus.act[k]] = (-s.torque_limit_nm, s.torque_limit_nm)
+            mujoco.mj_step(m, d)
+        for bus in self.buses:
+            bus.wire.process(t)
+        self.t = max(self.t, t)
 
     def step(self, seconds: float):
-        for _ in range(max(0, int(round(seconds / self.model.opt.timestep)))):
-            mujoco.mj_step(self.model, self.data)
+        self.advance_to(self.t + max(0.0, float(seconds)))
+
+    # ---- ports: all the hub ever gets --------------------------------------
+    def ports(self) -> Ports:
+        """What is plugged in right now: a serial port per servo bus, a camera port per camera, the clock."""
+        cams = sorted((WorldCamera(self, name) for name in self.built.cameras), key=lambda c: c.identity["serial"])
+        return Ports(clock=WorldClock(self), serial=[WirePort(self, i) for i in range(len(self.buses))], cameras=cams)
 
     # ---- pictures ------------------------------------------------------------
     def _pinhole(self, camera: str, width: int, height: int, fovy_deg: float | None = None) -> np.ndarray:
