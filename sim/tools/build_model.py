@@ -5,10 +5,14 @@ Reads third_party/SO-ARM100/Simulation/SO101/so101_new_calib.xml and writes
 sim/model/ (so101_follower.xml, cameras_world.xml, assets/). Changes, all
 reproducible from this script:
 
-1. Jaw collision. MuJoCo and Newton collide meshes as their convex hull. The
-   fixed jaw is one mesh with the wrist housing, so its hull fills the gap
-   between the jaws (an object there collides with empty air). Both jaw meshes
-   are replaced by a CoACD convex decomposition.
+1. Collision shapes. MuJoCo and Newton collide meshes as their convex hull.
+   The fixed jaw is one mesh with the wrist housing, so its hull fills the gap
+   between the jaws (an object there collides with empty air); the arm's
+   brackets and links are hollow or U-shaped, so their hulls are 1.7 to 4
+   times the part's volume and touch things the part doesn't. Every such mesh
+   is replaced by a CoACD convex decomposition. The base, which upstream gives
+   no collision shapes at all, gets them too, and is raised so that its lowest
+   face stands on the table (upstream's origin is 2.4 mm above it).
 2. Finger pads. A thin box on each jaw's inner face, fitted to the measured
    jaw surface, with higher friction and torsional friction (condim 4), so
    grasp contact is stable and its friction is tunable in one place.
@@ -45,12 +49,23 @@ OUT = SIM / "model"
 ASSETS = OUT / "assets"
 COLL = ASSETS / "collision"
 
-JAW_MESHES = {
-    # mesh name -> (body that carries it, max convex hulls)
-    # The fixed jaw is one part with the wrist housing; the housing needs few hulls.
-    "wrist_roll_follower_so101_v1": ("gripper", 16),
-    "moving_jaw_so101_v1": ("moving_jaw_so101_v1", 10),
+# mesh name -> max convex hulls. Every collision geom that uses one of these meshes is
+# replaced by its decomposition. (Hull volume / mesh volume before: jaws' housing ~3,
+# wrist_roll_pitch 3.6, motor holders 3.8-4.0, base 3.0, rotation_pitch 2.2, arms 1.7-1.8.
+# The servo bodies are 1.1 and stay single hulls.)
+DECOMPOSE = {
+    "wrist_roll_follower_so101_v1": 16,     # fixed jaw + wrist housing
+    "moving_jaw_so101_v1": 10,
+    "wrist_roll_pitch_so101_v2": 12,        # wrist link: the wrist camera bracket passes 0.7-2 mm from it
+    "motor_holder_so101_wrist_v1": 8,
+    "under_arm_so101_v1": 8,
+    "upper_arm_so101_v1": 8,
+    "rotation_pitch_so101_v1": 10,
+    "motor_holder_so101_base_v1": 8,
+    "base_so101_v2": 12,
+    "base_motor_holder_so101_v1": 8,
 }
+JAW_BODIES = ("gripper", "moving_jaw_so101_v1")
 COACD = dict(threshold=0.05, decimate=True, max_ch_vertex=64, seed=0)
 # Gap check: points between the jaws (gripper frame, jaws at q = 0, 15.8 mm apart
 # at the tip) that no jaw collision hull may contain.
@@ -188,7 +203,7 @@ def gap_intrusions(model, data):
     import mujoco
     data.qpos[:] = 0
     mujoco.mj_forward(model, data)
-    jaw_bodies = {model.body(b).id for b, _ in JAW_MESHES.values()}
+    jaw_bodies = {model.body(b).id for b in JAW_BODIES}
     xs = np.linspace(*GAP_PROBE["x"], 5)
     zs = np.linspace(*GAP_PROBE["z"], 12)
     probes = np.array([[x, GAP_PROBE["y"], z] for x in xs for z in zs])
@@ -210,6 +225,56 @@ WRIST_MOUNT = ROOT / "hardware/wrist_mount"
 # Printed-part masses at typical settings (3 walls, ~20% infill): about 40-45 %
 # of the solid-PLA mass from the CAD reports. Camera and board are datasheet-ish.
 BRACKET_MASS = 0.014
+BRACKET_HULLS = 8
+
+
+CONTACT: dict = {}        # solref / solimp for explicit contact pairs; filled in by main() from the scene file
+
+
+def add_scene_camera_hardware(root, cams) -> str:
+    """Give each fixed camera a body to hang its cables on (the detailed model only).
+
+    PLACEHOLDER: the fixed cameras' stand is not designed (docs/PLAN.md). Until it is, each gets the
+    same holder, Camera Module 3 and ESP32-P4 board as the wrist, placed so that the lens is exactly
+    where config/cameras.toml puts the camera, on a plain post down to the table (or to the floor if
+    the camera is not over the table), with a clip for its USB cable 15 cm below the camera.
+    """
+    pose = load_wrist_mount()
+    wc = pose["camera"]
+    Rc = np.column_stack(look_at_axes(wc["pos"], wc["look_at"], wc["up"]))     # wrist camera axes in the gripper frame
+    worldbody = root.find("worldbody")
+    boxes = {g.get("name"): g for g in root.iter("geom") if g.get("name") in ("wm_holder_collision", "wm_board_collision")}
+    scene = ET.parse(SIM / "scene/workcell.xml").getroot()
+    table = next(g for g in scene.iter("geom") if g.get("name") == "table")
+    t_pos, t_size = np.array(table.get("pos").split(), float), np.array(table.get("size").split(), float)
+    floor = float(next(g for g in scene.iter("geom") if g.get("name") == "floor").get("pos").split()[2])
+    names = []
+    for name, spec in cams["cameras"].items():
+        spec = resolve_camera_entry(spec)
+        if spec.get("enabled", True) is False or spec["parent_body"] != "world":
+            continue
+        Rw = np.column_stack(look_at_axes(spec["pos"], spec["look_at"], spec["up"]))
+        # A frame that relates to this camera as the gripper frame relates to the wrist camera: the
+        # wrist assembly's meshes and boxes (given in the gripper frame) then fit as they are.
+        Rb = Rw @ Rc.T
+        pb = np.asarray(spec["pos"], float) - Rb @ np.asarray(wc["pos"], float)
+        body = ET.SubElement(worldbody, "body", name=f"{name}_camera", pos=fmt(pb), quat=fmt(mat_to_quat(Rb)))
+        for n, rgba in (("holder", "0.95 0.56 0.2 1"), ("board", "0.1 0.45 0.2 1"), ("camera_module3", "0.2 0.2 0.25 1")):
+            ET.SubElement(body, "geom", {"type": "mesh", "mesh": f"wm_{n}", "rgba": rgba, "contype": "0", "conaffinity": "0", "group": "2"})
+        for key, g in boxes.items():
+            ET.SubElement(body, "geom", {"name": f"{name}_{key[3:]}", "type": "box", "pos": g.get("pos"), "quat": g.get("quat"),
+                                         "size": g.get("size"), "group": "3", **CONTACT})      # (not collision bit 2: its own
+            # ribbon and cable run along it, and the boxes are solid blocks around an open frame)
+        back = Rb @ (np.array(pose["holder_rotation"]) @ np.array([0.0, 0.0, -0.035]) + np.array(pose["holder_origin"])) + pb
+        over_table = bool((np.abs(back[:2] - t_pos[:2]) < t_size[:2]).all())
+        foot = np.array([back[0], back[1], 0.0 if over_table else floor])
+        ET.SubElement(worldbody, "geom", {"name": f"{name}_post", "type": "capsule", "size": "0.006",
+                                          "fromto": fmt(np.concatenate([back, foot])), "rgba": "0.35 0.35 0.38 1", **CONTACT})
+        ET.SubElement(worldbody, "site", name=f"{name}_post_top", pos=fmt(back + Rw[:, 2] * 0.010), size="0.002", group="4")
+        ET.SubElement(worldbody, "site", name=f"{name}_post_clip", pos=fmt(back - [0.0, 0.0, 0.15] + Rw[:, 2] * 0.010),
+                      size="0.002", group="4")
+        names.append(f"{name} ({'table' if over_table else 'floor'} post)")
+    return "placeholder hardware for the fixed cameras: " + ", ".join(names)
 
 
 def add_wrist_assembly(root, asset) -> str:
@@ -232,32 +297,42 @@ def add_wrist_assembly(root, asset) -> str:
 
     masses = dict(pose["masses_kg"], bracket=BRACKET_MASS)
     parts = {k: trimesh.load(out / f"{k}.stl") for k in ("bracket", "holder", "board")}
-    parts["camera"] = cam
+    parts["camera"] = cam.bounding_box          # the camera model is not a closed mesh; 4 g in its box is close enough
     total = sum(masses.values())
-    com = sum(masses[k] * parts[k].bounding_box.centroid / 1000 for k in masses) / total
-    allv = np.vstack([p.vertices for p in parts.values()]) / 1000
-    ext = allv.max(0) - allv.min(0)
-    inertia = total / 12 * np.array([ext[1] ** 2 + ext[2] ** 2, ext[0] ** 2 + ext[2] ** 2, ext[0] ** 2 + ext[1] ** 2])
+    # Centre of mass and inertia from the part shapes, each with its mass spread evenly through its
+    # volume (prints are not solid, but the infill is even). mm and kg -> m at the end.
+    com = sum(masses[k] * parts[k].center_mass for k in masses) / total
+    inertia = np.zeros((3, 3))
+    for k, part in parts.items():
+        r = part.center_mass - com
+        inertia += part.moment_inertia * (masses[k] / abs(part.volume)) + masses[k] * (r @ r * np.eye(3) - np.outer(r, r))
+    com, inertia = com / 1000, inertia * 1e-6
 
     gripper = next(b for b in root.iter("body") if b.get("name") == "gripper")
     body = ET.SubElement(gripper, "body", name="wrist_camera_assembly", pos="0 0 0")
-    ET.SubElement(body, "inertial", pos=fmt(com), mass=f"{total:.4f}", diaginertia=fmt(inertia))
+    ET.SubElement(body, "inertial", pos=fmt(com), mass=f"{total:.4f}",
+                  fullinertia=fmt([inertia[0, 0], inertia[1, 1], inertia[2, 2], inertia[0, 1], inertia[0, 2], inertia[1, 2]]))
     colours = {"bracket": "0.25 0.5 0.9 1", "holder": "0.95 0.56 0.2 1", "board": "0.1 0.45 0.2 1",
                "camera_module3": "0.2 0.2 0.25 1"}
     for n, rgba in colours.items():
         ET.SubElement(body, "geom", {"name": f"wm_{n}_visual", "type": "mesh", "class": "visual",
                                      "mesh": f"wm_{n}", "rgba": rgba})
-    # Collision: bracket hull (all outside the gripper's +y face) + holder and board boxes.
-    ET.SubElement(body, "geom", {"name": "wm_bracket_collision", "type": "mesh", "class": "collision",
-                                 "mesh": "wm_bracket"})
+    # Collision: the bracket as convex pieces (it is L-shaped, and the wrist link sits 0.7-2 mm from
+    # its inner corner: one hull would fill that corner and rub on the link) + holder and board boxes.
+    bracket_geoms = []
+    for k, hn in enumerate(decompose(out / "bracket.stl", "wm_bracket", BRACKET_HULLS)):
+        ET.SubElement(asset, "mesh", name=hn, file=f"collision/{hn}.stl", scale="0.001 0.001 0.001")
+        bracket_geoms.append(f"wm_bracket_collision_{k}")
+        ET.SubElement(body, "geom", {"name": bracket_geoms[-1], "type": "mesh", "class": "collision", "mesh": hn})
     q = mat_to_quat(R)
     for n, box in (("holder", pose["holder_box_holder_frame"]), ("board", pose["board_box_holder_frame"])):
         c_local = np.array([(b[0] + b[1]) / 2 for b in box])
         half = [(b[1] - b[0]) / 2 for b in box]
         ET.SubElement(body, "geom", {"name": f"wm_{n}_collision", "type": "box", "class": "collision",
                                      "pos": fmt(R @ c_local + o), "quat": fmt(q), "size": fmt(half)})
-    # The moving jaw is a sibling body (not filtered as parent/child); the mount
-    # sits outside its swing anyway (y > 24 mm vs <= 23.9 mm), but be explicit.
+    # The moving jaw is a sibling body (not filtered as parent/child). The real mount clears its
+    # swing by 3 mm (bracket) and 30 mm (holder), but the holder's collision BOX is a solid block
+    # around an open frame and does overlap the swing, so the pair is excluded.
     contact = root.find("contact")
     if contact is None:
         contact = ET.Element("contact")
@@ -275,8 +350,8 @@ def add_wrist_assembly(root, asset) -> str:
             continue
         g.set("name", g.get("name") or f"wrist_link_collision_{k}")
         k += 1
-        for n in ("bracket", "holder", "board"):
-            ET.SubElement(contact, "pair", geom1=f"wm_{n}_collision", geom2=g.get("name"))
+        for n in (*bracket_geoms, "wm_holder_collision", "wm_board_collision"):
+            ET.SubElement(contact, "pair", {"geom1": n, "geom2": g.get("name"), **CONTACT})
     assert k, "no collision geom found on the wrist link"
     return (f"wrist camera assembly: {total * 1000:.0f} g (bracket {BRACKET_MASS * 1000:.0f}, "
             f"holder {masses['holder'] * 1000:.0f}, camera {masses['camera'] * 1000:.0f}, "
@@ -310,23 +385,57 @@ def main() -> int:
     up_model = mujoco.MjModel.from_xml_path(str(src_xml))
     up_data = mujoco.MjData(up_model)
 
-    # 1. Jaw collision -> convex decomposition.
     report = []
-    for mesh_name, (body_name, max_hulls) in JAW_MESHES.items():
-        hulls = decompose(UPSTREAM / "assets" / f"{mesh_name}.stl", mesh_name, max_hulls)
-        for hn in hulls:
-            ET.SubElement(asset, "mesh", name=hn, file=f"collision/{hn}.stl")
-        body = next(b for b in root.iter("body") if b.get("name") == body_name)
-        coll = [g for g in body.findall("geom") if g.get("class") == "collision" and g.get("mesh") == mesh_name]
-        assert len(coll) == 1, (mesh_name, len(coll))
-        g = coll[0]
-        idx = list(body).index(g)
-        body.remove(g)
-        for k, hn in enumerate(hulls):
-            body.insert(idx + k, ET.Element("geom", {
-                "type": "mesh", "class": "collision", "mesh": hn,
-                "pos": g.get("pos"), "quat": g.get("quat")}))
-        report.append(f"{mesh_name}: {len(hulls)} convex hulls (CoACD {COACD}, max {max_hulls})")
+
+    # 0. The base. Upstream gives it visual meshes only, so the arm and objects pass through it:
+    #    give every base part a collision shape. And stand it on the table: upstream's origin is
+    #    above the base's lowest face, which would otherwise be sunk into the table top (z = 0).
+    base = next(b for b in root.iter("body") if b.get("name") == "base")
+    for g in [g for g in base.findall("geom") if g.get("class") == "visual"]:
+        base.append(ET.Element("geom", {"type": "mesh", "class": "collision", "mesh": g.get("mesh"),
+                                        "pos": g.get("pos"), "quat": g.get("quat")}))
+    mujoco.mj_forward(up_model, up_data)
+    bid = up_model.body("base").id
+    lowest = min(float(geom_triangles(up_model, up_data, g, "world")[..., 2].min())
+                 for g in range(up_model.ngeom) if up_model.geom_bodyid[g] == bid)
+    base.set("pos", f"0 0 {-lowest:.6g}")
+    report.append(f"base: collision shapes added; raised {-lowest * 1000:.2f} mm so its lowest face is on the table")
+    # The shoulder turns on the base's servo and sits against it. MuJoCo only skips parent/child
+    # contacts when the parent can move; the base is fixed, so say it explicitly.
+    contact0 = root.find("contact")
+    if contact0 is None:
+        contact0 = ET.Element("contact")
+        root.insert(list(root).index(root.find("actuator")), contact0)
+    ET.SubElement(contact0, "exclude", body1="base", body2="shoulder")
+
+    # 0b. Contact stiffness: the same values as the workcell's shapes (sim/scene/workcell.xml has the reasons).
+    scene_geom = ET.parse(SIM / "scene/workcell.xml").getroot().find("default").find("geom")
+    contact_attrs = {"solref": scene_geom.get("solref"), "solimp": scene_geom.get("solimp")}
+    top = next(dd for dd in root.iter("default") if dd.get("class") == "so101_new_calib")
+    top.insert(0, ET.Element("geom", contact_attrs))
+    CONTACT.update(contact_attrs)
+    report.append(f"contacts: solref {contact_attrs['solref']}, solimp {contact_attrs['solimp']} on every robot shape")
+
+    # 1. Collision meshes that are far from convex -> convex decomposition.
+    used = set()
+    for body in root.iter("body"):
+        for g in list(body.findall("geom")):
+            mesh_name = g.get("mesh")
+            if g.get("class") != "collision" or mesh_name not in DECOMPOSE:
+                continue
+            assert mesh_name not in used, f"{mesh_name} is used by two collision geoms"
+            used.add(mesh_name)
+            hulls = decompose(UPSTREAM / "assets" / f"{mesh_name}.stl", mesh_name, DECOMPOSE[mesh_name])
+            for hn in hulls:
+                ET.SubElement(asset, "mesh", name=hn, file=f"collision/{hn}.stl")
+            idx = list(body).index(g)
+            body.remove(g)
+            for k, hn in enumerate(hulls):
+                body.insert(idx + k, ET.Element("geom", {
+                    "type": "mesh", "class": "collision", "mesh": hn,
+                    "pos": g.get("pos"), "quat": g.get("quat")}))
+            report.append(f"{mesh_name} ({body.get('name')}): {len(hulls)} convex hulls (CoACD, max {DECOMPOSE[mesh_name]})")
+    assert used == set(DECOMPOSE), f"meshes to decompose that no collision geom uses: {set(DECOMPOSE) - used}"
 
     # 2. Finger pads, fitted to the jaw faces (moving jaw measured at q = 0).
     up_data.qpos[:] = 0
@@ -425,6 +534,21 @@ def main() -> int:
               "change the generator or sim/config/*.toml and re-run. -->\n")
     (OUT / "so101_follower.xml").write_text(header + ET.tostring(root, encoding="unicode") + "\n")
 
+    # 4c. The same robot with its wires (config/cables.toml): a second model file, because the wires
+    # roughly triple the cost of a step. so101sim loads it with load_backend("mujoco", cables=True).
+    import copy
+    import json
+    from so101sim.cables import add_cables
+    cabled = copy.deepcopy(root)
+    cabled.set("model", "so101_follower_cables")
+    report.append(add_scene_camera_hardware(cabled, cams))
+    spans = add_cables(cabled)
+    ET.indent(cabled, space="  ")
+    (OUT / "so101_follower_cables.xml").write_text(header + ET.tostring(cabled, encoding="unicode") + "\n")
+    (OUT / "cables.json").write_text(json.dumps(spans, indent=1) + "\n")
+    report.append(f"wires: {len(spans)} spans, {sum(s['segments'] for s in spans)} segments, "
+                  f"{sum(s['length_m'] for s in spans):.2f} m in all -> so101_follower_cables.xml")
+
     # 5. Fixed cameras for the workcell.
     world = ET.Element("mujoco")
     for name, spec in cams["cameras"].items():
@@ -438,7 +562,13 @@ def main() -> int:
         "<!-- GENERATED by sim/tools/build_model.py from sim/config/cameras.toml -->\n"
         + ET.tostring(world, encoding="unicode") + "\n")
 
-    shutil.copy2(SIM / "scene/workcell.xml", OUT / "workcell.xml")
+    # Every scene (workcell.xml: the plain one; bench.xml: the harder one), each also with the wires.
+    for scene_file in sorted((SIM / "scene").glob("*.xml")):
+        shutil.copy2(scene_file, OUT / scene_file.name)
+        scene = scene_file.read_text()
+        assert scene.count('<include file="so101_follower.xml"/>') == 1, scene_file.name
+        (OUT / f"{scene_file.stem}_cables.xml").write_text(scene.replace('<include file="so101_follower.xml"/>',
+                                                                         '<include file="so101_follower_cables.xml"/>'))
 
     # Validate: compiles, and no jaw hull intrudes into the gap between the jaws.
     model = mujoco.MjModel.from_xml_path(str(OUT / "so101_follower.xml"))

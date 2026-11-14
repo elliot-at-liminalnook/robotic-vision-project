@@ -1,0 +1,206 @@
+# The wires on the arm, for the model with cables (sim/model/workcell_cables.xml; so101sim/cables.py).
+#
+# KNOWN: which connector goes to which (the servo bus is a daisy chain, BOM.md), the length of the
+#   servo leads (20 cm, one comes with each HX-30HM), where the servo's sockets are (from its mesh).
+# CHOSEN HERE (the routing is an open decision in docs/PLAN.md): where the wrist camera's USB cable is
+#   clipped to the arm, and how much of it lies between the clips.
+# GUESSED, to be measured: each wire's weight per metre and bending stiffness, and where the USB header
+#   sits on the ESP32-P4 board. To measure bending stiffness: hold the wire level by one end with a
+#   free length L sticking out, measure how far the tip sags (d); EI = w * L^4 / (8 * d), with
+#   w = weight per metre x 9.81.
+
+settle_s = 0.4                    # after laying the wires out at a reset, let them settle for this long (arm held still)
+
+[types.servo_lead]
+contact_solref = "0.01 1"          # softer contacts than the rigid parts' 0.004
+contact_solimp = "0.9 0.95 0.001"                # 3-wire lead, 5264 connectors both ends
+radius_m = 0.0015
+mass_per_m = 0.020                # GUESS: 4 g for the 20 cm lead
+bend_stiffness_nm2 = 5e-5         # GUESS (EI)
+damping_ratio = 1.0               # of each joint in the chain; real wires don't ring
+joint_armature = 2e-7             # keeps the chain's fastest motion slower than the 2 ms timestep
+segment_m = 0.02
+free_end_m = 0.03                 # this much of each end ignores the part it plugs into (it starts inside it)
+rgba = "0.85 0.15 0.15 1"
+
+[types.usb]
+contact_solref = "0.01 1"          # softer contacts than the rigid parts' 0.004
+contact_solimp = "0.9 0.95 0.001"                       # round USB 2.0 lead from the wrist camera board
+radius_m = 0.002
+mass_per_m = 0.030                # GUESS
+bend_stiffness_nm2 = 4e-4         # GUESS (EI); several times stiffer than a servo lead
+damping_ratio = 1.0
+joint_armature = 5e-7
+segment_m = 0.025
+free_end_m = 0.075                # (it reaches a clip from any direction, so more of it may lie against the link)
+rgba = "0.12 0.12 0.14 1"
+
+# ---- servo bus: driver board -> pan -> lift -> elbow -> wrist flex -> wrist roll -> gripper ----
+# Each lead leaves a servo's socket (on the face opposite the horn) and ends at the next servo's.
+# When a wire is first laid out its slack bows the way it leaves its connector (it loops outward);
+# `bulges` overrides that per stretch, in the frame of the part the stretch starts on.
+# collide_arm: whether the wire is stopped by the arm's own parts. Off (the default) for leads that
+# run inside or against the brackets: their true path through the hollow parts is not modelled, so
+# they pass through the arm's plastic; they still lie on the table and bump the objects.
+
+[[cables]]
+name = "bus_pan_lift"
+type = "servo_lead"
+length_m = 0.20
+from = { servo = "shoulder_pan" }
+to = { servo = "shoulder_lift" }
+
+[[cables]]
+name = "bus_lift_elbow"
+type = "servo_lead"
+length_m = 0.20
+collide_arm = true
+from = { servo = "shoulder_lift" }
+to = { servo = "elbow_flex" }
+
+[[cables]]
+name = "bus_elbow_wrist"
+type = "servo_lead"
+length_m = 0.20
+collide_arm = true
+from = { servo = "elbow_flex" }
+to = { servo = "wrist_flex" }
+
+[[cables]]
+name = "bus_wrist_roll"
+type = "servo_lead"
+length_m = 0.20
+from = { servo = "wrist_flex" }
+to = { servo = "wrist_roll" }
+
+[[cables]]
+name = "bus_roll_grip"
+type = "servo_lead"
+length_m = 0.20
+from = { servo = "wrist_roll" }
+to = { servo = "gripper" }
+
+# The lead from the driver board (on the plate behind the base) to the first servo. GUESS: where on
+# the board the bus socket is, and which way the plug points.
+[[cables]]
+name = "bus_board_pan"
+type = "servo_lead"
+length_m = 0.20
+from = { body = "base", pos = [-0.036, 0.0, 0.050], dir = [0.0, 0.0, -1.0] }
+to = { servo = "shoulder_pan" }
+
+# ---- wrist camera USB cable ----
+# From the board on the wrist camera holder, clipped to the left side of the forearm and of the upper
+# arm (the side the servo sockets are on), then down to the table behind the base and away to the PC.
+# The furthest apart the ends of each stretch ever get is 162, 126 and 280 mm (measured over the joint
+# range). The last two have about 20 % to spare. The first needs much more than that: at some wrist
+# poses it wraps around the wrist link, and at 200 mm the simulation showed it pulled taut there
+# (3.7 N, pressed 3 mm into the link); at 260 mm it stays slack.
+[[cables]]
+name = "usb"
+type = "usb"
+collide_arm = true
+lengths_m = [0.26, 0.16, 0.34]
+from = { body = "wrist_camera_assembly", pos = [0.002, 0.0732, 0.0065], dir = [0.0, -0.712, 0.702] }   # GUESS: header at the board's end nearest the wrist
+via = [
+    { body = "lower_arm", pos = [-0.0675, 0.005, 0.046], dir = [1.0, 0.0, 0.0] },     # CHOSEN: clip half-way along the forearm, 8 mm proud of it
+    { body = "upper_arm", pos = [-0.056, -0.014, 0.046], dir = [1.0, 0.0, 0.0] },     # CHOSEN: clip half-way along the upper arm
+]
+to = { body = "world", pos = [-0.08, 0.10, 0.002], dir = [-1.0, 0.0, 0.0] }           # CHOSEN: taped to the table behind the base
+bulges = [[0.0, 0.7, 0.7], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]                          # away from the arm's left side
+
+# ---- camera ribbons (flat cables) ----
+# The 150 mm ribbon between a Camera Module 3 and its ESP32-P4 board, both on the same holder (it
+# crosses no joint). A strip that folds about one axis only (`axis`, in the frame of the part).
+# GUESS: where the board's camera connector is (taken as its lower end). The camera's connector is at
+# the lower edge of its board. How the spare length is folded is undecided (docs/PLAN.md): here it is
+# simply left to hang, which is the point of simulating it.
+[types.ribbon]
+shape = "ribbon"
+width_m = 0.016
+radius_m = 0.0005                 # half its thickness (1 mm here; a real ribbon is 0.1 mm, too thin to collide)
+mass_per_m = 0.007                # GUESS: 1 g for 150 mm
+bend_stiffness_nm2 = 1e-5         # GUESS
+damping_ratio = 1.0
+joint_armature = 1e-7
+segment_m = 0.0125
+free_end_m = 0.03
+contact_solref = "0.01 1"
+contact_solimp = "0.9 0.95 0.001"
+rgba = "0.85 0.85 0.8 1"
+
+[[cables]]
+name = "ribbon_wrist"
+type = "ribbon"
+length_m = 0.15
+from = { body = "wrist_camera_assembly", pos = [0.002, 0.0770, -0.0274], dir = [0.0, 0.712, -0.702], axis = [1.0, 0.0, 0.0] }
+to = { body = "wrist_camera_assembly", pos = [0.002, 0.1238, -0.0433], dir = [0.0, 0.712, -0.702] }
+
+# ---- behind the base: the supply lead and the driver board's USB lead ----
+# From the driver board (on the plate behind the base) across the table to its back edge.
+# GUESS: where on the board the screw terminal and the USB-C socket are.
+[types.power]                     # two-core supply lead with the fuse holder in it
+radius_m = 0.0025
+mass_per_m = 0.060                # GUESS
+bend_stiffness_nm2 = 1.5e-3       # GUESS
+damping_ratio = 1.0
+joint_armature = 1e-6
+segment_m = 0.025
+free_end_m = 0.05
+contact_solref = "0.01 1"
+contact_solimp = "0.9 0.95 0.001"
+rgba = "0.7 0.1 0.1 1"
+
+[[cables]]
+name = "supply"
+type = "power"
+length_m = 0.20
+from = { body = "base", pos = [-0.036, -0.012, 0.050], dir = [-1.0, 0.0, 0.0] }
+to = { body = "world", pos = [-0.14, -0.08, 0.004], dir = [-1.0, 0.0, 0.0] }
+
+[[cables]]
+name = "bus_usb"
+type = "usb"
+length_m = 0.20
+from = { body = "base", pos = [-0.036, 0.012, 0.050], dir = [-1.0, 0.0, 0.0] }
+to = { body = "world", pos = [-0.14, 0.02, 0.004], dir = [-1.0, 0.0, 0.0] }
+
+# ---- fixed scene cameras ----
+# PLACEHOLDER hardware (tools/build_model.py gives each fixed camera the wrist's holder and board on a
+# plain post, because their stand is not designed). Each has its ribbon, and a USB cable from its board,
+# tied to the top of the post just behind the holder, to a clip 15 cm further down; from there it would
+# run down the post (not modelled). Without the tie at the top, the cable (which leaves the board
+# upward) flopped forward within a few seconds and hung straight down across the lens.
+# The coordinates are the wrist's: each camera's body is placed so that they fit.
+[[cables]]
+name = "ribbon_scene_front"
+type = "ribbon"
+length_m = 0.15
+from = { body = "scene_front_camera", pos = [0.002, 0.0770, -0.0274], dir = [0.0, 0.712, -0.702], axis = [1.0, 0.0, 0.0] }
+to = { body = "scene_front_camera", pos = [0.002, 0.1238, -0.0433], dir = [0.0, 0.712, -0.702] }
+
+[[cables]]
+name = "usb_scene_front"
+type = "usb"
+lengths_m = [0.07, 0.18]
+from = { body = "scene_front_camera", pos = [0.002, 0.0732, 0.0065], dir = [0.0, -0.712, 0.702] }
+via = [{ site = "scene_front_post_top", dir = [0.0, 0.0, -1.0] }]      # tied to the top of the post, right behind the holder
+to = { site = "scene_front_post_clip", dir = [0.0, 0.0, -1.0] }
+bulges = [[0.0, 0.702, 0.712], [0.0, 0.702, 0.712]]
+
+[[cables]]
+name = "ribbon_scene_side"
+type = "ribbon"
+length_m = 0.15
+from = { body = "scene_side_camera", pos = [0.002, 0.0770, -0.0274], dir = [0.0, 0.712, -0.702], axis = [1.0, 0.0, 0.0] }
+to = { body = "scene_side_camera", pos = [0.002, 0.1238, -0.0433], dir = [0.0, 0.712, -0.702] }
+
+[[cables]]
+name = "usb_scene_side"
+type = "usb"
+lengths_m = [0.07, 0.18]
+from = { body = "scene_side_camera", pos = [0.002, 0.0732, 0.0065], dir = [0.0, -0.712, 0.702] }
+via = [{ site = "scene_side_post_top", dir = [0.0, 0.0, -1.0] }]      # tied to the top of the post, right behind the holder
+to = { site = "scene_side_post_clip", dir = [0.0, 0.0, -1.0] }
+bulges = [[0.0, 0.702, 0.712], [0.0, 0.702, 0.712]]
+

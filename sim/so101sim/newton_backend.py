@@ -16,6 +16,7 @@ import newton
 from newton.sensors import SensorCamera
 
 from . import JOINTS
+from .safety import CommandFilter
 from .config import WORKCELL, load_cameras, model_timestep
 
 
@@ -62,11 +63,14 @@ class NewtonBackend:
     WARP_NJMAX = 8192
 
     def __init__(self, model_path=WORKCELL, device=None, solver: str | None = None,
-                 nconmax: int | None = None, njmax: int | None = None):
+                 nconmax: int | None = None, njmax: int | None = None, safety: bool = True):
         self.device = wp.get_device(device) if device else wp.get_preferred_device()
         if solver is None:
             solver = "warp" if self.device.is_cuda else "cpu"
         self.solver_kind = solver
+        self.safety = CommandFilter() if safety else None    # as in MujocoBackend (so101sim/safety.py)
+        self._request = None
+        self._intended = None
 
         builder = newton.ModelBuilder()
         newton.solvers.SolverMuJoCo.register_custom_attributes(builder)
@@ -125,17 +129,31 @@ class NewtonBackend:
         targets[self.dofadr] = joint_q[self.qadr]
         self.control.joint_target_q.assign(targets)
         self._time = 0.0
+        self._request = joint_q[self.qadr].copy()
+        self._intended = None
+        if self.safety is not None:
+            self.safety.reset(self._request)
 
     def q(self) -> np.ndarray:
         return self.state_0.joint_q.numpy()[self.qadr].copy()
 
-    def set_targets(self, q):
+    def _write_targets(self, q):
         targets = self.control.joint_target_q.numpy()
         targets[self.dofadr] = q
         self.control.joint_target_q.assign(targets)
 
+    def set_targets(self, q, intended=None):
+        """Ask for joint positions. They reach the actuators through the command filter, one step at a time.
+        intended: as in MujocoBackend.set_targets."""
+        self._request = np.array(q, float)
+        self._intended = None if intended is None else np.array(intended, float)
+        if self.safety is None:
+            self._write_targets(q)
+
     def step(self, n: int = 1):
         for _ in range(n):
+            if self.safety is not None and self._request is not None:
+                self._write_targets(self.safety.update(self._request, self.dt, self._intended, measured=self.q()))
             self.solver.step(self.state_0, self.state_1, self.control, None, self.dt)
             self.state_0, self.state_1 = self.state_1, self.state_0
         self._time += n * self.dt

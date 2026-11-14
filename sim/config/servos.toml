@@ -79,6 +79,17 @@ click_accel_m_s2 = 3.0
 pace_lag_rad = 0.4            # the path slows once the measured arm is > pace_lag_rad/2 behind its goal
 max_lag_deg = 3.0             # with a measured position: slow down if the arm lags the command by more
 
+# The servo bus, for the bus-in-the-loop simulation (so101sim/bus_backend.py; teleop.py --bus) and the
+# controller's driver (so101sim/bus/driver.py). PLACEHOLDERS marked below: measure on the real hardware.
+[bus]
+baud = 1000000                # HX default (register 6 = 0)
+response_delay_s = 0.00025    # PLACEHOLDER: request end -> the servo starts its reply (scope it)
+usb_tx_latency_s = 0.001      # PLACEHOLDER: host write -> bytes on the wire (BusLinker's USB bridge)
+usb_rx_latency_s = 0.001      # PLACEHOLDER: bytes on the wire -> readable on the host
+echo = false                  # PLACEHOLDER: does the BusLinker repeat what the host sends?
+reply_timeout_s = 0.02        # driver: wait this long for a reply
+retries = 1                   # driver: tries after the first (Hiwonder's LeRobot patch also uses 1)
+
 # Joint <-> servo mapping. Sim angle 0 = middle of the joint's range (upstream
 # "new calibration"). rad = direction * (ticks - zero_ticks) * 2*pi / 4096.
 # PLACEHOLDERS: measure zero_ticks/direction on the real arm.

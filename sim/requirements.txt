@@ -6,7 +6,9 @@ pillow
 scipy        # used by trimesh when Newton loads meshes (else a noisy fallback)
 pygame       # teleop.py window
 pytest       # sim/tests
+openpyxl     # sim/tests/test_bus.py: reads the vendor's HX register spreadsheet
 # Model generator and studies:
-trimesh      # tools/build_model.py (wrist-mount meshes)
+trimesh      # tools/build_model.py (wrist-mount meshes); tests/test_invariants.py (true-mesh clearances)
+rtree        # trimesh's distance queries (tests/test_invariants.py)
 coacd        # tools/build_model.py (jaw convex decomposition; results are cached in sim/.cache)
 matplotlib   # scripts/*_study.py charts

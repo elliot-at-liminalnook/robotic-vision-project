@@ -1,0 +1,39 @@
+# Physical invariants, enforced in two places (docs/DECISIONS.md, "Physical invariants").
+#
+# [command_filter]  so101sim/safety.py: the last stage before the servos, in every backend. It stops
+#                   commands that are not finite, outside the joint limits, a jump, or that would
+#                   drive the arm into the table or its own base. Smooth, well-paced motion is still
+#                   the torque governor's job (teleop) or a motion profile's (pick_demo).
+# [monitor]         so101sim/monitor.py: watches the physics every step (MuJoCo backends) and records
+#                   anything that should not happen in a correct simulation.
+
+[command_filter]
+# A command is not a motion: with soft servos and feed-forward the command leads the arm and jitters
+# by milliradians every tick, so its own speed and acceleration say little (ordinary teleop commands
+# show 1400 rad/s2). What does matter is a JUMP: a command that moves further in one tick than any
+# servo could. A jump is not passed on; the filter moves toward it along the fastest motion the
+# controller itself ever plans (the torque governor's speed and acceleration caps in servos.toml).
+jump_speed_frac = 1.3           # one tick's change above this x no-load speed (5.96 rad/s at 12 V) is a jump
+# Feed-forward shifts a command ahead of the pose it is for (droop and lag compensation: up to about
+# 11 deg at full speed and reach). More than this is not compensation any more and is cut back.
+max_lead_deg = 20.0
+# Keep-out, checked on the pose a command asks for (collision shapes of every moving part):
+table_z_m = 0.0                 # the table top, in the robot's base frame
+table_margin_m = 0.001          # nothing may be commanded lower than this above the table ...
+table_tolerance_m = 0.0005      # ... give or take this (the bisection's resolution)
+base_margin_m = 0.001           # nor closer than this to the base's parts
+# If the filter has been stopped dead at a keep-out for restart_after_s while the arm itself is more
+# than restart_from_arm_deg away from the pose it accepted (something else held the arm back), it
+# starts again from where the arm is.
+restart_from_arm_deg = 6.0
+restart_after_s = 0.2
+
+[monitor]
+max_penetration_m = 0.005       # any two shapes overlapping deeper than this, even for one step (an impact) ...
+max_sustained_penetration_m = 0.0015   # ... or deeper than this ...
+sustained_s = 0.05              # ... for longer than this (something is being pushed into something)
+max_joint_speed_frac = 1.15     # x no-load speed
+max_joint_accel_rad_s2 = 400.0  # averaged over accel_window_s
+accel_window_s = 0.02
+max_object_speed_m_s = 3.0      # a free object moving faster than the arm's tip can throw it
+workcell_floor_m = -0.01        # a free object's centre lower than this over the table has passed through it

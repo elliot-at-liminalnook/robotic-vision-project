@@ -1,0 +1,308 @@
+[
+ {
+  "name": "bus_pan_lift",
+  "cable": "bus_pan_lift",
+  "type": "servo_lead",
+  "ribbon": false,
+  "segments": 10,
+  "segment_m": 0.02,
+  "length_m": 0.2,
+  "from_body": "base",
+  "to_body": "shoulder",
+  "bulge": [
+   1.9288660000000036e-16,
+   -5.710219999999999e-16,
+   -1.0
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "bus_lift_elbow",
+  "cable": "bus_lift_elbow",
+  "type": "servo_lead",
+  "ribbon": false,
+  "segments": 10,
+  "segment_m": 0.02,
+  "length_m": 0.2,
+  "from_body": "shoulder",
+  "to_body": "upper_arm",
+  "bulge": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "collide_arm": true
+ },
+ {
+  "name": "bus_elbow_wrist",
+  "cable": "bus_elbow_wrist",
+  "type": "servo_lead",
+  "ribbon": false,
+  "segments": 10,
+  "segment_m": 0.02,
+  "length_m": 0.2,
+  "from_body": "upper_arm",
+  "to_body": "lower_arm",
+  "bulge": [
+   -8.39606123874e-16,
+   -4.510281999499999e-16,
+   1.0000006188980002
+  ],
+  "collide_arm": true
+ },
+ {
+  "name": "bus_wrist_roll",
+  "cable": "bus_wrist_roll",
+  "type": "servo_lead",
+  "ribbon": false,
+  "segments": 10,
+  "segment_m": 0.02,
+  "length_m": 0.2,
+  "from_body": "lower_arm",
+  "to_body": "wrist",
+  "bulge": [
+   -1.443289999999999e-15,
+   6.661340000000023e-16,
+   1.0
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "bus_roll_grip",
+  "cable": "bus_roll_grip",
+  "type": "servo_lead",
+  "ribbon": false,
+  "segments": 10,
+  "segment_m": 0.02,
+  "length_m": 0.2,
+  "from_body": "wrist",
+  "to_body": "gripper",
+  "bulge": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "bus_board_pan",
+  "cable": "bus_board_pan",
+  "type": "servo_lead",
+  "ribbon": false,
+  "segments": 10,
+  "segment_m": 0.02,
+  "length_m": 0.2,
+  "from_body": "base",
+  "to_body": "base",
+  "bulge": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "usb_0",
+  "cable": "usb",
+  "type": "usb",
+  "ribbon": false,
+  "segments": 10,
+  "segment_m": 0.026000000000000002,
+  "length_m": 0.26,
+  "from_body": "wrist_camera_assembly",
+  "to_body": "lower_arm",
+  "bulge": [
+   0.0,
+   0.7,
+   0.7
+  ],
+  "collide_arm": true
+ },
+ {
+  "name": "usb_1",
+  "cable": "usb",
+  "type": "usb",
+  "ribbon": false,
+  "segments": 6,
+  "segment_m": 0.02666666666666667,
+  "length_m": 0.16,
+  "from_body": "lower_arm",
+  "to_body": "upper_arm",
+  "bulge": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "collide_arm": true
+ },
+ {
+  "name": "usb_2",
+  "cable": "usb",
+  "type": "usb",
+  "ribbon": false,
+  "segments": 14,
+  "segment_m": 0.02428571428571429,
+  "length_m": 0.34,
+  "from_body": "upper_arm",
+  "to_body": "world",
+  "bulge": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "collide_arm": true
+ },
+ {
+  "name": "ribbon_wrist",
+  "cable": "ribbon_wrist",
+  "type": "ribbon",
+  "ribbon": true,
+  "segments": 12,
+  "segment_m": 0.012499999999999999,
+  "length_m": 0.15,
+  "from_body": "wrist_camera_assembly",
+  "to_body": "wrist_camera_assembly",
+  "bulge": [
+   0.0,
+   0.7120897289591295,
+   -0.7020884687209394
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "supply",
+  "cable": "supply",
+  "type": "power",
+  "ribbon": false,
+  "segments": 8,
+  "segment_m": 0.025,
+  "length_m": 0.2,
+  "from_body": "base",
+  "to_body": "world",
+  "bulge": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "bus_usb",
+  "cable": "bus_usb",
+  "type": "usb",
+  "ribbon": false,
+  "segments": 8,
+  "segment_m": 0.025,
+  "length_m": 0.2,
+  "from_body": "base",
+  "to_body": "world",
+  "bulge": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "ribbon_scene_front",
+  "cable": "ribbon_scene_front",
+  "type": "ribbon",
+  "ribbon": true,
+  "segments": 12,
+  "segment_m": 0.012499999999999999,
+  "length_m": 0.15,
+  "from_body": "scene_front_camera",
+  "to_body": "scene_front_camera",
+  "bulge": [
+   0.0,
+   0.7120897289591295,
+   -0.7020884687209394
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "usb_scene_front_0",
+  "cable": "usb_scene_front",
+  "type": "usb",
+  "ribbon": false,
+  "segments": 4,
+  "segment_m": 0.0175,
+  "length_m": 0.07,
+  "from_body": "scene_front_camera",
+  "to_body": "world",
+  "bulge": [
+   0.0,
+   0.702,
+   0.712
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "usb_scene_front_1",
+  "cable": "usb_scene_front",
+  "type": "usb",
+  "ribbon": false,
+  "segments": 7,
+  "segment_m": 0.025714285714285714,
+  "length_m": 0.18,
+  "from_body": "world",
+  "to_body": "world",
+  "bulge": [
+   0.0,
+   0.702,
+   0.712
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "ribbon_scene_side",
+  "cable": "ribbon_scene_side",
+  "type": "ribbon",
+  "ribbon": true,
+  "segments": 12,
+  "segment_m": 0.012499999999999999,
+  "length_m": 0.15,
+  "from_body": "scene_side_camera",
+  "to_body": "scene_side_camera",
+  "bulge": [
+   0.0,
+   0.7120897289591295,
+   -0.7020884687209394
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "usb_scene_side_0",
+  "cable": "usb_scene_side",
+  "type": "usb",
+  "ribbon": false,
+  "segments": 4,
+  "segment_m": 0.0175,
+  "length_m": 0.07,
+  "from_body": "scene_side_camera",
+  "to_body": "world",
+  "bulge": [
+   0.0,
+   0.702,
+   0.712
+  ],
+  "collide_arm": false
+ },
+ {
+  "name": "usb_scene_side_1",
+  "cable": "usb_scene_side",
+  "type": "usb",
+  "ribbon": false,
+  "segments": 7,
+  "segment_m": 0.025714285714285714,
+  "length_m": 0.18,
+  "from_body": "world",
+  "to_body": "world",
+  "bulge": [
+   0.0,
+   0.702,
+   0.712
+  ],
+  "collide_arm": false
+ }
+]

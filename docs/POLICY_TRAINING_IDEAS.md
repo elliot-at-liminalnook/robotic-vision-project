@@ -564,6 +564,11 @@ and our 2° default. One line of feed-forward from `dynamics.py` fixes it, robus
 
 **B9. ⚠ Verify the HX register map before writing any gain or limit register**
 
+> **Correction (2026-11-11, DECISIONS X10).** The disagreement below was a misreading. The spreadsheet's hex
+> column holds formulas and was read one row off; its decimal column is the address, and it matches the
+> STS3215 table (16 torque limit, 21/22/23 P/D/I, 40 torque switch, 42 goal position). Verifying against a
+> real servo before the first write is still right, and `BusArm.connect()` now does the read-only part.
+
 Two of our sources disagree.
 - **`third_party/hiwonder-so-arm101/README.md`:** the HX is "protocol-compatible with Feetech STS". Hiwonder's
   LeRobot fork only changes sync read/write retries, so stock LeRobot drives it as `sts3215` and writes the

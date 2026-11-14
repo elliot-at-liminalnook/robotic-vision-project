@@ -560,6 +560,9 @@ void app_main(void)
     s_req_done = xSemaphoreCreateBinary();
     s_req_q = xQueueCreate(1, sizeof(cam_req_t *));
     assert(s_lock && s_req_done && s_req_q);
+    /* Nobody has asked for a frame yet. Left at 0, the first IDLE_STOP_MS after boot would count as
+     * "frames wanted", and a start that failed in that time would be retried with no one reading. */
+    s_last_fb_get = xTaskGetTickCount() - pdMS_TO_TICKS(IDLE_STOP_MS);
     BaseType_t created = xTaskCreate(cam_task, "camera", CAM_TASK_STACK, &s_cam, CAM_TASK_PRIORITY, NULL);
     assert(created == pdPASS);
 

@@ -68,6 +68,10 @@ would overheat the wire before the supply shut down. With the fuse, the usable c
 
 - That the board's "MX1.25" header takes a PicoBlade plug. The pitch matches; the fit is unconfirmed.
 - The bracket's 4.0 mm pilot hole against the insert's recommended hole size.
+- **Camera cable length on the arm.** The simulated wires (`sim/README.md`, "Wires") put the wrist camera's
+  USB cable at about 0.76 m from the board to the table (260 + 160 + 340 mm between its clips). The
+  spliced lead is about 0.45 m (150 mm PicoBlade lead + 300 mm USB-A lead), so its USB-A plug and the
+  extension's socket would end up on the upper arm. Either splice in a longer lead or accept the join there.
 - The BusLinker's screw terminal and the servo bus connectors are small. The supply can deliver 21 A, but the
   wiring between it and the servos has not been rated for that.
 

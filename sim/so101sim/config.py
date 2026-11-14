@@ -12,6 +12,7 @@ SIM = Path(__file__).resolve().parents[1]
 ROOT = SIM.parent
 MODEL_DIR = SIM / "model"
 WORKCELL = MODEL_DIR / "workcell.xml"
+WORKCELL_CABLES = MODEL_DIR / "workcell_cables.xml"     # the same, with the arm's wires (so101sim/cables.py)
 
 
 def _load(name: str) -> dict:
@@ -106,6 +107,11 @@ def load_cameras(include_disabled: bool = False) -> dict[str, CameraSpec]:
 
 def load_servos() -> dict:
     return _load("servos.toml")
+
+
+def load_safety() -> dict:
+    """Limits for the command filter and the physics monitor (config/safety.toml)."""
+    return _load("safety.toml")
 
 
 def servo_limits(arm: str = "follower") -> dict:

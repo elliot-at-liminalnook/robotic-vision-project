@@ -37,6 +37,7 @@ class Monitor:
         self.worst_over = np.zeros(len(JOINTS))
         self.min_tip_z = np.inf
         self.problems: list[str] = []
+        self.physics = app.monitor              # every physics step: overlaps, speeds, accelerations, objects through the table
 
     def check(self, dt: float = FRAME):
         sim, app = self.app.sim, self.app
@@ -68,6 +69,7 @@ class Monitor:
 
     def assert_ok(self):
         assert not self.problems, self.problems[:5]
+        self.physics.assert_ok()
         for j, name in enumerate(JOINTS):
             assert self.worst_sat[j] <= self.MAX_SATURATED_S, \
                 f"{name} sat at its torque limit for {self.worst_sat[j]:.2f} s (stalled against something)"
@@ -79,12 +81,14 @@ class Monitor:
 class Rig:
     """A Teleop app without a window: call its methods, then run() frames."""
 
-    def __init__(self):
+    def __init__(self, bus: dict | None = None, camera_fw: tuple | None = None, cables: bool = False):
+        """bus: settings for the servo bus in the loop (so101sim.bus_backend), or None for direct joint targets.
+        camera_fw: (width, height) to run the wrist camera through the firmware (so101sim.camera_fw)."""
         import pygame as pg
         import teleop
         pg.init()
         self.pg, self.teleop = pg, teleop
-        self.app = teleop.Teleop("mujoco", None, render_every=10 ** 9)
+        self.app = teleop.Teleop("mujoco", None, render_every=10 ** 9, bus=bus, camera_fw=camera_fw, cables=cables)
         self.keys = teleop._FakeKeys(pg)
         self.mon = Monitor(self.app)
 

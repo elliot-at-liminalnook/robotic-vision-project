@@ -43,11 +43,11 @@ The keyboard/mouse teleop window (`sim/scripts/teleop.py`):
 | `docs/BOM.md` | Parts ordered and still to buy, with links, prices and the power wiring | Yes |
 | `docs/CONCEPTS.md` | Self-contained lessons on the ideas behind the arm (motors, control, IK, contact, camera) | Yes |
 | `docs/datasheets/` | Datasheets + official CAD: servos, servo driver board, Camera Module 3, ESP32-P4 board/chip | No, reference only |
-| `firmware/p4-uvc-camera/` | ESP32-P4 + Camera Module 3 → USB UVC webcam firmware (ESP-IDF) | Yes |
+| `firmware/p4-uvc-camera/` | ESP32-P4 + Camera Module 3 → USB UVC webcam firmware (ESP-IDF). `host/` builds the same source for a PC with stand-in hardware, for the simulation | Yes |
 | `firmware/components/` | Vendored IMX708 camera driver (Apache-2.0) used by the firmware | Carefully |
 | `hardware/camera_mount/` | Single Camera Module 3 holder (from the stereo V9 beam, reinforced): STEP/STL + CadQuery build | Yes |
 | `hardware/wrist_mount/` | Wrist bracket + camera placement study (gripper +y side, lens between the jaw tips) | Yes |
-| `sim/` | Simulation (Newton/MuJoCo Warp + MuJoCo): follower with the mounted wrist camera, workcell, 3 cameras, keyboard/mouse **teleop** (fast: torque governor; optional load-aware IK), pick demo, vision check, servo load + fast-teleop studies. See `sim/README.md` | Yes (not `sim/model/`, which is generated) |
+| `sim/` | Simulation (Newton/MuJoCo Warp + MuJoCo): follower with the mounted wrist camera, workcell, 3 cameras, keyboard/mouse **teleop** (fast: torque governor; optional load-aware IK), pick demo, vision check, servo load + fast-teleop studies, the **servo bus in the loop** (emulated HX-30HM servos behind a byte-level bus) and the **camera firmware in the loop** (the real firmware source built for the PC), both for debugging before the hardware exists. See `sim/README.md` | Yes (not `sim/model/`, which is generated) |
 | `scripts/` | `sync_so_arm100.sh`: re-sync the upstream mirror | |
 
 Keep `third_party/` and `docs/datasheets/` pristine so we can always diff our
@@ -70,6 +70,11 @@ Without LFS you get small pointer files instead of meshes, and simulation won't 
 ```bash
 python sim/scripts/teleop.py                    # keyboard + mouse, all three cameras (MuJoCo backend)
 python sim/scripts/teleop.py --backend newton   # Linux: Newton / MuJoCo Warp
+python sim/scripts/teleop.py --bus              # commands go through a simulated servo bus to emulated servos
+python sim/scripts/teleop.py --camera-fw        # the wrist view comes through the camera firmware, built for this PC
+python sim/scripts/teleop.py --cables           # with the arm's wires in the model (servo leads, camera USB cable)
+python sim/scripts/sim_api.py                   # REST API so a language model (or any program) can drive the arm
+python sim/scripts/sim_api.py --scene bench --window   # the harder scene and its task; bench_solution.py solves it
 ```
 
 Details, verified results and backend notes: `sim/README.md`. Decisions so far: `docs/DECISIONS.md`.

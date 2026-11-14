@@ -108,7 +108,7 @@ See `docs/POLICY_TRAINING_IDEAS.md` (B0, B4, B7, B9).
 | P2 | 9° is a prior, set in one place (`servos.toml [follower.position_loop] sat_error_deg`) | Unmeasured until the HX bench test; the model generator and the feed-forward both read it |
 | P3 | Every arm command gets gravity + back-EMF feed-forward (`so101sim/command.py`), in teleop (`V` toggles) and `pick_demo` | At realistic stiffness the pick fails without it (cube not lifted, MuJoCo and Newton) and succeeds with it; at home, droop drops from 4.9 to 0.2 mm. Study: robust to ±20 % mass error; fast-teleop lag 30 → 10 mm. Needs stiffness within ~±20 % |
 | P4 | Grip by offset: after the jaws stall on an object, hold 3° past contact (≈33 % of stall) | "Fully closed" stalls the servo into overload protection (80 % for 2 s); in the study the offset grip removed every trip and still lifted. 3° keeps the squeeze under the gripper's 50 % limit |
-| P5 | Verify the HX register map before any register write (incl. stock LeRobot `connect()`) | The vendor's "STS-compatible" claim and the HX register table v3.7 disagree on P/D/I, torque limit and torque-enable addresses; a wrong map could set the under-voltage threshold or a goal position |
+| P5 | Verify the HX register map before any register write (incl. stock LeRobot `connect()`) | ~~The vendor's "STS-compatible" claim and the HX register table v3.7 disagree on P/D/I, torque limit and torque-enable addresses~~ → corrected in X10: the table agrees with the STS layout; the disagreement was a misreading. The check stays, because the table has still not been compared with a real servo |
 
 ## Audit fixes (2026-11-09)
 
@@ -154,3 +154,144 @@ Not yet flashed; these remove the first-flash risks the audit found (`firmware/p
 | B6 | 10 A inline blade fuse on the supply's + lead | The 21 A supply would overheat the thin servo leads in a short. Limits usable current to 10 A |
 
 Parts, links and prices: `BOM.md`.
+
+## Low-level simulation: servo bus in the loop (2026-11-11, with the user)
+
+See `sim/README.md`, "Servo bus in the loop".
+
+| # | Decision | Why |
+|---|---|---|
+| X1 | Simulate the hardware's interfaces at byte level, and have the controller talk only to those interfaces | User's goal: debug the controller and firmware before (and alongside) the hardware. Not for policy training: it is serial and slow |
+| X2 | Order: servo bus, then a camera model (latency, dropped frames, compression), then a PC build of the camera firmware | The bus driver is also the real-robot backend's lower half, so it pays twice. A PC build of the camera firmware tests its logic but not the image (the sensor, ISP and JPEG blocks would be faked) |
+| X3 | The HX-30HM firmware is emulated from documents (register table V3.7, protocol manual, our motor model), not run | It ships as closed `.sfw` binaries for a microcontroller we haven't identified. The emulator's guesses are listed in `servo_emu.py` and logged whenever the controller relies on one |
+| X4 | The servo emulator is Python | It is our model, not real firmware, so there is no C to keep faithful to. C matters for the camera firmware, which is real code |
+| X5 | One clock for everything, one thread. Bus traffic takes time on it; a blocking read advances the simulation; the control loop keeps an absolute schedule and counts overruns | Deterministic and repeatable, and timing problems (a read that takes longer than a tick, a timeout longer than a frame) show up as numbers |
+| X6 | `BusBackend` has the same API as the other backends (`q`, `set_targets`, `step`) | Teleop, `pick_demo` and the test rig run through it unchanged. MuJoCo only for now |
+| X7 | The emulated servo's loop reads the same `sat_error_deg` as the model generator, and a test requires the bus path and the direct path to move the arm the same | One source for the stiffness (P2); the bus must add only what a bus adds (ticks, delay) |
+| X8 | Where the firmware's behaviour is unknown, the emulator takes the strict reading: a goal write does not switch torque on; writes to read-only or undocumented registers are ignored and reported; out-of-range values are clamped and reported | A controller that leans on a guess fails in the simulation instead of on the bench |
+| X9 | `BusArm.connect()` only reads, and refuses to continue unless each servo's registers look like the HX table (register 5 = its id, plausible baud index, response level, torque limit, mode) | P5 as code: nothing is written to a servo that hasn't been identified |
+| X10 | Correction to P5 and `POLICY_TRAINING_IDEAS.md` B9: the HX register table V3.7 **agrees** with the Feetech STS layout (16 torque limit, 21/22/23 P/D/I, 40 torque switch, 42 goal, 56 position). The reported conflict came from the spreadsheet's hex column, which holds formulas and was read one row off; the decimal column is the address. Real differences: the HX table lists **no angle-limit registers (9–12)** and no run-time torque limit (48); current is in 1 mA and speed in steps/s | Found while transcribing the table for the emulator; a test now compares our table with the spreadsheet. Still unverified against a real servo |
+| X11 | Teleop's stall guard and lag guard skip a repeated encoder reading (a failed bus read), and the driver waits one timeout per failed read, not two | Found with the bus simulation: with 5 % of replies lost, corrupted and commands missed, teleop saw old readings as an arm that wasn't following, reported "blocked" and stopped 20 mm short of the cube. A lost reply also stalled the loop for 40 ms, longer than a 33 ms frame |
+| X12 | The bus timing numbers (`servos.toml [bus]`: servo response delay, USB latency each way, echo, reply timeout) are placeholders | Unknown until measured on the BusLinker; a 20 ms timeout is already most of a control frame |
+
+## Low-level simulation: camera firmware in the loop (2026-11-11, with the user)
+
+See `firmware/p4-uvc-camera/host/README.md` and `sim/README.md`, "Camera firmware in the loop".
+
+| # | Decision | Why |
+|---|---|---|
+| X13 | The camera model and the PC build of the firmware are one thing: the firmware source is compiled unchanged, and the "camera model" is the stand-in hardware under it (sensor timing, crop, encoder, USB link) plus the PC's buffer queue above it | X2 planned them as two steps. Built separately, the model would have needed its own copy of the firmware's behaviour (start-up time, pacing, idle stop), which is the part most worth testing |
+| X14 | The firmware file is `#include`d into `host/host_api.c`; its `open`/`ioctl`/`mmap` calls are redirected by a force-included header | No edits to the firmware for the sake of the simulation, and tests can read its private state (`s_cam.running`, the lock) |
+| X15 | FreeRTOS stand-in: one thread per task, one running at a time, virtual time, priorities, hand-over when a higher-priority task is readied; no preemption inside plain code | Exactly repeatable runs, and no dependence on the PC's speed. The cost: races that need an interrupt between two statements are not explored, and stack sizes are not modelled |
+| X16 | The C side never calls Python. It returns events (`need a picture`, `need a JPEG`, `frame arrived`) and Python answers | MuJoCo's renderer must be used from the thread that created it; firmware tasks run on other threads |
+| X17 | The UVC task in the stand-in follows `usb_device_uvc`'s `video_task` line for line | That loop sets the frame rate and decides what a failed frame costs; an approximation would have hidden both |
+| X18 | The stand-in devices validate how the firmware uses them and list every misuse; tests require an empty list, and one test misuses a device on purpose to prove the checks fire | The firmware's riskiest code is buffer and lifecycle handling (audit items U1–U3); checks in the hardware model catch whole classes of those mistakes |
+| X19 | A sensor mode is a pinhole camera with the calibrated focal length in pixels and the mode's size, so a smaller size sees less. In teleop only the wrist camera goes through the firmware | Matches the driver (every mode is a centre crop at one pixel pitch). Click-to-move needs the fixed views' calibrated full picture |
+| X20 | Firmware fix: `s_last_fb_get` starts as "long ago", not 0 | Found by the PC build: for the first 1.5 s after boot the camera task treated frames as wanted, so a start that failed in that window (no camera on the cable) was retried with nobody reading. Not rebuilt with ESP-IDF since the change |
+| X21 | Left as designed, now measured: one encoder queue error stops the stream for about 1.7 s (30 bad frames, then a restart) | The firmware can't know the encoder's buffer state after such an error. Worth revisiting only if these errors turn out to happen on the board |
+| X22 | Stand-in timings (bring-up 0.5 s, readout 20 ms, encode 8 ms per megapixel, link 8.18 MB/s) and the PC's 4-frame queue are placeholders | None has been measured. Simulated pictures also compress much better than real ones, so USB frame rates at large sizes are optimistic |
+
+## Model audit and fixes (2026-11-11, with the user)
+
+An audit of the generated model against upstream, the CAD and the true meshes. Fixed in this order.
+
+| # | Decision | Why |
+|---|---|---|
+| M1 | The camera bracket's collision shape is 8 convex pieces, and the wrist link's meshes are decomposed too | As single hulls they overlapped by up to 1 mm for wrist roll between −0.7 and +0.8 rad, whatever the other joints did: phantom friction costing wrist roll 1.4 N·m on average and 2.1 N·m at peak (67 % of stall) in a slow sweep, against 0.3 N·m outside that zone. The real parts clear by 0.7 to 2 mm. Cause: the explicit contact pairs of A6 on top of hulls that fill the parts' hollows. Home has roll −1.57, outside the zone, so no test saw it |
+| M2 | Every arm part whose hull was more than about 1.5 times its volume is decomposed (ten meshes, 8 to 16 hulls) | Same class as M1 and S2. Step time is unchanged (0.10 ms) |
+| M3 | The base gets collision shapes, with an explicit exclusion against the shoulder | Upstream gives it none: a cube dropped on it fell through to the table and the arm could enter it. The exclusion is needed because MuJoCo does not skip parent/child contacts when the parent is fixed to the world |
+| M4 | The base is raised 2.4 mm so that its lowest face is on the table | Upstream's origin is above the base's lowest flat (20 cm² at −2.4 mm, 36 cm² at 0), so the base was sunk into the table top. Assumes the base rests on its lowest faces; check on the printed part |
+| M5 | The table is solid down to the floor | A box pushes an overlapping shape out through its nearest face: the 40 mm table top let a cube at 5 m/s through. Now nothing passes at 40 m/s |
+| M6 | Contact `solref 0.004`, `solimp 0.95 0.99` on every shape | With MuJoCo's defaults the arm at full torque sank 10 mm into the table and pressed a cube 7 mm into it. 0.004 s is the stiffest a 2 ms step allows; now 1.3 mm on impact, 0.04 mm at rest, and a pressed cube 0.6 mm |
+| M7 | The wrist camera assembly's centre of mass and inertia come from the part meshes (mass spread evenly through each) | They came from bounding boxes: centre of mass 2.6 mm off, inertia 1.3 to 2 times too high |
+| M8 | `vision_check.py` prints the number it compares, allows 3 px (was 12), and checks each edge of the cube's outline where nothing hides it | The centre of a near-central object barely moves with a wrong focal length; the edges do. Measured: under 1 px |
+| M9 | `pick_demo.py` moves on the speed-and-acceleration profile of `servos.toml` | It limited speed only, so every move started and stopped with a step in speed |
+| M10 | A correction to my own audit: clearances between parts must be taken from the compiled model's mesh, not the STL file | MuJoCo re-centres meshes on load. Two numbers in the first audit report were wrong for this reason (the base "41 mm into the table": really 2.4; the bracket "5 to 9 mm clear": really 0.7 to 2) |
+
+## Physical invariants (2026-11-11, with the user)
+
+See `sim/README.md`, "Physical invariants". Limits in `sim/config/safety.toml`.
+
+| # | Decision | Why |
+|---|---|---|
+| V1 | Enforce each invariant in several layers: model, command filter, physics monitor, tests | A model fix prevents; the filter stops bad commands on the real arm too; the monitor catches what neither foresaw; tests keep all three honest |
+| V2 | The command filter is part of every backend (`set_targets` → filter → actuators or bus), not of the scripts | Nothing can bypass it: a new script or a policy gets it without knowing |
+| V3 | The filter limits **jumps**, not a command's speed or acceleration | Tried first, and wrong: with soft servos and feed-forward the command leads the arm and jitters, so ordinary teleop commands show 1400 rad/s² tick to tick. A limit there mangles good commands and does not make the arm gentler |
+| V4 | A jump is closed along a straight line in joint space at the governor's speed and acceleration caps, while still following the request | The fastest motion the controller itself ever plans, so it is not a new behaviour. Per-joint catching-up bent the path and could walk the arm into a keep-out |
+| V5 | Keep-outs (table, base) are checked on the **intended** pose, which callers that add feed-forward pass along | The compensated command can point 11° past the arm. Checked on the command, the keep-out fired in every fast descent though the arm was clear |
+| V6 | A blocked step means the command stays exactly where it was. If the filter has been stuck for 0.2 s while the arm is more than 6° from the accepted pose, it restarts from where the arm is | Otherwise the accepted pose can sit at a keep-out's edge, a place the arm never was (something else held the arm back), and bar the way back |
+| V7 | The monitor allows 5 mm of overlap for a single step and 1.5 mm sustained; for wires, their radius | An impact at full closing speed overlaps 2 to 3 mm for one or two steps even with the stiffest contacts; a sustained overlap is something being pushed into something |
+| V8 | A `pick_demo` run with a physics violation counts as failed | A pick that needed impossible physics is not a pick |
+| V9 | **Not done: servo-side speed and acceleration caps.** | Speed is already bounded by the motor (it cannot exceed its no-load speed). The acceleration register would make the servo plan to stop at every goal it is sent; on a stream of goals that means lagging by v²/2a (about 20° at full speed with the largest setting), by the emulator's reading of the register. Worth revisiting only for point-to-point moves, and only after the register's behaviour is checked on a servo |
+| V10 | Known and left alone: one large jump of the Cartesian target makes the joints race, and the planned path dips the fixed jaw's tip about 3 mm under the table top | Found by the filter, which now cuts it short. Clicks, Home and the wheel are straight-line or small moves; only a programmatic 8 cm jump does it. Tests that descend use the straight-line move |
+
+## Wires (2026-11-11, with the user)
+
+See `sim/README.md`, "Wires", and `sim/config/cables.toml`.
+
+| # | Decision | Why |
+|---|---|---|
+| K1 | Wires are chains of capsules with ball joints (spring = bending stiffness), not MuJoCo's cable plugin and not tendons | Plain MJCF: no plugin to load, and it should carry over to Newton / MuJoCo Warp. A tendon has no slack shape and touches nothing |
+| K2 | A separate model file, off by default (`load_backend("mujoco", cables=True)`, `teleop.py --cables`) | 90 segments make a step about ten times as expensive (1.1 ms). Like the bus and camera layers: detail for checking a design, the fast model for everything else |
+| K3 | One end fixed in its connector, the other held by a ball constraint; laid out along a slack curve at every reset, then settled for 0.4 s with the arm and clock held | A chain's rest shape is straight, so it cannot start from the model's reference pose; and the layout must work for any arm pose |
+| K4 | Wires never collide with each other; every wire collides with the table and objects; only the exposed ones (two bus leads, the USB cable) collide with the arm | The other four leads run inside or against the brackets. Laid out through solid plastic, one jammed the pan joint with millions of newtons. Their real path through the hollow parts is not known well enough to model |
+| K5 | Wire contacts are softer than the rigid parts' (`solref 0.01`), and a wire's values win in any contact | A wire gives; and one laid out through a part then works its way out instead of being shot out |
+| K6 | The USB cable is clipped half-way along the forearm and the upper arm, on the side the servo sockets are on, 8 mm proud, and taped to the table behind the base | A choice, since the routing was open (PLAN). It keeps the cable off the gripper and gives each joint its own slack |
+| K7 | The USB cable's first stretch (board to forearm clip) is 260 mm | At 200 mm, 20 % more than its ends are ever apart, the simulation showed it wrapped around the wrist link and pulled taut at one pose (3.7 N). The straight-line check is necessary, not sufficient |
+| K8 | Weight per metre and bending stiffness of each wire are guesses, marked in the config with how to measure them | Nothing here depends on them yet: slack wires cost under 5 % of stall torque either way. They matter once a wire is nearly taut |
+| K9 | Camera ribbons are chains of flat strips joined by hinges (they fold about one axis only), 1 mm thick | A ribbon cannot twist or bend sideways; a chain of ball joints would let it. 0.1 mm is too thin for contact |
+| K10 | The fixed cameras get placeholder hardware in the cabled model only: the wrist's holder, camera and board, placed so the lens is exactly at the configured camera position, on a plain post | A cable needs something to hang from, and their stand is not designed (PLAN). Kept out of the plain model so that nothing else changes until the stand is real |
+| K11 | A fixed camera's USB cable is tied to the top of its post, right behind the holder | It leaves the board upward. Free, it flopped forward within a few seconds of simulated time and hung straight down across the lens: a dark bar down the middle of that camera's picture |
+| K12 | The supply lead and the driver board's USB lead are modelled from the board to the table's back edge only | Beyond that they are off the workcell and touch nothing |
+
+## REST API for a language model (2026-11-11, with the user)
+
+See `sim/README.md`, "REST API for a language model".
+
+| # | Decision | Why |
+|---|---|---|
+| R1 | Turn-based: simulated time moves only inside an action, which blocks until it is done or times out | A model takes seconds to answer. With the simulation running meanwhile, the result would depend on how fast the model is; this way a run is repeatable and a slow model is not penalised |
+| R2 | The API drives the Teleop controller (straight-line moves, governor, feed-forward, grip-by-offset, stall guard), behind the command filter and the monitor | One controller to trust and test, and the model gets the same protections as a person. It also means the API will carry over to the real arm when teleop does |
+| R3 | Actions are few and at the level a person thinks: move the tip, move joints, set the gripper, wait | A model is good at sequencing and bad at servo loops. No velocity or torque commands |
+| R4 | "Tip" in the API is the midpoint between the jaw pads; the controller's own tip is on the fixed jaw's pad | With the controller's tip, sending the tip to an object's centre drove the fixed jaw onto the object (the first API pick failed that way). `gap_m` and `square_jaws` exist for the same reason: they are what a clean grasp needs |
+| R5 | Every refusal is a sentence with the allowed range, unknown fields are refused by name, and a refused request changes nothing | The model's only way to recover is to read the answer |
+| R6 | The guide (`GET /`), the OpenAPI document and request validation come from one table | They cannot drift apart; a test checks every endpoint and parameter is in all three |
+| R7 | Standard library HTTP server, one request at a time, bound to 127.0.0.1, no authentication | No new dependency. One thread also keeps MuJoCo's renderer on the thread that made it. Not for exposing to a network as it is |
+| R8 | `/state` gives the objects' true positions by default; `--no-object-positions` withholds them | Useful for getting a model going; not available on a real robot, so it can be switched off to make the model use the cameras |
+| R9 | `--hands-on` (2026-11-12): the API's window also takes teleop's keys and mouse between requests, and the simulation then runs at real speed; keys are ignored while a request's action runs, and an action unpauses a paused simulation | The user asked to control the arm together with the model. Taking turns needs no arbitration between two sources of commands: both go through the one teleop controller, one at a time. The cost is that time passes between requests, so such a run is not repeatable; without the flag nothing changes |
+| R10 | `POST /randomize` (2026-11-12): objects are placed upright with a random turn, 0.20 to 0.31 m from the base and within 65 deg of straight ahead, centres at least 75 mm apart, and a layout is redrawn until each object touches only the table. The answer gives the seed, and the positions only if `/state` would | The user asked for a random layout to be worked from pictures. The band is where the arm reaches with fingers down (T7), so every layout can be worked; the contact check keeps objects out of the fixtures in any scene without a list of them; the seed lets a layout be replayed afterwards to score a picture-only run |
+| R11 | No camera calibration in the API. `GET /pixel` (the ray through a pixel and where it meets the table, from the camera's pose and field of view) was added on 2026-11-12 and removed the same day at the user's request | With it, both the author and a fresh agent given only the guide built a tower from pictures on the first try, locating objects within 1.5 mm: the endpoint did the hard part. The user wants to see how a newcomer manages with the pictures alone |
+| R12 | The guide (`GET /`) is written for the server it is served by (2026-11-12): it lists the scene's objects with their sizes and colours, sends the caller to `objects` in `/state` only if positions are given, says that time runs between requests under `--hands-on`, says where each camera stands and what the arm looks like in the pictures, and explains every message the controller and the filter can give. `/gripper` and `/wait` now set their own message | A fresh agent given only the guide reported each of these as wrong or missing: the walkthrough pointed at a field that was withheld, sizes had to be guessed from pictures, the clock moved when the guide said it could not, messages were stale or unexplained, and the arm's own coloured parts were taken for objects. Tests tie the guide to the model and to the filter's source so it cannot drift again |
+| R13 | `/gripper` changes only the jaws' target (2026-11-12). Before, it re-solved the arm's pose for the tip with the fingers down | Found by the second newcomer run: it had turned the wrist with `/move_joints` to hold a cylinder upright over a tower, and opening the jaws swung the arm back to fingers-down through the tower. A test now checks, from poses reached either way, that the five arm joints stay put when the jaws move |
+
+## Scenes and tasks: the bench (2026-11-11, with the user)
+
+See `sim/README.md`, "The bench scene and task".
+
+| # | Decision | Why |
+|---|---|---|
+| T5 | A second scene, `bench`: a cabinet with a sliding drawer, two bins, a platform, a socket for a peg, five loose parts | The user asked for a really complex environment and task. It adds an articulated fixture, containers with walls, an insertion with 4 mm of clearance, stacking at height, and steps that depend on each other |
+| T6 | A task is a description plus goals about the end state only, all of which must hold at once | Goals can then be checked at any moment and in any order, by `GET /task` or a test, without watching the run. Order still matters where the scene forces it: the red cube is in the closed drawer |
+| T7 | "Physically feasible" is proved, not argued: a reference solution made only of REST calls does the task, and a test runs it | The first layout looked fine and was not: three places were out of the arm's fingers-down reach. The solution found each one |
+| T8 | Everything that must be approached from above sits between 0.20 and 0.32 m from the base | Measured: with the fingers straight down the arm reaches 12 cm or higher only in that band; closer in the ceiling drops (10 cm at 0.18 m, 5 cm at 0.12 m), too low to carry anything over the fixtures |
+| T9 | `/move_tip` takes `jaws_along_deg`, and `/state` reports which way the jaws close | The task needed it twice: the low block rolls over if pinched across its short side, and at the drawer handle one jaw otherwise lands on the cabinet's roof |
+| T10 | The reference solution holds low parts with the tip at least 10 mm above the table | Lower, the gripper could not close: the moving jaw swings down a little as it closes and the command filter refuses a pose with any part below the table top (V5). The filter is right; the grasp height was wrong |
+| T11 | The drawer does not rest on the table (1 mm clear) and stays put by friction in its slide (0.5 N) | Contact between a moving tray and the table adds nothing but solver work. Not measured against any real drawer: it is a made-up fixture |
+
+## Stop path (2026-11-14, with the user)
+
+See `sim/README.md`, "teleop.py" (Stop path). Tests: `sim/tests/test_stop.py`.
+
+| # | Decision | Why |
+|---|---|---|
+| E1 | Two software levels: **freeze** (`X`: the goal becomes the measured pose, torque stays on) and **torque off** (`T`, and on every way out of the program) | Every other protection assumes the controller and its model are right. Freeze is for "stop that": nothing drops. Torque off is for when holding is itself the danger, and for leaving; the arm sags |
+| E2 | Not built: a power cut. A switch on the 12 V lead is still to buy | The only level that works with the computer or the bus dead. Software cannot stand in for it |
+| E3 | Freeze uses the stall guard's own code (`Teleop.hold_here`), and keeps the gripper's command | One way of "start again from where the arm is" to trust. Opening the jaws on a stop would drop what is held |
+| E4 | After a stop, movement keys that are still down do nothing until they are let go | Found by the first test: a key held through the stop moved the arm again on the next frame |
+| E5 | Torque is a backend operation (`torque_off()`, `torque_on()` returning the pose now held), and while it is off the backend sends nothing | Same reason as V2: no script can forget it. Feetech firmware switches torque on when a goal is written (HX unverified), so "off" has to mean "no goal writes" on the controller's side |
+| E6 | Torque on holds the pose the encoders report at that moment, and is refused without a fresh reading | The arm has fallen since the last command. Any older pose would make it jump |
+| E7 | Torque switches and `enable()`'s goals are read back from every servo; a servo that differs is written singly with an acknowledgement; one that cannot be confirmed is named | They went out as broadcasts, which have no reply. A servo that missed the goal but got the switch would drive to its old goal (0 ticks after power-on) |
+| E8 | The program switches torque off in one `finally`; SIGTERM is turned into a normal exit so it gets there too | Before, every exit left the servos holding their last goal at up to full torque |
+| E9 | Assumed: a servo with torque off coasts (no back-EMF braking), in both MuJoCo backends | Unknown for the HX. Coasting is the worse case: the arm falls faster. Check on a servo |
+| E10 | The API refuses actions while torque is off (hands-on mode); it has no stop endpoints | A remote caller must not switch on what the person at the arm switched off. A stop request has no meaning in a turn-based API where time only runs inside an action |
+| E11 | Not done: Newton backend (no `torque_off`; teleop reports it), `pick_demo.py`, and stops triggered by servo feedback (temperature, status bits, lost replies) | Newton cannot be run on this machine; the feedback watchdog is the next piece |

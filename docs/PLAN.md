@@ -110,8 +110,30 @@ Options:
 - [x] Wrist camera mount designed (`hardware/wrist_mount`): bracket on the gripper's +y side, board on the holder's back; pose feeds the sim.
 - [ ] Print + test: camera holder snap fit, bracket fit on the gripper, wobble; design the ESP32-P4 cradle on the holder's back.
 - [ ] Fixed scene-camera stand for the holder (2× M3 holes), then measure its pose into `cameras.toml`.
-- [ ] Real-robot backend for `teleop.py` (HX servos over the bus, `ServoMap` ticks↔rad, UVC cameras). Write the camera-safe wrist-roll range (−2.34…+0.80 rad) into servo 5's angle-limit registers.
-- [ ] **Before any register writes (incl. stock LeRobot `connect()`):** verify which control table the HX-30HM firmware uses. The STS3215 map (P 21, D 22, I 23, Max_Torque_Limit 16, Torque_Enable 40) conflicts with the HX register table v3.7 (16 = under-voltage threshold, 21 = LED alarm, 22–24 = P/D/I, 40 = target position). Read model and firmware, dump registers, test with a harmless write. See `docs/POLICY_TRAINING_IDEAS.md` B9.
+- [x] Servo bus in the loop (2026-11-11): byte-level bus, emulated HX-30HM servos, the controller's driver; `teleop.py --bus` (DECISIONS X1–X12, `sim/README.md`).
+- [ ] Real-robot backend for `teleop.py`: the bus half exists (`so101sim/bus/driver.py`, `arm.py`); still needed are a serial `Port` (pyserial), a real-time `step()`, and UVC cameras. The camera-safe wrist-roll range (−2.34…+0.80 rad) was to go into servo 5's angle-limit registers, but **the HX register table lists none (9–12)**: read those addresses on a real servo; if they don't exist, the limit stays in software only.
+- [ ] On the real bus, measure the `servos.toml [bus]` placeholders (servo response delay, USB latency, whether the BusLinker echoes) and check the emulator's assumptions listed at the top of `so101sim/bus/servo_emu.py` (goal write vs torque switch, speed 0 = no limit, out-of-range writes, position calibration).
+- [x] Model audit fixes, command filter, physics monitor (2026-11-11): DECISIONS M1–M10, V1–V10; `sim/README.md`, "Physical invariants".
+- [x] Wires in the model (2026-11-11): `teleop.py --cables`; DECISIONS K1–K8.
+- [ ] Wrist camera ribbon: decide how its spare 100 mm is folded (unfolded, it hangs to 13 mm above the table at a grasp), and tie the fixed cameras' USB cables down behind the camera (DECISIONS K11).
+- [ ] Wires: measure each wire's weight per metre and bending stiffness (sag test in `sim/config/cables.toml`), find where the USB header and the driver board's bus socket really are, and decide how the four leads inside the brackets are routed.
+- [ ] Camera cable: the spliced lead (about 0.45 m) is shorter than the 0.76 m the cable needs on the arm (`BOM.md`, "Not checked").
+- [ ] Print check: the camera bracket clears the wrist link by only 0.7 to 2 mm over half the roll range (DECISIONS M1), and the base is assumed to rest on its lowest faces (M4).
+- [ ] Command filter and wires on the Newton backend: the filter is wired in but has never run there; the wires are MuJoCo only.
+- [ ] Teleop: make one large jump of the Cartesian target a straight-line move too (DECISIONS V10).
+- [x] Stop path (2026-11-14): freeze (`X`), torque off (`T` and on every exit), confirmed over the bus (DECISIONS E1–E11).
+- [ ] Buy and fit a switch on the 12 V supply lead: the stop that works with the computer or the bus dead (DECISIONS E2).
+- [ ] Stop path follow-ups: `torque_off()` / `torque_on()` on the Newton backend; torque off at the end of `pick_demo.py`; a watchdog that freezes or switches torque off on servo feedback (temperature, voltage, status bits, replies lost in a row).
+- [ ] On a real HX-30HM: does a goal write switch torque on, and does a servo with torque off coast or brake (DECISIONS E5, E9)?
+- [x] Bench scene and task with a reference solution through the API (2026-11-11): DECISIONS T5–T11.
+- [x] REST API for a language model (2026-11-11): `sim/scripts/sim_api.py`; DECISIONS R1–R8.
+- [ ] Try the API with a model end to end (nothing has driven it yet except tests and curl), with and without object positions; add what it turns out to need (likely: a way to point at a pixel in a camera picture).
+- [x] Camera firmware in the loop (2026-11-11): `p4-uvc-camera` built for the PC with stand-in sensor, encoder, FreeRTOS and USB; `teleop.py --camera-fw` (DECISIONS X13–X22, `firmware/p4-uvc-camera/host/README.md`).
+- [ ] Rebuild the firmware with ESP-IDF after the `s_last_fb_get` change (X20).
+- [ ] On the board, measure the stand-in timings (`host/README.md`: bring-up, readout, encode time per megapixel, real JPEG sizes and frame rate per size) and put them into the PC build.
+- [ ] Scene cameras through the firmware too (needs click-to-move to work on a cropped or delayed view), and a controller-side camera reader shared with the real robot (V4L2/OpenCV underneath).
+- [ ] Servo bus in the loop on the Newton backend (MuJoCo only today).
+- [ ] **Before any register writes (incl. stock LeRobot `connect()`):** compare a real HX-30HM with the register table. The table V3.7 agrees with the STS3215 layout (the conflict reported earlier was a misreading, DECISIONS X10), but it has not been checked against a servo. Read model and firmware, dump registers, test with a harmless write. `BusArm.connect()` does the read-only part and refuses to write if the registers don't look right.
 - [ ] On the real HX-30HM: measure position error under a known load (stiffness), a step response (D term, loop ringing frequency), whether overload protection is relative to the torque-limit register, and temperature after a 10-min far-reach hold; update `ServoSpec` (`sat_error_deg`, `d_time_s`) and the governor's `bandwidth_rad_s`, rerun `servo_load_study.py` and `fast_teleop_study.py`.
 - [ ] Real-robot teleop: stream governor commands as goal positions (servo goal speed = max, acceleration off), feed measured positions back for the lag guard and path pacing, log present current (register 69) against the governor's predicted torque. Gripper torque limit 500.
 - [x] Power supply: 12.0 V bench supply sized for ~20 A (DECISIONS F1).
@@ -131,6 +153,6 @@ Found by the 2026-11-09 audit. None blocks the sim work; each blocks the step na
 | RL framework | mjlab or Newton, after the GPU renderer benchmark | Policy training |
 | Servo control library | Own minimal Feetech-protocol driver, or a patched existing one, once the register map is verified | Real-robot backend |
 | Jaw pads | Add rubber/TPU pads to the real jaws (the sim assumes friction 1.0) or lower the sim's pad friction to bare PLA (~0.35) | Sim-to-real grasping |
-| ESP32-P4 cradle and cable routing | Cradle on the holder's back, USB cable path down the arm, ribbon fold | Printing the wrist mount |
+| ESP32-P4 cradle and cable routing | Cradle on the holder's back, ribbon fold. A USB cable path down the arm is now modelled (DECISIONS K6, K7: clips on the forearm and upper arm, first stretch 260 mm); confirm or change it | Printing the wrist mount |
 | Fixed scene-camera stand | Design, then measure its pose | Scene camera calibration |
 | Upstream STLs with HX servos | Print `Gauge_0.STL` and test-fit; if it fits, use upstream STLs unchanged | Printing the arm |

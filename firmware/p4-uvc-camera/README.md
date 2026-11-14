@@ -11,11 +11,18 @@ IMX708 --MIPI CSI RAW10--> P4 ISP (AE/AWB/AF) --RGB565--> HW JPEG --> USB 2.0 HS
 **Status (2026-11-09): builds cleanly (ESP-IDF v5.5.5). Not yet flashed or tested on hardware.**
 Everything below describes what the code is written to do; none of it has been observed on a board yet.
 
+**2026-11-11:** the firmware's logic now also runs on a PC inside the simulation (`host/`, see `host/README.md`
+and `sim/README.md`, "Camera firmware in the loop"), with stand-ins for the sensor, the encoder, FreeRTOS and
+USB. That exercises start/stop, locking, idle stop and recovery; it says nothing about the real sensor, ISP
+or USB timing. One change came out of it (the `s_last_fb_get` line in `app_main`; `docs/DECISIONS.md` X20),
+and it has not been rebuilt with ESP-IDF since.
+
 ## What's in here
 
 | Path | What |
 |---|---|
 | `main/uvc_camera_main.c` | Firmware, adapted from Espressif's esp_video 2.5.0 `uvc` example |
+| `host/` | The firmware built for a PC with stand-in hardware, for the simulation and its tests |
 | `main/Kconfig.projbuild` | Image options (`idf.py menuconfig` → "P4 UVC camera"): flips, fixed exposure/gain, fixed focus, JPEG quality |
 | `sdkconfig.defaults` | Board, PSRAM, camera, and UVC configuration |
 | `patches/esp_video-2.5.0/` | Verified esp_video fixes from `esp32-stereo-camera` (RAW10 receive, Bayer phase after flip, AWB validation) |
@@ -67,7 +74,9 @@ corruption. Things to try if 1080p falls short, in this order:
   lens motor are shut down (`host stopped reading frames; camera off` in the log). USB suspend stops it
   immediately. If frames are requested again without a new commit, the last mode is brought back up automatically.
 - **Recovery:** a capture that yields no frame within 200 ms, or a failed JPEG encode, drops that frame.
-  30 dropped frames in a row restart the pipeline (at most once per second).
+  30 dropped frames in a row restart the pipeline (at most once per second). An encoder *queue* error
+  (as opposed to a failed encode) leaves the encoder's buffers in an unknown state, so every following
+  frame fails until that restart: in the PC build one such error is an outage of about 1.7 s.
 - **Auto 3A (default):** auto exposure, white balance and autofocus run on the P4 (esp_ipa with the IMX708
   tuning JSON).
 - **Image options** (`idf.py menuconfig` → "P4 UVC camera", or `sdkconfig.defaults`; all off by default):

@@ -22,7 +22,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from so101sim import JOINTS, SlewLimiter, load_backend  # noqa: E402
+from so101sim import JOINTS, load_backend  # noqa: E402
+from so101sim.config import load_servos  # noqa: E402
+from so101sim.servo import ProfileLimiter  # noqa: E402
 from so101sim.command import CommandFeedforward, GripOffset  # noqa: E402
 from so101sim.ik import ArmIK  # noqa: E402
 
@@ -128,6 +130,10 @@ def main() -> int:
     q_open = gripper_open_angle(ik, CUBE_SIZE + 0.014)
     home, _ = ik.solve([0.20, 0.0, 0.16], [0, 0, 0, 0, 0, q_open])
     sim.reset(home)
+    monitor = None
+    if hasattr(sim, "step_hooks"):          # MuJoCo: watch the physics for things that must not happen
+        from so101sim.monitor import PhysicsMonitor
+        monitor = PhysicsMonitor(sim)
     sim.step(int(0.3 / sim.dt))   # settle objects
 
     cube0 = sim.body_pos("cube")
@@ -147,7 +153,10 @@ def main() -> int:
     ]
     ik_err = max(e1, e2, e3)
 
-    slew = SlewLimiter(sim.q())
+    # Speed AND acceleration limited (the gentle profile of config/servos.toml). A speed limit alone
+    # starts and stops every move with a step in speed, which the servos answer with full torque.
+    f = load_servos()["follower"]
+    slew = ProfileLimiter(sim.q(), f["profile_speed_rad_s"], f["profile_accel_rad_s2"])
     ff = None if args.no_feedforward else CommandFeedforward()
     grip = None if args.no_grip_offset else GripOffset()
     frames = {}
@@ -159,12 +168,13 @@ def main() -> int:
         cmd = np.array(cmd, float)
         if grip is not None:
             cmd[5] = grip.update(cmd[5], float(sim.q()[5]), dt)
+        ref = cmd.copy()               # where the arm is meant to be (the keep-out check uses this)
         if ff is not None:
             cmd = ff.apply(cmd, dt)
-        sim.set_targets(cmd)
+        sim.set_targets(cmd, intended=ref)
 
     for phase, goal, settle in phases:
-        # Move at servo speed, then let it settle.
+        # Move along the profile, then let it settle.
         while np.abs(slew.current - goal).max() > 1e-4:
             cmd = None
             for _ in range(CHUNK):
@@ -193,6 +203,8 @@ def main() -> int:
     lifted = float(cube1[2] - cube0[2])
     held = tip is not None and float(np.linalg.norm(cube1 - tip)) < 0.03
     success = lifted > 0.07 and held
+    if monitor is not None and monitor.violations:
+        success = False                     # a pick that needed impossible physics is not a pick
 
     result = {
         "backend": label, "success": bool(success),
@@ -205,6 +217,9 @@ def main() -> int:
         "final_q": dict(zip(JOINTS, [round(float(v), 4) for v in sim.q()])),
         "sim_time_s": round(sim_steps * sim.dt, 3), "wall_time_s": round(t_sim, 2),
         "real_time_factor": round(sim_steps * sim.dt / max(t_sim, 1e-9), 3), "build_time_s": round(t_build, 2),
+        "command_filter": dict(sim.safety.interventions) if getattr(sim, "safety", None) is not None else None,
+        "physics": None if monitor is None else {**{k: round(v, 4) for k, v in monitor.worst.items()},
+                                                 "violations": monitor.violations},
     }
 
     if frames:

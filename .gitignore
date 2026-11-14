@@ -11,3 +11,5 @@ sim/.cache/
 sim/out/
 venv/
 hardware/wrist_mount/upstream_mount_stepframe.stl
+# MuJoCo writes this where a test provokes an unstable simulation on purpose
+MUJOCO_LOG.TXT

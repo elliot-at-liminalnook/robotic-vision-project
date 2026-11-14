@@ -3,6 +3,7 @@
   <compiler angle="radian" meshdir="assets" autolimits="true" />
   <default>
     <default class="so101_new_calib">
+      <geom solref="0.004 1" solimp="0.95 0.99 0.001" />
       <joint damping="1" frictionloss="0.1" armature="0.005" />
       <position kp="50" />
       <default class="visual">
@@ -24,7 +25,7 @@
     </default>
   </default>
   <worldbody>
-    <body name="base" pos="0 0 0" quat="1 0 0 0" childclass="so101_new_calib">
+    <body name="base" pos="0 0 0.0024" quat="1 0 0 0" childclass="so101_new_calib">
       <inertial pos="0.0137179 -5.19711e-05 0.0334843" mass="0.147" fullinertia="0.000114686 0.000136117 0.000130364 -4.59787e-07 4.97151e-06 9.75275e-08" />
       <geom type="mesh" class="visual" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" mesh="base_motor_holder_so101_v1" material="base_motor_holder_so101_v1_material" />
       <geom type="mesh" class="visual" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" mesh="base_so101_v2" material="base_so101_v2_material" />
@@ -37,23 +38,60 @@
         <geom type="mesh" class="visual" pos="-0.0303992 0.000422241 -0.0417" quat="0.5 0.5 0.5 -0.5" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material" />
         <geom type="mesh" class="collision" pos="-0.0303992 0.000422241 -0.0417" quat="0.5 0.5 0.5 -0.5" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material" />
         <geom type="mesh" class="visual" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" mesh="motor_holder_so101_base_v1" material="motor_holder_so101_base_v1_material" />
-        <geom type="mesh" class="collision" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" mesh="motor_holder_so101_base_v1" material="motor_holder_so101_base_v1_material" />
+        <geom type="mesh" class="collision" mesh="motor_holder_so101_base_v1_hull00" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" />
+        <geom type="mesh" class="collision" mesh="motor_holder_so101_base_v1_hull01" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" />
+        <geom type="mesh" class="collision" mesh="motor_holder_so101_base_v1_hull02" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" />
+        <geom type="mesh" class="collision" mesh="motor_holder_so101_base_v1_hull03" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" />
+        <geom type="mesh" class="collision" mesh="motor_holder_so101_base_v1_hull04" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" />
+        <geom type="mesh" class="collision" mesh="motor_holder_so101_base_v1_hull05" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" />
+        <geom type="mesh" class="collision" mesh="motor_holder_so101_base_v1_hull06" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" />
+        <geom type="mesh" class="collision" mesh="motor_holder_so101_base_v1_hull07" pos="-0.0675992 -0.000177759 0.0158499" quat="0.5 0.5 -0.5 0.5" />
         <geom type="mesh" class="visual" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" mesh="rotation_pitch_so101_v1" material="rotation_pitch_so101_v1_material" />
-        <geom type="mesh" class="collision" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" mesh="rotation_pitch_so101_v1" material="rotation_pitch_so101_v1_material" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull00" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull01" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull02" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull03" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull04" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull05" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull06" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull07" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull08" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
+        <geom type="mesh" class="collision" mesh="rotation_pitch_so101_v1_hull09" pos="0.0122008 2.22413e-05 0.0464" quat="0.707107 -0.707107 -0 8.3163e-34" />
         <body name="upper_arm" pos="-0.0303992 -0.0182778 -0.0542" quat="0.5 -0.5 -0.5 -0.5">
           <joint axis="0 0 1" name="shoulder_lift" type="hinge" range="-1.7453292519943224 1.7453292519943366" class="hx30hm" />
           <inertial pos="-0.0898471 -0.00838224 0.0184089" mass="0.103" fullinertia="4.08002e-05 0.000147318 0.000142487 -1.97819e-05 -4.03016e-08 8.97326e-09" />
           <geom type="mesh" class="visual" pos="-0.11257 -0.0155 0.0187" quat="4.56308e-16 -0.707107 0.707107 -1.37383e-16" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material" />
           <geom type="mesh" class="collision" pos="-0.11257 -0.0155 0.0187" quat="4.56308e-16 -0.707107 0.707107 -1.37383e-16" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material" />
           <geom type="mesh" class="visual" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" mesh="upper_arm_so101_v1" material="upper_arm_so101_v1_material" />
-          <geom type="mesh" class="collision" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" mesh="upper_arm_so101_v1" material="upper_arm_so101_v1_material" />
+          <geom type="mesh" class="collision" mesh="upper_arm_so101_v1_hull00" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" />
+          <geom type="mesh" class="collision" mesh="upper_arm_so101_v1_hull01" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" />
+          <geom type="mesh" class="collision" mesh="upper_arm_so101_v1_hull02" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" />
+          <geom type="mesh" class="collision" mesh="upper_arm_so101_v1_hull03" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" />
+          <geom type="mesh" class="collision" mesh="upper_arm_so101_v1_hull04" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" />
+          <geom type="mesh" class="collision" mesh="upper_arm_so101_v1_hull05" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" />
+          <geom type="mesh" class="collision" mesh="upper_arm_so101_v1_hull06" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" />
+          <geom type="mesh" class="collision" mesh="upper_arm_so101_v1_hull07" pos="-0.065085 0.012 0.0182" quat="0 1 0 0" />
           <body name="lower_arm" pos="-0.11257 -0.028 1.73763e-16" quat="0.707107 -5.98613e-17 -2.58051e-17 0.707107">
             <joint axis="0 0 1" name="elbow_flex" type="hinge" range="-1.69 1.69" class="hx30hm" />
             <inertial pos="-0.0980701 0.00324376 0.0182831" mass="0.104" fullinertia="2.87438e-05 0.000159844 0.00014529 7.41152e-06 1.26409e-06 -4.90188e-08" />
             <geom type="mesh" class="visual" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" mesh="under_arm_so101_v1" material="under_arm_so101_v1_material" />
-            <geom type="mesh" class="collision" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" mesh="under_arm_so101_v1" material="under_arm_so101_v1_material" />
+            <geom type="mesh" class="collision" mesh="under_arm_so101_v1_hull00" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" />
+            <geom type="mesh" class="collision" mesh="under_arm_so101_v1_hull01" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" />
+            <geom type="mesh" class="collision" mesh="under_arm_so101_v1_hull02" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" />
+            <geom type="mesh" class="collision" mesh="under_arm_so101_v1_hull03" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" />
+            <geom type="mesh" class="collision" mesh="under_arm_so101_v1_hull04" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" />
+            <geom type="mesh" class="collision" mesh="under_arm_so101_v1_hull05" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" />
+            <geom type="mesh" class="collision" mesh="under_arm_so101_v1_hull06" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" />
+            <geom type="mesh" class="collision" mesh="under_arm_so101_v1_hull07" pos="-0.0648499 -0.032 0.0182" quat="0 1 0 0" />
             <geom type="mesh" class="visual" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" mesh="motor_holder_so101_wrist_v1" material="motor_holder_so101_wrist_v1_material" />
-            <geom type="mesh" class="collision" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" mesh="motor_holder_so101_wrist_v1" material="motor_holder_so101_wrist_v1_material" />
+            <geom type="mesh" class="collision" mesh="motor_holder_so101_wrist_v1_hull00" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" />
+            <geom type="mesh" class="collision" mesh="motor_holder_so101_wrist_v1_hull01" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" />
+            <geom type="mesh" class="collision" mesh="motor_holder_so101_wrist_v1_hull02" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" />
+            <geom type="mesh" class="collision" mesh="motor_holder_so101_wrist_v1_hull03" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" />
+            <geom type="mesh" class="collision" mesh="motor_holder_so101_wrist_v1_hull04" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" />
+            <geom type="mesh" class="collision" mesh="motor_holder_so101_wrist_v1_hull05" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" />
+            <geom type="mesh" class="collision" mesh="motor_holder_so101_wrist_v1_hull06" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" />
+            <geom type="mesh" class="collision" mesh="motor_holder_so101_wrist_v1_hull07" pos="-0.0648499 -0.032 0.018" quat="3.92687e-16 -1 -1.9186e-15 -6.38378e-16" />
             <geom type="mesh" class="visual" pos="-0.1224 0.0052 0.0187" quat="7.21645e-16 1.56949e-15 1 -3.33067e-16" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material" />
             <geom type="mesh" class="collision" pos="-0.1224 0.0052 0.0187" quat="7.21645e-16 1.56949e-15 1 -3.33067e-16" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material" />
             <body name="wrist" pos="-0.1349 0.0052 3.62355e-17" quat="0.707107 9.58722e-16 -7.51313e-16 -0.707107">
@@ -62,7 +100,18 @@
               <geom type="mesh" class="visual" pos="8.32667e-17 -0.0424 0.0306" quat="0.5 0.5 0.5 -0.5" mesh="sts3215_03a_no_horn_v1" material="sts3215_03a_no_horn_v1_material" />
               <geom type="mesh" class="collision" pos="8.32667e-17 -0.0424 0.0306" quat="0.5 0.5 0.5 -0.5" mesh="sts3215_03a_no_horn_v1" material="sts3215_03a_no_horn_v1_material" name="wrist_link_collision_0" />
               <geom type="mesh" class="visual" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" mesh="wrist_roll_pitch_so101_v2" material="wrist_roll_pitch_so101_v2_material" />
-              <geom type="mesh" class="collision" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" mesh="wrist_roll_pitch_so101_v2" material="wrist_roll_pitch_so101_v2_material" name="wrist_link_collision_1" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull00" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_1" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull01" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_2" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull02" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_3" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull03" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_4" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull04" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_5" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull05" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_6" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull06" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_7" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull07" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_8" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull08" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_9" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull09" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_10" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull10" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_11" />
+              <geom type="mesh" class="collision" mesh="wrist_roll_pitch_so101_v2_hull11" pos="0 -0.028 0.0181" quat="0.5 -0.5 -0.5 -0.5" name="wrist_link_collision_12" />
               <body name="gripper" pos="5.55112e-17 -0.0611 0.0181" quat="0.0172091 -0.0172091 0.706897 0.706897">
                 <joint axis="0 0 1" name="wrist_roll" type="hinge" range="-2.34159 0.8" class="hx30hm" />
                 <inertial pos="0.000213627 0.000245138 -0.025187" mass="0.087" fullinertia="2.75087e-05 4.33657e-05 3.45059e-05 -3.35241e-07 -5.7352e-06 -5.17847e-08" />
@@ -109,12 +158,19 @@
                 <geom name="pad_fixed_2" type="box" class="collision" pos="-0.0121 0 -0.0745" quat="1 0 0 0" size="0.001 0.0055 0.009" friction="1.0 0.02 0.0005" condim="4" rgba="0.9 0.3 0.2 1" />
                 <camera name="wrist" pos="0.002 0.066 -0.025" xyaxes="-1 -0 0 0 -0.712403 0.70177" fovy="57.608" />
                 <body name="wrist_camera_assembly" pos="0 0 0">
-                  <inertial pos="0.002 0.0723324 -0.0181885" mass="0.0460" diaginertia="6.12735e-05 3.50853e-05 6.16389e-05" />
+                  <inertial pos="0.00201381 0.0706879 -0.0160589" mass="0.0460" fullinertia="4.20353e-05 2.20502e-05 4.40135e-05 -6.5303e-09 -1.61008e-08 1.14747e-05" />
                   <geom name="wm_bracket_visual" type="mesh" class="visual" mesh="wm_bracket" rgba="0.25 0.5 0.9 1" />
                   <geom name="wm_holder_visual" type="mesh" class="visual" mesh="wm_holder" rgba="0.95 0.56 0.2 1" />
                   <geom name="wm_board_visual" type="mesh" class="visual" mesh="wm_board" rgba="0.1 0.45 0.2 1" />
                   <geom name="wm_camera_module3_visual" type="mesh" class="visual" mesh="wm_camera_module3" rgba="0.2 0.2 0.25 1" />
-                  <geom name="wm_bracket_collision" type="mesh" class="collision" mesh="wm_bracket" />
+                  <geom name="wm_bracket_collision_0" type="mesh" class="collision" mesh="wm_bracket_hull00" />
+                  <geom name="wm_bracket_collision_1" type="mesh" class="collision" mesh="wm_bracket_hull01" />
+                  <geom name="wm_bracket_collision_2" type="mesh" class="collision" mesh="wm_bracket_hull02" />
+                  <geom name="wm_bracket_collision_3" type="mesh" class="collision" mesh="wm_bracket_hull03" />
+                  <geom name="wm_bracket_collision_4" type="mesh" class="collision" mesh="wm_bracket_hull04" />
+                  <geom name="wm_bracket_collision_5" type="mesh" class="collision" mesh="wm_bracket_hull05" />
+                  <geom name="wm_bracket_collision_6" type="mesh" class="collision" mesh="wm_bracket_hull06" />
+                  <geom name="wm_bracket_collision_7" type="mesh" class="collision" mesh="wm_bracket_hull07" />
                   <geom name="wm_holder_collision" type="box" class="collision" pos="0.002 0.0772267 -0.0274966" quat="0.379208 0.925312 0 0" size="0.034 0.04275 0.0109" />
                   <geom name="wm_board_collision" type="box" class="collision" pos="0.002 0.0984781 -0.0183917" quat="0.379208 0.925312 0 0" size="0.0105 0.0355 0.0075" />
                 </body>
@@ -123,6 +179,28 @@
           </body>
         </body>
       </body>
+      <geom type="mesh" class="collision" mesh="base_motor_holder_so101_v1_hull00" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_motor_holder_so101_v1_hull01" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_motor_holder_so101_v1_hull02" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_motor_holder_so101_v1_hull03" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_motor_holder_so101_v1_hull04" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_motor_holder_so101_v1_hull05" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_motor_holder_so101_v1_hull06" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_motor_holder_so101_v1_hull07" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull00" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull01" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull02" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull03" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull04" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull05" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull06" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull07" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull08" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull09" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull10" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="base_so101_v2_hull11" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" />
+      <geom type="mesh" class="collision" mesh="sts3215_03a_v1" pos="0.0263353 -8.97657e-09 0.0437" quat="1 -2.85511e-16 -9.64433e-17 6.12908e-16" />
+      <geom type="mesh" class="collision" mesh="waveshare_mounting_plate_so101_v2" pos="-0.0309827 -0.000199441 0.0474" quat="0.5 0.5 0.5 0.5" />
     </body>
   </worldbody>
   <asset>
@@ -152,6 +230,80 @@
     <material name="wrist_roll_pitch_so101_v2_material" rgba="1 0.82 0.12 1" />
     <material name="wrist_roll_follower_so101_v1_material" rgba="1 0.82 0.12 1" />
     <material name="moving_jaw_so101_v1_material" rgba="1 0.82 0.12 1" />
+    <mesh name="base_motor_holder_so101_v1_hull00" file="collision/base_motor_holder_so101_v1_hull00.stl" />
+    <mesh name="base_motor_holder_so101_v1_hull01" file="collision/base_motor_holder_so101_v1_hull01.stl" />
+    <mesh name="base_motor_holder_so101_v1_hull02" file="collision/base_motor_holder_so101_v1_hull02.stl" />
+    <mesh name="base_motor_holder_so101_v1_hull03" file="collision/base_motor_holder_so101_v1_hull03.stl" />
+    <mesh name="base_motor_holder_so101_v1_hull04" file="collision/base_motor_holder_so101_v1_hull04.stl" />
+    <mesh name="base_motor_holder_so101_v1_hull05" file="collision/base_motor_holder_so101_v1_hull05.stl" />
+    <mesh name="base_motor_holder_so101_v1_hull06" file="collision/base_motor_holder_so101_v1_hull06.stl" />
+    <mesh name="base_motor_holder_so101_v1_hull07" file="collision/base_motor_holder_so101_v1_hull07.stl" />
+    <mesh name="base_so101_v2_hull00" file="collision/base_so101_v2_hull00.stl" />
+    <mesh name="base_so101_v2_hull01" file="collision/base_so101_v2_hull01.stl" />
+    <mesh name="base_so101_v2_hull02" file="collision/base_so101_v2_hull02.stl" />
+    <mesh name="base_so101_v2_hull03" file="collision/base_so101_v2_hull03.stl" />
+    <mesh name="base_so101_v2_hull04" file="collision/base_so101_v2_hull04.stl" />
+    <mesh name="base_so101_v2_hull05" file="collision/base_so101_v2_hull05.stl" />
+    <mesh name="base_so101_v2_hull06" file="collision/base_so101_v2_hull06.stl" />
+    <mesh name="base_so101_v2_hull07" file="collision/base_so101_v2_hull07.stl" />
+    <mesh name="base_so101_v2_hull08" file="collision/base_so101_v2_hull08.stl" />
+    <mesh name="base_so101_v2_hull09" file="collision/base_so101_v2_hull09.stl" />
+    <mesh name="base_so101_v2_hull10" file="collision/base_so101_v2_hull10.stl" />
+    <mesh name="base_so101_v2_hull11" file="collision/base_so101_v2_hull11.stl" />
+    <mesh name="motor_holder_so101_base_v1_hull00" file="collision/motor_holder_so101_base_v1_hull00.stl" />
+    <mesh name="motor_holder_so101_base_v1_hull01" file="collision/motor_holder_so101_base_v1_hull01.stl" />
+    <mesh name="motor_holder_so101_base_v1_hull02" file="collision/motor_holder_so101_base_v1_hull02.stl" />
+    <mesh name="motor_holder_so101_base_v1_hull03" file="collision/motor_holder_so101_base_v1_hull03.stl" />
+    <mesh name="motor_holder_so101_base_v1_hull04" file="collision/motor_holder_so101_base_v1_hull04.stl" />
+    <mesh name="motor_holder_so101_base_v1_hull05" file="collision/motor_holder_so101_base_v1_hull05.stl" />
+    <mesh name="motor_holder_so101_base_v1_hull06" file="collision/motor_holder_so101_base_v1_hull06.stl" />
+    <mesh name="motor_holder_so101_base_v1_hull07" file="collision/motor_holder_so101_base_v1_hull07.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull00" file="collision/rotation_pitch_so101_v1_hull00.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull01" file="collision/rotation_pitch_so101_v1_hull01.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull02" file="collision/rotation_pitch_so101_v1_hull02.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull03" file="collision/rotation_pitch_so101_v1_hull03.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull04" file="collision/rotation_pitch_so101_v1_hull04.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull05" file="collision/rotation_pitch_so101_v1_hull05.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull06" file="collision/rotation_pitch_so101_v1_hull06.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull07" file="collision/rotation_pitch_so101_v1_hull07.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull08" file="collision/rotation_pitch_so101_v1_hull08.stl" />
+    <mesh name="rotation_pitch_so101_v1_hull09" file="collision/rotation_pitch_so101_v1_hull09.stl" />
+    <mesh name="upper_arm_so101_v1_hull00" file="collision/upper_arm_so101_v1_hull00.stl" />
+    <mesh name="upper_arm_so101_v1_hull01" file="collision/upper_arm_so101_v1_hull01.stl" />
+    <mesh name="upper_arm_so101_v1_hull02" file="collision/upper_arm_so101_v1_hull02.stl" />
+    <mesh name="upper_arm_so101_v1_hull03" file="collision/upper_arm_so101_v1_hull03.stl" />
+    <mesh name="upper_arm_so101_v1_hull04" file="collision/upper_arm_so101_v1_hull04.stl" />
+    <mesh name="upper_arm_so101_v1_hull05" file="collision/upper_arm_so101_v1_hull05.stl" />
+    <mesh name="upper_arm_so101_v1_hull06" file="collision/upper_arm_so101_v1_hull06.stl" />
+    <mesh name="upper_arm_so101_v1_hull07" file="collision/upper_arm_so101_v1_hull07.stl" />
+    <mesh name="under_arm_so101_v1_hull00" file="collision/under_arm_so101_v1_hull00.stl" />
+    <mesh name="under_arm_so101_v1_hull01" file="collision/under_arm_so101_v1_hull01.stl" />
+    <mesh name="under_arm_so101_v1_hull02" file="collision/under_arm_so101_v1_hull02.stl" />
+    <mesh name="under_arm_so101_v1_hull03" file="collision/under_arm_so101_v1_hull03.stl" />
+    <mesh name="under_arm_so101_v1_hull04" file="collision/under_arm_so101_v1_hull04.stl" />
+    <mesh name="under_arm_so101_v1_hull05" file="collision/under_arm_so101_v1_hull05.stl" />
+    <mesh name="under_arm_so101_v1_hull06" file="collision/under_arm_so101_v1_hull06.stl" />
+    <mesh name="under_arm_so101_v1_hull07" file="collision/under_arm_so101_v1_hull07.stl" />
+    <mesh name="motor_holder_so101_wrist_v1_hull00" file="collision/motor_holder_so101_wrist_v1_hull00.stl" />
+    <mesh name="motor_holder_so101_wrist_v1_hull01" file="collision/motor_holder_so101_wrist_v1_hull01.stl" />
+    <mesh name="motor_holder_so101_wrist_v1_hull02" file="collision/motor_holder_so101_wrist_v1_hull02.stl" />
+    <mesh name="motor_holder_so101_wrist_v1_hull03" file="collision/motor_holder_so101_wrist_v1_hull03.stl" />
+    <mesh name="motor_holder_so101_wrist_v1_hull04" file="collision/motor_holder_so101_wrist_v1_hull04.stl" />
+    <mesh name="motor_holder_so101_wrist_v1_hull05" file="collision/motor_holder_so101_wrist_v1_hull05.stl" />
+    <mesh name="motor_holder_so101_wrist_v1_hull06" file="collision/motor_holder_so101_wrist_v1_hull06.stl" />
+    <mesh name="motor_holder_so101_wrist_v1_hull07" file="collision/motor_holder_so101_wrist_v1_hull07.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull00" file="collision/wrist_roll_pitch_so101_v2_hull00.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull01" file="collision/wrist_roll_pitch_so101_v2_hull01.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull02" file="collision/wrist_roll_pitch_so101_v2_hull02.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull03" file="collision/wrist_roll_pitch_so101_v2_hull03.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull04" file="collision/wrist_roll_pitch_so101_v2_hull04.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull05" file="collision/wrist_roll_pitch_so101_v2_hull05.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull06" file="collision/wrist_roll_pitch_so101_v2_hull06.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull07" file="collision/wrist_roll_pitch_so101_v2_hull07.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull08" file="collision/wrist_roll_pitch_so101_v2_hull08.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull09" file="collision/wrist_roll_pitch_so101_v2_hull09.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull10" file="collision/wrist_roll_pitch_so101_v2_hull10.stl" />
+    <mesh name="wrist_roll_pitch_so101_v2_hull11" file="collision/wrist_roll_pitch_so101_v2_hull11.stl" />
     <mesh name="wrist_roll_follower_so101_v1_hull00" file="collision/wrist_roll_follower_so101_v1_hull00.stl" />
     <mesh name="wrist_roll_follower_so101_v1_hull01" file="collision/wrist_roll_follower_so101_v1_hull01.stl" />
     <mesh name="wrist_roll_follower_so101_v1_hull02" file="collision/wrist_roll_follower_so101_v1_hull02.stl" />
@@ -182,15 +334,148 @@
     <mesh name="wm_holder" file="wrist_mount/holder.stl" scale="0.001 0.001 0.001" />
     <mesh name="wm_board" file="wrist_mount/board.stl" scale="0.001 0.001 0.001" />
     <mesh name="wm_camera_module3" file="wrist_mount/camera_module3.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_bracket_hull00" file="collision/wm_bracket_hull00.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_bracket_hull01" file="collision/wm_bracket_hull01.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_bracket_hull02" file="collision/wm_bracket_hull02.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_bracket_hull03" file="collision/wm_bracket_hull03.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_bracket_hull04" file="collision/wm_bracket_hull04.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_bracket_hull05" file="collision/wm_bracket_hull05.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_bracket_hull06" file="collision/wm_bracket_hull06.stl" scale="0.001 0.001 0.001" />
+    <mesh name="wm_bracket_hull07" file="collision/wm_bracket_hull07.stl" scale="0.001 0.001 0.001" />
   </asset>
   <contact>
+    <exclude body1="base" body2="shoulder" />
     <exclude body1="wrist_camera_assembly" body2="moving_jaw_so101_v1" />
-    <pair geom1="wm_bracket_collision" geom2="wrist_link_collision_0" />
-    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_0" />
-    <pair geom1="wm_board_collision" geom2="wrist_link_collision_0" />
-    <pair geom1="wm_bracket_collision" geom2="wrist_link_collision_1" />
-    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_1" />
-    <pair geom1="wm_board_collision" geom2="wrist_link_collision_1" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_0" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_1" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_2" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_3" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_4" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_5" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_6" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_7" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_8" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_9" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_10" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_11" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_0" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_1" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_2" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_3" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_4" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_5" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_6" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_bracket_collision_7" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_holder_collision" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
+    <pair geom1="wm_board_collision" geom2="wrist_link_collision_12" solref="0.004 1" solimp="0.95 0.99 0.001" />
   </contact>
   <actuator>
     <position class="hx30hm" name="shoulder_pan" joint="shoulder_pan" forcerange="-3.178 3.178" ctrlrange="-1.91986 1.91986" />

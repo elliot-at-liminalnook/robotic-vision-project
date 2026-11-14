@@ -113,7 +113,9 @@ def test_wrist_camera_can_collide_with_the_wrist_link(m):
     """The mount is welded to the gripper; without explicit pairs the engine skips its contacts with the wrist link."""
     wrist = m.joint("wrist_flex").bodyid[0]
     link_geoms = {g for g in range(m.ngeom) if m.geom_bodyid[g] == wrist and m.geom_contype[g]}
-    mount_geoms = {m.geom(f"wm_{n}_collision").id for n in ("bracket", "holder", "board")}
+    mount = m.body("wrist_camera_assembly").id
+    mount_geoms = {g for g in range(m.ngeom) if m.geom_bodyid[g] == mount and m.geom_contype[g]}
+    assert len(mount_geoms) >= 3
     assert link_geoms
     pairs = {(int(a), int(b)) for a, b in zip(m.pair_geom1, m.pair_geom2)}
     pairs |= {(b, a) for a, b in pairs}

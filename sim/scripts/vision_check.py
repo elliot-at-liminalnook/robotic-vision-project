@@ -13,7 +13,8 @@ mirrored, flipped, or has the wrong focal length shows up as pixel error.
     python sim/scripts/vision_check.py --compare      # side-by-side of saved runs
 
 Writes sim/out/vision/<backend>/ (images + result.json).
-Pass: every visible cube within MAX_ERR_PX of its predicted position.
+Pass: every visible cube's outline centred within MAX_ERR_PX of the prediction, and, in the fixed
+cameras with the arm at home, each edge of the outline within MAX_EDGE_PX.
 """
 from __future__ import annotations
 
@@ -32,7 +33,9 @@ from so101sim.config import MODEL_DIR, look_at_axes  # noqa: E402
 from so101sim.ik import ArmIK  # noqa: E402
 
 OUT = Path(__file__).resolve().parents[1] / "out" / "vision"
-MAX_ERR_PX = 12.0      # at 640x360; the cube is ~25-60 px across in these views
+MAX_ERR_PX = 3.0       # centre of the cube's outline, at 640x360 (the cube is ~25-60 px across in these views)
+MAX_EDGE_PX = 3.0      # each edge of the outline, where nothing hides the cube (fixed cameras, arm at home):
+                       # a wrong focal length or scale moves the edges even when the centre stays put
 CUBE_HALF = 0.015
 
 
@@ -98,7 +101,8 @@ def run(backend: str, solver: str | None):
             h, w = img.shape[:2]
             pred_visible = depth[0] > 0 and 0 <= uv[0, 0] < w and 0 <= uv[0, 1] < h
             mask = red_mask(img)
-            row = {"pose": pname, "camera": cname, "predicted_px": np.round(uv[0], 1).tolist(),
+            box = np.array([uv[1:, 0].min(), uv[1:, 0].max(), uv[1:, 1].min(), uv[1:, 1].max()])   # projected outline
+            row = {"pose": pname, "camera": cname, "predicted_px": np.round([(box[0] + box[1]) / 2, (box[2] + box[3]) / 2], 1).tolist(),
                    "predicted_visible": bool(pred_visible), "mask_pixels": int(mask.sum())}
             if mask.sum() > 20:
                 ys, xs = np.nonzero(mask)
@@ -110,17 +114,22 @@ def run(backend: str, solver: str | None):
                 row["seen_px"] = np.round(seen, 1).tolist()
                 row["error_px"] = round(float(np.linalg.norm(seen - box_c)), 1)
                 row["pass"] = row["error_px"] <= MAX_ERR_PX
+                if pname == "home" and spec.parent_body == "world":      # the cube is in full view
+                    edges = np.array([xs.min(), xs.max() + 1, ys.min(), ys.max() + 1]) - box
+                    row["edge_error_px"] = round(float(np.abs(edges).max()), 1)
+                    row["pass"] = row["pass"] and row["edge_error_px"] <= MAX_EDGE_PX
             else:
                 # Not seen: fine only if the prediction says it's out of view (or occluded by the jaws at the grasp).
                 row["pass"] = (not pred_visible) or (cname == "wrist" and pname == "grasp")
-                row["note"] = "cube not visible in image"
+                row["note"] = "cube not visible in image (allowed: out of view, or between the jaws at the grasp)"
             ok &= row["pass"]
             rows.append(row)
     result = {"backend": label, "pass": bool(ok), "max_err_px": MAX_ERR_PX, "checks": rows}
     (out / "result.json").write_text(json.dumps(result, indent=2))
     for r in rows:
-        print(f"{r['pose']:6s} {r['camera']:12s} pred {r['predicted_px']}  seen {r.get('seen_px', '-')}  "
-              f"err {r.get('error_px', '-')}  {'PASS' if r['pass'] else 'FAIL'}")
+        print(f"{r['pose']:6s} {r['camera']:12s} expected {r['predicted_px']}  seen {r.get('seen_px', '-')}  "
+              f"centre err {r.get('error_px', '-')}  edge err {r.get('edge_error_px', '-')}  "
+              f"{'PASS' if r['pass'] else 'FAIL'}{'  (' + r['note'] + ')' if 'note' in r else ''}")
     print("PASS" if ok else "FAIL", label)
     return 0 if ok else 1
 

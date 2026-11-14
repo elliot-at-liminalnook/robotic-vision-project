@@ -21,6 +21,9 @@ Joint mode (toggle J): 1-6 select a joint; Left/Right or the wheel move it.
   [ / ]      tilt cone for load-aware IK, 0..25 deg (default 0 = fingers straight down)
   V          servo feed-forward on/off (default on; off shows the droop it removes)
   H home   Backspace reset scene   P pause physics   F12 screenshot   Esc quit
+  X          STOP: drop whatever move is under way and hold the arm where it is
+             (movement keys still held down do nothing until they are let go)
+  T          torque off (the arm goes limp and sags) / back on, holding where it then is
 
 Motion (sim/docs/FAST_TELEOP_FINDINGS.md):
   * FAST: so101sim.governor.TorqueGovernor predicts every joint's torque each
@@ -48,12 +51,18 @@ table (in joint mode: a jog that would take the tip below it is refused).
 Unreachable targets are refused. Stall guard: if an arm joint stays more than
 12 deg behind its command for 0.4 s (blocked by the table, an object or the
 arm itself), the goal is pulled back to where the arm is.
+
+Stop path: X freezes (the servos keep holding, nothing drops); T switches the
+servos' torque off, and it is switched off whenever the program ends, however
+it ends (Esc, an error, Ctrl-C, a kill). Neither helps if this computer or the
+bus is dead: that takes a switch on the 12 V lead.
 """
 from __future__ import annotations
 
 import argparse
 import math
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -91,9 +100,29 @@ HOME_TIP = (0.20, 0.0, 0.16)
 
 
 class Teleop:
-    def __init__(self, backend: str, solver: str | None, render_every: int):
+    def __init__(self, backend: str, solver: str | None, render_every: int, bus: dict | None = None,
+                 camera_fw: tuple | None = None, cables: bool = False, scene: str = "workcell"):
         kw = {"solver": solver} if backend == "newton" else {}
+        if scene != "workcell":          # another scene from sim/scene/ (MuJoCo backend)
+            kw["scene"] = scene
+        if cables:                       # the arm's wires as part of the model (so101sim/cables.py)
+            kw["cables"] = True
         self.sim = load_backend(backend, **kw)
+        if bus is not None:              # servo bus in the loop: bytes to emulated servos instead of joint targets
+            from so101sim.bus_backend import BusBackend
+            self.sim = BusBackend(self.sim, **bus)
+        self.monitor = None              # physics monitor (MuJoCo backends): overlaps, speeds, objects through the table
+        if hasattr(self.sim, "step_hooks"):
+            from so101sim.monitor import PhysicsMonitor
+            self.monitor = PhysicsMonitor(self.sim)
+        self._alerts = (0, 0)            # (monitor violation kinds, command-filter interventions) already announced
+        self.fwcam = None                # wrist camera through the real firmware (camera_fw = (width, height))
+        if camera_fw is not None:
+            from so101sim.camera_fw import UvcCamera, backend_source
+            self.fwcam = UvcCamera(backend_source(self.sim, "wrist"))
+            self.sim.step_hooks.append(self.fwcam.advance_to)     # same clock as the physics
+            self.fwcam.open(*camera_fw)
+            self._fw_view = None
         self.ik = ArmIK()
         self.roll_lo, self.roll_hi = wrist_roll_range()
         jr = self.ik.m.jnt_range
@@ -127,11 +156,15 @@ class Teleop:
         self.ff.reset()
         self.grip_latch.reset()
         self.move = None                # active straight-line CartesianMove
+        self.failed_point = None
+        self.last_block = None
         self._blocked_t = 0.0
+        self.limp = False               # torque is off (T): nothing is commanded until it is back on
+        self.stop_latch = False         # stopped (X) with movement keys still down: they wait for a release
         self.target = np.array(HOME_TIP, float)
         self.roll = q[4]
         self.grip = GRIP_OPEN
-        self.images = self.sim.render()
+        self.refresh_images()
         self.frame = 0
 
     def _make_generator(self, q):
@@ -158,6 +191,8 @@ class Teleop:
 
     def load_frac(self) -> np.ndarray:
         """Predicted |torque| / stall per joint (governor's, or the dynamics model's for GENTLE)."""
+        if self.limp:
+            return np.zeros(len(JOINTS))
         if isinstance(self.gen, TorqueGovernor):
             return self.gen.load_frac()
         return np.abs(self.tau_pred) / self.spec.tau_s
@@ -265,6 +300,7 @@ class Teleop:
             a = self.move.s / max(self.move.length, 1e-9)
             roll = self.roll + (self.move_roll - self.roll) * min(1.0, a + 0.05)
         if not self.set_cartesian(p, roll=roll):
+            self.failed_point = p            # the point on the line it could not find joint angles for
             self.move = None
             return
         if self.move.done:
@@ -272,19 +308,88 @@ class Teleop:
                 self.set_cartesian(p, roll=self.move_roll)
             self.move = None
 
+    # ---- stop path ------------------------------------------------------------
+    def hold_here(self, q_meas, grip=None):
+        """Make the pose the arm is in the goal, and start the command again from it, at rest.
+        The gripper keeps its command (a held object stays held) unless grip is given."""
+        self.move = None
+        self._blocked_t = 0.0
+        hold = self.goal.copy()
+        hold[:5] = q_meas[:5]
+        if grip is not None:
+            hold[5] = grip
+        self.goal = np.clip(hold, self.lo, self.hi)
+        self.interp = GoalInterpolator(self.goal, 1.0 / FRAME_HZ)
+        self._make_generator(np.r_[self.goal[:5], self.gen.current[5] if grip is None else self.goal[5]])
+        self.ff.reset()
+        self.target, self.roll = self.tip_pos(self.goal), self.goal[4]
+
+    def freeze(self):
+        """STOP (X): drop the move under way and hold where the arm is. Torque stays on, so nothing drops."""
+        if self.limp:
+            self.say("torque is off (T switches it on)")
+            return
+        self.hold_here(self.sim.q())
+        self.stop_latch = True
+        self.say("STOPPED: holding here")
+
+    def set_torque(self, on: bool) -> bool:
+        """Torque off: the arm goes limp. On: it holds the pose it is in by then. True if it was done."""
+        if not hasattr(self.sim, "torque_off"):
+            self.say(f"the {self.sim.name} backend has no torque switch yet")
+            return False
+        if on:
+            try:
+                q = self.sim.torque_on()
+            except Exception as e:                   # no fresh encoder reading, or a servo did not confirm
+                self.say(f"torque stays OFF: {e}")
+                return False
+            self.limp, self.stop_latch = False, True
+            self.grip_latch.reset()
+            self.hold_here(q, grip=q[5])
+            self.grip = GRIP_OPEN if q[5] > 0.3 else GRIP_CLOSED
+            self.say("torque on: holding here")
+            return True
+        self.limp, self.move = True, None            # first: from here on this controller commands nothing
+        self.grip_latch.reset()
+        try:
+            self.sim.torque_off()
+        except Exception as e:
+            self.say(f"TORQUE OFF NOT CONFIRMED, cut the power: {e}")
+            return False
+        self.say("torque OFF: the arm is limp (T switches it on)")
+        return True
+
+    def shutdown(self) -> str:
+        """Leave the servos with torque off. For every way out of the program; never raises."""
+        if not hasattr(self.sim, "torque_off"):
+            return f"the {self.sim.name} backend has no torque switch yet"
+        try:
+            self.limp, self.move = True, None
+            self.sim.torque_off()
+            return "torque off on every servo"
+        except Exception as e:
+            return f"TORQUE OFF NOT CONFIRMED, cut the power: {e}"
+
     # ---- loop ---------------------------------------------------------------
     def physics(self, dt_wall: float):
         if self.paused:
+            return
+        if self.limp:                    # torque off: time passes, the arm sags, nothing is commanded
+            self.sim.step(max(1, int(round(min(dt_wall, 0.1) / self.sim.dt))))
             return
         dt = self.sim.dt
         n = max(1, int(round(min(dt_wall, 0.1) / dt)))
         frame_dt = n * dt
         self.interp.set(self.goal)
         q_meas = self.sim.q()              # once per frame (the real arm: position registers)
-        if self._blocked(q_meas, frame_dt):
+        # Over the servo bus a read can fail; q() then repeats the last good reading. An old reading says
+        # nothing about whether the arm is following, so the stall guard and the lag guard wait for a new one.
+        fresh = getattr(self.sim, "q_fresh", True)
+        if fresh and self._blocked(q_meas, frame_dt):
             return
         governed = isinstance(self.gen, TorqueGovernor)
-        if governed:
+        if governed and fresh:
             self.gen.observe(q_meas)       # lag vs the command as it is now, not as it advances below
         # Grip-by-offset: once the jaws stall on an object, hold a few degrees past contact.
         latched = self.grip_latch.update(float(self.gen.current[5]), float(q_meas[5]), frame_dt)
@@ -297,10 +402,18 @@ class Teleop:
             cmd = np.array(self.gen.update(g, dt), float)
             if self.grip_latch.holding:
                 cmd[5] = max(cmd[5], latched)
+            ref = cmd                      # where the arm is meant to be; the command below is shifted to get it there
             if self.ff_on:
                 cmd = self.ff.apply(cmd, dt)
-            self.sim.set_targets(cmd)
+            self.sim.set_targets(cmd, intended=ref)
             self.sim.step(1)
+        safety = getattr(self.sim, "safety", None)
+        seen = (len(self.monitor.kinds) if self.monitor else 0, sum(safety.started.values()) if safety else 0)
+        if seen[0] > self._alerts[0]:
+            self.say("physics check: " + self.monitor.violations[-1].split(": ", 1)[1])
+        elif seen[1] > self._alerts[1]:
+            self.say("command filter: " + safety.describe(safety.events[-1]))
+        self._alerts = seen
         if not governed:                   # GENTLE: predicted torque for the load panel
             self.tau_pred = self.dyn.torque(self.gen.current, self.gen.vel, (self.gen.vel - vel0) / frame_dt,
                                             float(self.gov_cfg["assumed_payload_kg"]))
@@ -319,21 +432,20 @@ class Teleop:
         if self._blocked_t < BLOCK_TIME:
             return False
         j = int(behind.argmax())
-        self._blocked_t = 0.0
-        self.move = None
-        hold = self.goal.copy()
-        hold[:5] = q_meas[:5]
-        self.goal = np.clip(hold, self.lo, self.hi)
-        self.interp = GoalInterpolator(self.goal, 1.0 / FRAME_HZ)
-        self._make_generator(np.r_[q_meas[:5], self.gen.current[5]])
-        self.ff.reset()
-        self.target, self.roll = self.tip_pos(self.goal), self.goal[4]
+        self.last_block = {"joint": JOINTS[j], "behind_rad": float(behind[j]), "seconds": float(self._blocked_t),
+                           "load": float(self.load_frac()[j])}
+        self.hold_here(q_meas)
         self.say(f"blocked at {JOINTS[j]}: stopped pushing")
         return True
 
     def handle_held_keys(self, keys, dt: float, pg):
-        if self.paused:                  # the target must not run ahead of a frozen arm
+        if self.paused or self.limp:     # the target must not run ahead of a frozen or limp arm
             return
+        if self.stop_latch:              # after a stop, movement keys still held down do nothing until let go
+            if any(keys[k] for k in (pg.K_w, pg.K_s, pg.K_a, pg.K_d, pg.K_r, pg.K_f, pg.K_q, pg.K_e,
+                                     pg.K_UP, pg.K_DOWN, pg.K_LEFT, pg.K_RIGHT)):
+                return
+            self.stop_latch = False
         fine = 0.2 if (keys[pg.K_LSHIFT] or keys[pg.K_RSHIFT]) else 1.0
         if self.mode == "cartesian":
             v = np.zeros(3)
@@ -359,7 +471,13 @@ class Teleop:
             k = e.key
             if k == pg.K_ESCAPE:
                 return False
-            if k == pg.K_SPACE:
+            if k == pg.K_x:
+                self.freeze()
+            elif k == pg.K_t:
+                self.set_torque(self.limp)
+            elif self.limp and k not in (pg.K_BACKSPACE, pg.K_p, pg.K_F12):
+                self.say("torque is off (T switches it on)")
+            elif k == pg.K_SPACE:
                 self.toggle_grip()
             elif k == pg.K_j:
                 self.set_mode("joint" if self.mode == "cartesian" else "cartesian")
@@ -387,8 +505,8 @@ class Teleop:
             elif pg.K_1 <= k <= pg.K_6:
                 self.sel_joint = k - pg.K_1
                 self.say(f"selected {JOINTS[self.sel_joint]}")
-        if self.paused and e.type in (pg.MOUSEWHEEL, pg.MOUSEBUTTONDOWN):
-            self.say("paused (P to resume)")
+        if (self.paused or self.limp) and e.type in (pg.MOUSEWHEEL, pg.MOUSEBUTTONDOWN):
+            self.say("torque is off (T switches it on)" if self.limp else "paused (P to resume)")
             return True
         if e.type == pg.MOUSEWHEEL:
             if self.mode == "cartesian":
@@ -413,12 +531,35 @@ class Teleop:
                 return cam, (x - x0) * spec.render_width / VIEW_W, (y - y0) * spec.render_height / VIEW_H
         return None, 0, 0
 
+    def refresh_images(self):
+        """Camera views. With the firmware in the loop, the wrist view is what reached the PC over USB."""
+        self.images = self.sim.render()
+        if self.fwcam is None:
+            return
+        from PIL import Image
+        frame = self.fwcam.read_latest()
+        if frame is not None:                # letterboxed into the view: a cropping sensor mode shows as a narrower picture
+            h, w = frame.image.shape[:2]
+            k = min(VIEW_W / w, VIEW_H / h)
+            small_img = Image.fromarray(frame.image).resize((max(1, int(w * k)), max(1, int(h * k))), Image.BILINEAR)
+            view = Image.new("RGB", (VIEW_W, VIEW_H))
+            view.paste(small_img, ((VIEW_W - small_img.width) // 2, (VIEW_H - small_img.height) // 2))
+            self._fw_view = np.asarray(view)
+        if not self.fwcam.stats()["running"] or self._fw_view is None:
+            self._fw_view = np.zeros((VIEW_H, VIEW_W, 3), np.uint8)       # nothing is streaming
+        self.images["wrist"] = self._fw_view
+
     # ---- drawing ------------------------------------------------------------
     def draw(self, screen, font, small, pg):
         screen.fill((24, 24, 28))
         for cam, (c, r) in LAYOUT.items():
             x0, y0 = c * VIEW_W, r * (VIEW_H + PANEL)
-            screen.blit(font.render(cam, True, (220, 220, 220)), (x0 + 8, y0 + 6))
+            label = cam
+            if cam == "wrist" and self.fwcam is not None:
+                st = self.fwcam.stats()
+                label = (f"wrist via firmware {self.fwcam.mode[0]}x{self.fwcam.mode[1]}: {st['fps']:.0f} fps, "
+                         f"{st['delay_ms']:.0f} ms old on arrival" if st["fps"] else "wrist via firmware: no frames")
+            screen.blit(font.render(label, True, (220, 220, 220)), (x0 + 8, y0 + 6))
             img = self.images.get(cam)
             if img is not None:
                 surf = pg.surfarray.make_surface(np.ascontiguousarray(img.swapaxes(0, 1)))
@@ -431,7 +572,7 @@ class Teleop:
         tip = self.tip_pos(q)
         lines = [
             f"backend {self.sim.name}{'-' + self.sim.solver_kind if hasattr(self.sim, 'solver_kind') else ''}"
-            f"   mode {self.mode.upper()}   {'PAUSED' if self.paused else 'running'}   sim t {self.sim.time:6.1f}s",
+            f"   mode {self.mode.upper()}   {'TORQUE OFF' if self.limp else 'PAUSED' if self.paused else 'running'}   sim t {self.sim.time:6.1f}s",
             f"target  x {self.target[0]:+.3f}  y {self.target[1]:+.3f}  z {self.target[2]:+.3f} m"
             f"   roll {self.roll:+.2f}   grip {'open' if self.grip > 0.3 else 'closed'}",
             f"tip     x {tip[0]:+.3f}  y {tip[1]:+.3f}  z {tip[2]:+.3f} m"
@@ -470,7 +611,7 @@ class Teleop:
             screen.blit(small.render(txt, True, col), (lx + lw + 6, yy))
         help_ = ["WASD/arrows move  R/F/wheel up-down  Q/E roll  Space/right-click grip  Shift fine",
                  "click table in a scene view: go there   J joint mode (1-6, L/R)   G fast/gentle",
-                 "[ ] tilt cone  V feed-fwd  H home  Backspace reset  P pause  F12 shot  Esc quit"]
+                 "X STOP  T torque off/on  [ ] tilt  V feed-fwd  H home  Backspace reset  P pause  Esc quit"]
         for k, ln in enumerate(help_):
             screen.blit(small.render(ln, True, (150, 150, 160)), (x0 + 12, y0 + 246 + 18 * k))
         if time.time() - self.message_t < 3.0:
@@ -509,7 +650,7 @@ class Teleop:
             self.handle_held_keys(pg.key.get_pressed() if script is None else _FakeKeys.current, dt if script is None else 1 / 30, pg)
             self.physics(dt if script is None else 1 / 30)
             if self.frame % self.render_every == 0:
-                self.images = self.sim.render()
+                self.refresh_images()
             self.frame += 1
             self.draw(screen, font, small, pg)
             pg.display.flip()
@@ -643,6 +784,11 @@ def selftest_script(app: Teleop, pg):
     app.selftest_ok = all(checks.values())
 
 
+def exit_on_sigterm():
+    """A kill (SIGTERM) leaves through the same `finally` as everything else, so torque still goes off."""
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--backend", choices=("mujoco", "newton"), default="mujoco")
@@ -650,12 +796,56 @@ def main() -> int:
     ap.add_argument("--render-every", type=int, default=None,
                     help="render cameras every N frames (default 1; 10 for Newton on CPU)")
     ap.add_argument("--selftest", action="store_true", help="headless scripted check")
+    ap.add_argument("--bus", action="store_true",
+                    help="drive emulated HX-30HM servos over a simulated servo bus (MuJoCo backend); "
+                         "prints a bus report on exit")
+    ap.add_argument("--bus-drop", type=float, default=0.0, metavar="P",
+                    help="with --bus: probability that a servo's reply is lost")
+    ap.add_argument("--bus-trace", type=int, default=0, metavar="N",
+                    help="with --bus: also print the last N frames on the wire on exit")
+    ap.add_argument("--camera-fw", nargs="?", const="640x480", default=None, metavar="WxH",
+                    help="run the wrist camera through the camera firmware built for this PC "
+                         "(MuJoCo backend; needs a C compiler). Sizes: 1920x1080, 1280x720, 800x600, 640x480 "
+                         "(default; each is a crop, so smaller sees less). Prints a camera report on exit")
+    ap.add_argument("--scene", default="workcell", help="which scene: workcell (default) or bench (sim/scene/*.xml)")
+    ap.add_argument("--cables", action="store_true",
+                    help="include the arm's wires (servo bus leads, wrist camera USB cable) in the model "
+                         "(MuJoCo backend; about ten times slower to simulate). Prints a wire report on exit")
     a = ap.parse_args()
-    app = Teleop(a.backend, a.solver, a.render_every or 1)
+    if (a.bus or a.camera_fw or a.cables or a.scene != "workcell") and a.backend != "mujoco":
+        ap.error("--bus, --camera-fw, --cables and --scene need --backend mujoco")
+    mode = None
+    if a.camera_fw:
+        try:
+            mode = tuple(int(v) for v in a.camera_fw.lower().split("x"))
+            assert len(mode) == 2
+        except (ValueError, AssertionError):
+            ap.error("--camera-fw takes a size like 640x480")
+    try:
+        app = Teleop(a.backend, a.solver, a.render_every or 1,
+                     bus={"drop_reply_prob": a.bus_drop} if a.bus else None, camera_fw=mode, cables=a.cables,
+                     scene=a.scene)
+    except ValueError as e:              # a size the firmware does not advertise
+        ap.error(str(e))
     if a.render_every is None and getattr(app.sim, "solver_kind", None) == "cpu":
         app.render_every = 10            # ray-traced cameras are slow without a GPU (also when cpu was auto-selected)
     app.selftest_ok = True
-    app.run(selftest=a.selftest)
+    exit_on_sigterm()
+    try:
+        app.run(selftest=a.selftest)
+    finally:
+        print("stop path:", app.shutdown())
+        if a.bus:
+            print(app.sim.report(trace=a.bus_trace))
+        if app.fwcam is not None:
+            print(app.fwcam.report())
+        inner = getattr(app.sim, "inner", app.sim)
+        if getattr(inner, "cables", None) is not None:
+            print(inner.cables.report(inner.d))
+        if app.monitor is not None:
+            print(app.monitor.report())
+        if getattr(app.sim, "safety", None) is not None:
+            print(app.sim.safety.report())
     return 0 if app.selftest_ok else 1
 
 
