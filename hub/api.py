@@ -172,7 +172,9 @@ def dispatch(hub: Hub, method: str, url: str, body_bytes: bytes = b"") -> tuple[
                 return 200, "text/plain; charset=utf-8", guide(hub).encode()
             if path == "tree":
                 result = {"ok": True, "tree": hub.root.outline()}
-            elif path in ("place", "place/state"):
+            elif path == "place":                             # the node, like any other, and what has been found with it
+                result = {"ok": True, **hub.node(path).describe(), **hub.place_state(query.get("relative_to"))}
+            elif path == "place/state":
                 result = {"ok": True, "path": "/place", **hub.place_state(query.get("relative_to"))}
             elif path == "where":
                 if "of" not in query:
