@@ -1,0 +1,113 @@
+# Things up high and things underneath: a raised shelf on legs, and a ledge that overhangs.
+name = "shelf"
+description = "A raised shelf with something on it, and an overhanging ledge with something under it."
+
+[surface]
+outline_m = [[0.0, 0.0], [0.9, 0.0], [0.9, 0.7], [0.0, 0.7]]
+lip_height_m = 0.02
+friction = 0.5
+colour = "wood"
+
+[[fixtures]]
+kind = "shelf"
+name = "shelf"
+at_m = [0.47, 0.35]
+size_m = [0.2, 0.14, 0.006]      # its top: x, y, thickness
+height_m = 0.08
+support = "legs"
+colour = "grey"
+
+[[fixtures]]
+kind = "shelf"
+name = "ledge"
+at_m = [0.62, 0.57]
+size_m = [0.16, 0.12, 0.006]
+height_m = 0.07
+support = "back"                 # one wall along its far edge; open on the other three sides
+colour = "steel"
+
+[[fixtures]]
+kind = "bin"
+name = "tray"
+at_m = [0.33, 0.17]
+inner_m = [0.07, 0.07]
+wall_height_m = 0.012
+colour = "cream"
+
+[[objects]]
+name = "red_cube"
+shape = "box"
+size_m = [0.03, 0.03, 0.03]
+mass_kg = 0.03
+colour = "red"
+on = "shelf"
+
+[[objects]]
+name = "green_block"
+shape = "box"
+size_m = [0.04, 0.025, 0.02]
+mass_kg = 0.02
+colour = "green"
+at_m = [0.6, 0.57]
+# under the ledge
+
+[[objects]]
+name = "yellow_cylinder"
+shape = "cylinder"
+size_m = [0.03, 0.06]
+mass_kg = 0.025
+colour = "yellow"
+at_m = [0.74, 0.3]
+
+[[devices]]
+kind = "arm"
+name = "arm"
+at_m = [0.2, 0.35]
+facing_deg = 0
+
+[[devices]]
+kind = "camera"
+name = "camera_1"
+at_m = [0.86, 0.06, 0.42]
+looking_at_m = [0.45, 0.38, 0.0]
+
+[[devices]]
+kind = "rover"
+name = "rover"
+at_m = [0.62, 0.16]
+facing_deg = 120
+
+[[tasks]]
+name = "fetch_from_shelf"
+request = "There is a red cube somewhere up high. Put it in the tray."
+needs = ["arm"]
+
+[[tasks.goals]]
+kind = "inside"
+object = "red_cube"
+region = "tray"
+
+[[tasks]]
+name = "on_the_shelf"
+request = "There is a raised shelf on legs. What colour is the thing on it, and how high is the shelf's top above the surface, in metres?"
+
+[[tasks.goals]]
+kind = "answer_list"
+key = "colours"
+truth = "colours_in:shelf_top"
+
+[[tasks.goals]]
+kind = "answer_number"
+key = "height_m"
+truth = "fixture_top_m:shelf"
+tolerance = 0.01
+
+[[tasks]]
+name = "under_the_ledge"
+request = "Something may be lying underneath the overhanging ledge. What colours are the things under it?"
+needs = ["rover"]
+
+[[tasks.goals]]
+kind = "answer_list"
+key = "colours"
+truth = "colours_in:ledge_under"

@@ -58,7 +58,8 @@ GOAL = {
     "key": F(str), "truth": F(str), "tolerance": F(NUM, lo=0.0, hi=10.0), "relative_tolerance": F(NUM, lo=0.0, hi=1.0),
     "tolerance_deg": F(NUM, lo=0.0, hi=180.0), "of": F(str), "relative_to": F(str),
 }
-TASK = {"name": F(str, True), "request": F(str, True), "goals": F("list", True, of=GOAL), "needs": F("vec_str")}
+TASK = {"name": F(str, True), "request": F(str, True), "goals": F("list", True, of=GOAL), "needs": F("vec_str"),
+        "swap_to": F(str)}          # the operator loads this scene mid-run; the goals are then checked there
 SCENE = {
     "name": F(str, True), "description": F(str),
     "surface": F({

@@ -21,7 +21,8 @@ from ..rover_model import add_rover
 from . import geometry as G
 from .schema import COLOURS
 
-ARM_PARKED = (0.0, -0.6, 0.9, 0.9, -1.57, 0.5)          # joint angles an arm starts at unless the scene says otherwise
+ARM_PARKED = (0.0467, -0.6928, 0.1269, 1.6581, -1.5708, 0.9)    # an arm's starting joint angles unless the scene says otherwise:
+#                                                              # teleop's home, tip 16 cm up and 20 cm ahead, fingers down, jaws open
 ARM_BASE_Z = 0.0024                                      # the base's origin above its lowest face (DECISIONS M4)
 FLOOR_Z = -0.75
 SOLREF, SOLIMP = [0.004, 1.0], [0.95, 0.99, 0.001, 0.5, 2.0]      # stiff contacts (DECISIONS M6)

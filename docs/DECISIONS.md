@@ -306,3 +306,25 @@ See `MULTI_DEVICE_PLAN.md`, section 5.6. Nothing is built or bought.
 | RV2 | Follows from RV1: the rover's data goes by Wi-Fi, through a board on the rover that also drives the wheel servos | A battery with a data cable is still a tether. Needs new firmware, a 5 V regulator for the boards, a fuse at the pack and a balance charger; none chosen yet |
 | RV3 | The hub reads the battery's voltage from the wheel servos (register 62) and stops the rover before about 3.3 V per cell | No extra part, and the servo's own under-voltage threshold (4.0 V by default) is far too low to protect a LiPo |
 
+## Multi-device system (2026-11-14, with the user)
+
+The design, the steps and the open questions are in `MULTI_DEVICE_PLAN.md`; progress in `MULTI_DEVICE_CHECKLIST.md`.
+
+| # | Decision | Why |
+|---|---|---|
+| MD1 | One language model commands several devices (the arm, fixed cameras, a rover); devices form a logical network, grouped by interest in a tree in the hub | User's goal and choice |
+| MD2 | The system is given no prior information about its surroundings: no table size, object list, camera or device positions, or count of devices | User's choice: it should work out a place it has never seen |
+| MD3 | Ground truth is removed from the model's API. It lives behind a separate operator API and a referee | User's choice: the system has to orient |
+| MD4 | Scenes are TOML config files, loadable while the program runs and editable over REST | User's choice. TOML matches the repo's other configs; the cost is that an edit over the API drops a file's comments |
+| MD5 | MuJoCo only for this work, not Newton | User's choice. Newton's renderer shows no textures, so it could not show markers |
+| MD6 | The hub is a top-level package beside `sim/` | User's choice |
+| MD7 | OpenCV for reading tags (AprilTag 36h11); tags on devices only | User accepted the recommendation |
+| MD8 | The rover's two cameras sit on a motorised head (spacing, tilt, pan, lift), and the rover surveys from where it stands at start-up | User's choice |
+| MD9 | A lip round the surface keeps the rover on the table | User's choice |
+| MD10 | Camera pictures pass through a realistic lens model | User's choice |
+| MD11 | A scene is built in memory from the arm's own model plus MuJoCo's `MjSpec`; nothing is written to disk | That is what lets a scene be swapped at run time. `sim/scene/*.xml` and `tools/build_model.py` stay for the old path |
+| MD12 | Validation runs no device: fields, compile, placing, overlaps, one second left alone, tasks | User's choice: create and validate before anything runs. It still caught real faults in the first drafts (the arm parked through a shelf; the rover placeholder thrown off the table) |
+| MD13 | The rover placeholder stands on four round feet, not on its flat underside | A large flat box on the deep table box got a false contact 0.33 m deep from MuJoCo's box-box test at one position and heading, and was thrown 19 m. Small boxes (the loose parts) have not shown it. Worth remembering for any large flat-bottomed body |
+| MD14 | An arm in a scene starts at teleop's home pose (tip 16 cm up, 20 cm ahead) | The old test pose had the gripper low over the table, inside things placed in front of the arm |
+| MD15 | Tasks are data in the scene file; a task that swaps scenes (`swap_to`) is scored in the scene swapped to | User's choice that tasks be created as files; "carried to another table" is a task about a swap |
+

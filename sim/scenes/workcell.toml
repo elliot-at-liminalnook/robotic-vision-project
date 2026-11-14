@@ -51,3 +51,13 @@ kind = "camera"
 name = "scene_side"               # stands off the table, on a post from the floor
 at_m = [0.24, -0.55, 0.32]
 looking_at_m = [0.22, 0.0, 0.02]
+
+[[tasks]]
+name = "stack"
+request = "Put the red cube on top of the green block."
+needs = ["arm"]
+
+[[tasks.goals]]
+kind = "on"
+object = "cube"
+on = "block"

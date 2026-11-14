@@ -22,8 +22,8 @@ SCENE_DIR = SIM / "scenes"
 
 
 def _path(name: str, directory=None) -> Path:
-    if not name or not name.replace("_", "").isalnum():
-        raise ValueError(f"'{name}' is not a scene name (letters, digits and _ only)")
+    if not name or len(name) > 64 or not name.isascii() or not name.replace("_", "").isalnum():
+        raise ValueError(f"'{name[:80]}' is not a scene name (up to 64 letters, digits and _)")
     return Path(directory or SCENE_DIR) / f"{name}.toml"
 
 

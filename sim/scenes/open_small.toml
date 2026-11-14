@@ -41,3 +41,24 @@ kind = "rover"
 name = "rover"
 at_m = [0.52, 0.12]
 facing_deg = 150
+
+[[tasks]]
+name = "where_is_everyone"
+request = "Work out where the rover is relative to the arm: its position in the arm's own frame (x ahead of it, y to its left), in metres."
+
+[[tasks.goals]]
+kind = "answer_pose"
+key = "pose"
+of = "rover"
+relative_to = "arm"
+tolerance = 0.03
+
+[[tasks]]
+name = "how_big"
+request = "How large is the surface you are standing on? Give its area in square metres."
+
+[[tasks.goals]]
+kind = "answer_number"
+key = "area_m2"
+truth = "surface_area_m2"
+relative_tolerance = 0.1

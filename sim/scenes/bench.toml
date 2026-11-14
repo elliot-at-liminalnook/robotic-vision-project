@@ -1,0 +1,170 @@
+# The bench: a cabinet with a sliding drawer, two bins, a platform, a socket for a peg, five loose parts.
+# The original sim/scene/bench.xml in scene-file form, with a lip and the rover added.
+name = "bench"
+description = "A cabinet with a drawer, two bins, a platform and a socket, with five loose parts."
+
+[surface]
+outline_m = [[-0.15, -0.45], [0.65, -0.45], [0.65, 0.45], [-0.15, 0.45]]
+lip_height_m = 0.02
+friction = 0.5
+colour = "wood"
+
+[[fixtures]]
+kind = "cabinet"                 # open toward -x (the arm); its drawer slides out that way, up to 85 mm
+name = "cabinet"
+at_m = [0.277, 0.13]
+inner_m = [0.084, 0.082, 0.048]  # depth, width, height
+colour = "steel"
+drawer_travel_m = 0.085
+
+[[fixtures]]
+kind = "bin"
+name = "red_bin"
+at_m = [0.10, 0.24]
+inner_m = [0.056, 0.056]
+wall_height_m = 0.014
+colour = "red"
+
+[[fixtures]]
+kind = "bin"
+name = "blue_bin"
+at_m = [0.13, -0.23]
+inner_m = [0.056, 0.056]
+wall_height_m = 0.014
+colour = "blue"
+
+[[fixtures]]
+kind = "box"
+name = "platform"
+at_m = [0.27, -0.14]
+size_m = [0.08, 0.08, 0.04]
+colour = "grey"
+
+[[fixtures]]
+kind = "socket"                  # a block with a square hole through it, for the peg
+name = "socket"
+at_m = [0.30, -0.02]
+size_m = [0.056, 0.056, 0.025]
+hole_m = 0.026
+colour = "yellow"
+
+[[objects]]
+name = "red_cube"
+shape = "box"
+size_m = [0.03, 0.03, 0.03]
+mass_kg = 0.03
+colour = "red"
+at_m = [0.277, 0.13, 0.004]
+# starts inside the closed drawer
+
+[[objects]]
+name = "purple_cube"
+shape = "box"
+size_m = [0.025, 0.025, 0.025]
+mass_kg = 0.018
+colour = "purple"
+on = "cabinet"
+
+[[objects]]
+name = "blue_cylinder"
+shape = "cylinder"
+size_m = [0.03, 0.06]
+mass_kg = 0.025
+colour = "blue"
+at_m = [0.22, 0.03]
+
+[[objects]]
+name = "yellow_peg"
+shape = "cylinder"
+size_m = [0.018, 0.06]
+mass_kg = 0.012
+colour = "yellow"
+at_m = [0.21, -0.06]
+
+[[objects]]
+name = "green_block"
+shape = "box"
+size_m = [0.04, 0.025, 0.02]
+mass_kg = 0.02
+colour = "green"
+at_m = [0.17, 0.21]
+
+[[devices]]
+kind = "arm"
+name = "arm"
+at_m = [0.0, 0.0]
+facing_deg = 0
+
+[[devices]]
+kind = "camera"
+name = "scene_front"
+at_m = [0.62, 0.0, 0.38]
+looking_at_m = [0.22, 0.0, 0.02]
+
+[[devices]]
+kind = "camera"
+name = "scene_side"
+at_m = [0.24, -0.55, 0.32]
+looking_at_m = [0.22, 0.0, 0.02]
+
+[[devices]]
+kind = "rover"
+name = "rover"
+at_m = [0.5, 0.3]
+facing_deg = 200
+
+[[tasks]]
+name = "tidy"
+request = "Tidy the bench. The red cube goes in the red bin; it starts inside the closed drawer of the grey cabinet. The blue cylinder stands upright in the blue bin. The yellow peg stands in the square hole of the yellow socket. The green block lies flat on the grey platform, with the purple cube on top of it. Close the drawer again."
+needs = ["arm"]
+
+[[tasks.goals]]
+kind = "inside"
+object = "red_cube"
+region = "red_bin"
+
+[[tasks.goals]]
+kind = "inside"
+object = "blue_cylinder"
+region = "blue_bin"
+
+[[tasks.goals]]
+kind = "upright"
+object = "blue_cylinder"
+
+[[tasks.goals]]
+kind = "inside"
+object = "yellow_peg"
+region = "socket"
+
+[[tasks.goals]]
+kind = "upright"
+object = "yellow_peg"
+
+[[tasks.goals]]
+kind = "on"
+object = "green_block"
+on = "platform"
+
+[[tasks.goals]]
+kind = "upright"
+object = "green_block"
+
+[[tasks.goals]]
+kind = "on"
+object = "purple_cube"
+on = "green_block"
+
+[[tasks.goals]]
+kind = "fixture_at"
+fixture = "cabinet"
+max_m = 0.005
+
+[[tasks]]
+name = "drawer_open"
+request = "Is the drawer of the grey cabinet open? Answer yes or no."
+
+[[tasks.goals]]
+kind = "answer_text"
+key = "open"
+truth = "open:cabinet"

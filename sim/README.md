@@ -363,6 +363,54 @@ built = scenes.build(scene)            # built.model, plus what the referee need
 - **The rover in a scene is a placeholder box** until it is designed (`so101sim/rover_model.py`).
 - The old path (`load_backend`, `--scene`, `sim/scene/*.xml`) is unchanged and does not read these files yet.
 
+The scenes so far, each with its tasks:
+
+| Scene | What it is | Tasks |
+|---|---|---|
+| `workcell` | The original table and three objects | `stack` |
+| `bench` | Cabinet with drawer, bins, platform, socket, five parts, the rover | `tidy` (the old bench task), `drawer_open` |
+| `open_small` | A small bare surface: arm, camera, rover, two objects | `where_is_everyone`, `how_big` |
+| `l_shaped` | An L; the camera sees one leg, the arm reaches neither end | `far_leg`, `where_is_everyone`, `how_big` |
+| `shelf` | A shelf on legs and an overhanging ledge | `fetch_from_shelf`, `on_the_shelf`, `under_the_ledge` |
+| `cluttered` | Things that hide each other, lit from one side | `tidy_by_colour`, `fetch_hidden` |
+| `no_arm` | Rover and two cameras | `where_is_everyone`, `how_big` |
+| `moved_arm` | The arm at a corner, turned 225° | `where_is_everyone`, `fetch`, `carried` (the scene is swapped mid-run) |
+
+A task is a request in words plus goals. Arrangement goals (`inside`, `on`, `upright`, `fixture_at`) are
+checked on the true state; answer goals (`answer_number`, `answer_text`, `answer_list`, `answer_pose`) are
+checked on what was handed in, against a truth worked out from the scene. Created and validated only:
+that each can be done waits for the system that does them.
+
+### The operator's REST API (`scripts/operator_api.py`)
+
+```bash
+python sim/scripts/operator_api.py                 # http://127.0.0.1:8766, scene open_small loaded
+curl http://127.0.0.1:8766/                        # the guide
+curl -X PATCH http://127.0.0.1:8766/scenes/shelf -d '{"objects": {"red_cube": {"at_m": [0.5, 0.2]}}}'
+curl -X POST http://127.0.0.1:8766/world/load -d '{"scene": "shelf"}'
+curl http://127.0.0.1:8766/world/truth
+```
+
+For people, tests and scripts. It holds ground truth, so it is on its own address and the model driving
+the hub is never given it.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /scenes`, `GET /scenes/{name}` | The scene files; one scene as JSON |
+| `PUT /scenes/{name}` | Create or replace. Checked first; an invalid scene is refused with every problem listed, and nothing is saved |
+| `PATCH /scenes/{name}` | Change part. Tables merge; items of `fixtures`, `objects`, `devices`, `regions`, `tasks` are addressed by name; `null` removes |
+| `DELETE /scenes/{name}` | Refused for the scene that is loaded |
+| `POST /scenes/{name}/validate` | Check without saving or loading |
+| `GET /world`, `POST /world/load`, `/world/reset`, `/world/step` | What is running; swap scenes while it runs; start again; let time pass |
+| `GET /world/truth` | The referee: where everything really is |
+| `GET /world/tasks`, `GET /world/tasks/{name}` | Tasks; a task's goals and whether each holds |
+| `POST /world/tasks/{name}/answer` | Hand in an answer. The reply does not say whether it is right |
+
+- Changing the loaded scene reloads it: `generation` goes up and time restarts.
+- An edit over the API rewrites the file and drops its comments.
+- `so101sim/world.py` is the running scene. Until the hub exists no device is driven in it: the arm holds
+  its starting pose and the rover stands still.
+
 ## Physical invariants: nothing clips, nothing jumps
 
 Enforced in layers, because each one fails differently (limits in `config/safety.toml`):
@@ -488,6 +536,7 @@ The tests go after classes of bugs, not single cases:
 | `test_camera_fw.py` | The camera firmware in the loop (skipped without a C compiler). Every frame that reaches the PC is the frame the sensor took, at every size. Frame rate and delay are what the sensor, encoder and link allow; a slow link lowers the rate and corrupts nothing. Close, reopen, resume, suspend and size changes shut down and restart cleanly with nothing leaked. No camera, stalled sensor, failed encodes, encoder queue errors, misaligned buffers. Seeded fuzzing of PC actions and faults: never stuck, never leaking, never misusing a device. Each build option does what it says (flips keep colours, fixed exposure holds, JPEG quality). The stand-in hardware really reports misuse. The same run gives the same result. A smaller size is the centre of the larger picture. Teleop shows the firmware's frames |
 | `test_stop.py` | The stop path, on direct joint targets, a clean bus and a faulty one. A stop from any motion (click, keys, joint jog, home) leaves the arm at rest where it was, even with the keys still held, and keeps a gripped cube gripped. With torque off no servo delivers any torque and nothing a person presses gets through. Torque on holds the arm where it lies. A broadcast a servo missed is noticed and repaired, or the servo is named; no goal is written while torque is off. The real program leaves torque off on Esc, an exception, Ctrl-C and SIGTERM |
 | `test_scenes.py` | Scenes as files. Every scene in `sim/scenes/` is valid and survives being written and read back. The lip has no gap for any outline. `workcell.toml` is today's model plus the lip. Random right-angled outlines are tiled exactly. Seventeen kinds of fault (unknown field, a thing past the lip, an overlap, a thing in mid-air, a task about nothing, a task already done, a thing too big for its place, ...) are each named by the validator. An invalid scene is not saved |
+| `test_operator_api.py` | The operator's API. Scenes are listed and read back as they are; a patch changes only what it names; changing the loaded scene restarts the world. Twenty-four kinds of refused request each say why and change no file and nothing in the world. Fuzzed methods, paths and bodies never get a server error and never leave an invalid scene on disk. Loading another scene leaves nothing of the old one. Every arrangement goal of the bench task follows the things themselves; answers are scored against the truth and the caller is not told; a pose answer is scored in the named device's own frame; a task that swaps scenes is scored in the scene swapped to |
 | `test_bus.py` | The servo bus in the loop. Packets: any packet round-trips, every packet is found in fuzzed garbage, no flipped bit is accepted. Register table equals the vendor spreadsheet; every register behaves by its row. No fuzzed instruction stream breaks a servo. Under injected faults the driver returns checked data or raises. Bus time equals the byte counts at three baud rates. Set-up mistakes are caught at connect, before any write. The arm moves the same with the bus as without. Teleop grasps and lifts through a clean bus and a faulty one, under the invariant monitor, without writing any register a servo ignores |
 
 ## Verified results (2026-11-09)

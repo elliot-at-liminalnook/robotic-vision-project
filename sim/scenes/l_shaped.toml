@@ -1,0 +1,100 @@
+# An L-shaped surface. The fixed camera sees the long leg only; the arm reaches neither end.
+name = "l_shaped"
+description = "An L-shaped surface; the camera sees one leg, and only the rover can reach the other."
+
+[surface]
+outline_m = [[0.0, 0.0], [1.0, 0.0], [1.0, 0.4], [0.45, 0.4], [0.45, 0.9], [0.0, 0.9]]
+lip_height_m = 0.02
+friction = 0.5
+colour = "wood"
+
+[[regions]]
+name = "far_leg"                 # the end of the short leg, out of the camera's sight
+rect_m = [0.0, 0.55, 0.45, 0.9]
+
+[[objects]]
+name = "red_cube"
+shape = "box"
+size_m = [0.03, 0.03, 0.03]
+mass_kg = 0.03
+colour = "red"
+at_m = [0.5, 0.25]
+
+[[objects]]
+name = "yellow_box"
+shape = "box"
+size_m = [0.04, 0.03, 0.03]
+mass_kg = 0.03
+colour = "yellow"
+at_m = [0.15, 0.75]
+
+[[objects]]
+name = "green_cylinder"
+shape = "cylinder"
+size_m = [0.03, 0.05]
+mass_kg = 0.025
+colour = "green"
+at_m = [0.3, 0.8]
+
+[[objects]]
+name = "purple_cube"
+shape = "box"
+size_m = [0.025, 0.025, 0.025]
+mass_kg = 0.018
+colour = "purple"
+at_m = [0.22, 0.62]
+
+[[devices]]
+kind = "arm"
+name = "arm"
+at_m = [0.22, 0.2]
+facing_deg = 0
+
+[[devices]]
+kind = "camera"
+name = "camera_1"
+at_m = [0.05, 0.06, 0.4]
+looking_at_m = [0.7, 0.2, 0.0]
+
+[[devices]]
+kind = "rover"
+name = "rover"
+at_m = [0.78, 0.2]
+facing_deg = 180
+
+[[tasks]]
+name = "far_leg"
+request = "Part of this surface is out of the fixed camera's sight. How many loose things are on that part, and what colours are they?"
+needs = ["rover"]
+
+[[tasks.goals]]
+kind = "answer_number"
+key = "count"
+truth = "count_in:far_leg"
+tolerance = 0
+
+[[tasks.goals]]
+kind = "answer_list"
+key = "colours"
+truth = "colours_in:far_leg"
+
+[[tasks]]
+name = "where_is_everyone"
+request = "Work out where the rover is relative to the arm: its position in the arm's own frame (x ahead of it, y to its left), in metres."
+
+[[tasks.goals]]
+kind = "answer_pose"
+key = "pose"
+of = "rover"
+relative_to = "arm"
+tolerance = 0.03
+
+[[tasks]]
+name = "how_big"
+request = "How large is the surface you are standing on? Give its area in square metres."
+
+[[tasks.goals]]
+kind = "answer_number"
+key = "area_m2"
+truth = "surface_area_m2"
+relative_tolerance = 0.1

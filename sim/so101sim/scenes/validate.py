@@ -95,12 +95,29 @@ def rest_problems(built: Built, d, settle_s: float) -> list[str]:
     return out
 
 
-def task_problems(built: Built, d) -> list[str]:
+def task_problems(built: Built, d, others=None) -> list[str]:
+    """others: name -> scene, for tasks that swap to another scene (default: the files in sim/scenes/)."""
     out = []
     for t in built.scene.get("tasks", []):
-        static = tasks.static_problems(built, t)
+        where = built
+        if "swap_to" in t:                              # the goals are about the scene swapped to
+            try:
+                if others is not None:
+                    other = others[t["swap_to"]]
+                else:
+                    from . import read
+                    other = read(t["swap_to"])
+                if schema.check(other):
+                    raise SceneError("it is not a valid scene")
+                where = build(other)
+            except (KeyError, FileNotFoundError, SceneError) as e:
+                out.append(f"tasks '{t['name']}': cannot swap to scene '{t['swap_to']}' ({e})")
+                continue
+        static = tasks.static_problems(where, t)
         out += static
         if static:
+            continue
+        if where is not built:
             continue
         results = tasks.check_task(built, d, t, answers={})
         if results and all(r["done"] for r in results):

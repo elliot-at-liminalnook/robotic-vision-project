@@ -220,8 +220,10 @@ def static_problems(built: Built, task: dict) -> list[str]:
             except KeyError as e:
                 out.append(f"{where}: truth '{g['truth']}' cannot be worked out ({e})")
         elif g["kind"] == "answer_pose":
-            names = {x["name"] for x in built.devices}
+            names = {x["name"]: x["kind"] for x in built.devices}
             for k in ("of", "relative_to"):
                 if g[k] not in names:
                     out.append(f"{where}: there is no device '{g[k]}'")
+            if names.get(g["relative_to"]) == "camera":
+                out.append(f"{where}: relative_to must be a device with a heading (an arm or a rover), not a camera")
     return out

@@ -1,0 +1,149 @@
+# Many things of different heights that hide each other, lit from one side.
+name = "cluttered"
+description = "A crowded surface with things that hide each other, under uneven light."
+
+[surface]
+outline_m = [[0.0, 0.0], [0.9, 0.0], [0.9, 0.75], [0.0, 0.75]]
+lip_height_m = 0.02
+friction = 0.5
+colour = "wood"
+
+[light]
+ambient = 0.12
+key = { from_m = [1.1, -0.3, 0.5], strength = 0.8 }
+fill = { from_m = [-0.2, 0.9, 0.9], strength = 0.1 }
+
+[[fixtures]]
+kind = "box"
+name = "tower"
+at_m = [0.56, 0.50]
+size_m = [0.08, 0.06, 0.14]
+colour = "steel"
+
+[[fixtures]]
+kind = "box"
+name = "wall"
+at_m = [0.58, 0.22]
+yaw_deg = 30
+size_m = [0.2, 0.02, 0.09]
+colour = "grey"
+
+[[fixtures]]
+kind = "box"
+name = "slab"
+at_m = [0.40, 0.66]
+size_m = [0.1, 0.1, 0.05]
+colour = "cream"
+
+[[fixtures]]
+kind = "bin"
+name = "red_bin"
+at_m = [0.30, 0.20]
+inner_m = [0.08, 0.08]
+wall_height_m = 0.014
+colour = "red"
+
+[[fixtures]]
+kind = "bin"
+name = "blue_bin"
+at_m = [0.30, 0.55]
+inner_m = [0.08, 0.08]
+wall_height_m = 0.014
+colour = "blue"
+
+[[objects]]
+name = "red_cube_1"
+shape = "box"
+size_m = [0.03, 0.03, 0.03]
+mass_kg = 0.03
+colour = "red"
+at_m = [0.42, 0.42]
+
+[[objects]]
+name = "red_cube_2"
+shape = "box"
+size_m = [0.03, 0.03, 0.03]
+mass_kg = 0.03
+colour = "red"
+at_m = [0.47, 0.3]
+
+[[objects]]
+name = "blue_cylinder"
+shape = "cylinder"
+size_m = [0.03, 0.06]
+mass_kg = 0.025
+colour = "blue"
+at_m = [0.36, 0.32]
+
+[[objects]]
+name = "blue_block"
+shape = "box"
+size_m = [0.04, 0.025, 0.02]
+mass_kg = 0.02
+colour = "blue"
+at_m = [0.44, 0.53]
+
+[[objects]]
+name = "yellow_peg"
+shape = "cylinder"
+size_m = [0.018, 0.06]
+mass_kg = 0.012
+colour = "yellow"
+at_m = [0.44, 0.19]
+
+[[devices]]
+kind = "arm"
+name = "arm"
+at_m = [0.2, 0.37]
+facing_deg = 0
+
+[[devices]]
+kind = "camera"
+name = "camera_1"
+at_m = [0.05, 0.7, 0.35]
+looking_at_m = [0.45, 0.35, 0.0]
+
+[[devices]]
+kind = "rover"
+name = "rover"
+at_m = [0.74, 0.56]
+facing_deg = 200
+
+[[tasks]]
+name = "tidy_by_colour"
+request = "Sort the loose parts by colour: every red one into the red bin, every blue one into the blue bin."
+needs = ["arm"]
+
+[[tasks.goals]]
+kind = "inside"
+object = "red_cube_1"
+region = "red_bin"
+
+[[tasks.goals]]
+kind = "inside"
+object = "red_cube_2"
+region = "red_bin"
+
+[[tasks.goals]]
+kind = "inside"
+object = "blue_cylinder"
+region = "blue_bin"
+
+[[tasks.goals]]
+kind = "inside"
+object = "blue_block"
+region = "blue_bin"
+
+[[tasks]]
+name = "fetch_hidden"
+request = "A yellow peg is hidden somewhere on this surface. Find it and stand it upright in the blue bin."
+needs = ["arm"]
+
+[[tasks.goals]]
+kind = "inside"
+object = "yellow_peg"
+region = "blue_bin"
+
+[[tasks.goals]]
+kind = "upright"
+object = "yellow_peg"

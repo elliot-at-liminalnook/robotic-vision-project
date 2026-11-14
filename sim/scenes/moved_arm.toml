@@ -1,0 +1,89 @@
+# The arm stands at a corner, turned to face the middle. Nothing may assume it is at the origin facing +x.
+name = "moved_arm"
+description = "The arm at a corner of the surface, turned 225 degrees."
+
+[surface]
+outline_m = [[0.0, 0.0], [0.8, 0.0], [0.8, 0.7], [0.0, 0.7]]
+lip_height_m = 0.02
+friction = 0.5
+colour = "wood"
+
+[[fixtures]]
+kind = "bin"
+name = "tray"
+at_m = [0.52, 0.30]
+inner_m = [0.07, 0.07]
+wall_height_m = 0.012
+colour = "cream"
+
+[[objects]]
+name = "red_cube"
+shape = "box"
+size_m = [0.03, 0.03, 0.03]
+mass_kg = 0.03
+colour = "red"
+at_m = [0.4, 0.45]
+
+[[objects]]
+name = "green_block"
+shape = "box"
+size_m = [0.04, 0.025, 0.02]
+mass_kg = 0.02
+colour = "green"
+at_m = [0.2, 0.5]
+
+[[devices]]
+kind = "arm"
+name = "arm"
+at_m = [0.63, 0.53]
+facing_deg = 225
+
+[[devices]]
+kind = "camera"
+name = "camera_1"
+at_m = [0.05, 0.06, 0.38]
+looking_at_m = [0.45, 0.4, 0.0]
+
+[[devices]]
+kind = "rover"
+name = "rover"
+at_m = [0.22, 0.2]
+facing_deg = 45
+
+[[tasks]]
+name = "where_is_everyone"
+request = "Work out where the rover is relative to the arm: its position in the arm's own frame (x ahead of it, y to its left), in metres."
+
+[[tasks.goals]]
+kind = "answer_pose"
+key = "pose"
+of = "rover"
+relative_to = "arm"
+tolerance = 0.03
+
+[[tasks]]
+name = "fetch"
+request = "Put the red cube in the tray."
+needs = ["arm"]
+
+[[tasks.goals]]
+kind = "inside"
+object = "red_cube"
+region = "tray"
+
+[[tasks]]
+name = "carried"
+request = "Partway through, everything may be picked up and put down somewhere else. Say whether that happened (yes or no), and then where the rover is relative to the arm, in the arm's own frame, in metres."
+swap_to = "open_small"        # the operator loads this scene mid-run; the goals are checked there
+
+[[tasks.goals]]
+kind = "answer_text"
+key = "moved"
+truth = "is:yes"
+
+[[tasks.goals]]
+kind = "answer_pose"
+key = "pose"
+of = "rover"
+relative_to = "arm"
+tolerance = 0.03

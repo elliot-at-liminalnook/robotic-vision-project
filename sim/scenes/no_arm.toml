@@ -1,0 +1,71 @@
+# No arm: the rover and two fixed cameras. There is no arm's frame to lean on.
+name = "no_arm"
+description = "The rover and two fixed cameras, with no arm."
+
+[surface]
+outline_m = [[0.0, 0.0], [0.8, 0.0], [0.8, 0.6], [0.0, 0.6]]
+lip_height_m = 0.02
+friction = 0.5
+colour = "wood"
+
+[[fixtures]]
+kind = "box"
+name = "crate"
+at_m = [0.25, 0.42]
+size_m = [0.12, 0.08, 0.07]
+colour = "grey"
+
+[[objects]]
+name = "red_cube"
+shape = "box"
+size_m = [0.03, 0.03, 0.03]
+mass_kg = 0.03
+colour = "red"
+at_m = [0.55, 0.4]
+
+[[objects]]
+name = "blue_cylinder"
+shape = "cylinder"
+size_m = [0.03, 0.06]
+mass_kg = 0.025
+colour = "blue"
+at_m = [0.18, 0.18]
+
+[[devices]]
+kind = "camera"
+name = "camera_1"
+at_m = [0.76, 0.56, 0.38]
+looking_at_m = [0.35, 0.28, 0.0]
+
+[[devices]]
+kind = "camera"
+name = "camera_2"
+at_m = [0.04, 0.05, 0.3]
+looking_at_m = [0.45, 0.32, 0.0]
+
+[[devices]]
+kind = "rover"
+name = "rover"
+at_m = [0.45, 0.15]
+facing_deg = 90
+
+[[tasks]]
+name = "where_is_everyone"
+request = "Work out where the camera 1 is relative to the rover: its position in the rover's own frame (x ahead of it, y to its left), in metres."
+
+[[tasks.goals]]
+kind = "answer_pose"
+key = "pose"
+of = "camera_1"
+relative_to = "rover"
+tolerance = 0.03
+
+[[tasks]]
+name = "how_big"
+request = "How large is the surface you are standing on? Give its area in square metres."
+
+[[tasks.goals]]
+kind = "answer_number"
+key = "area_m2"
+truth = "surface_area_m2"
+relative_tolerance = 0.1

@@ -469,7 +469,7 @@ region = "tray"
 - the file has the required fields and no unknown ones, with every number in range;
 - the model compiles; nothing overlaps at the start; every object and device is on the surface and
   inside the lip;
-- left alone for a second of physics, with devices unpowered at their start poses, nothing moves;
+- left alone for a second of physics nothing moves (an arm holds its starting pose on its own servos; no controller runs);
 - every task names things that exist, starts with its goals not met, and each goal could hold (the
   region exists and the object fits in it).
 

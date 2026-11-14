@@ -25,37 +25,37 @@ Plan: [5.7](MULTI_DEVICE_PLAN.md#57-scenes-and-tasks-are-config-files), [5.8 Two
 
 Scenes:
 
-- [ ] `bench` converted to a scene file
-- [ ] `l_shaped`
-- [ ] `shelf`
-- [ ] `cluttered`
-- [ ] `no_arm`
-- [ ] `moved_arm`
+- [x] `bench` converted to a scene file
+- [x] `l_shaped`
+- [x] `shelf`
+- [x] `cluttered`
+- [x] `no_arm`
+- [x] `moved_arm`
 
 Tasks, as data:
 
-- [ ] Task format, with the referee's checks (inside a region, on top of, upright, fixture open or closed, reported number within tolerance)
-- [ ] Where is everyone
-- [ ] How big is this place
-- [ ] What is on the far leg
-- [ ] What is on the shelf, and how high is it
-- [ ] Fetch the hidden part
-- [ ] Is the drawer open
-- [ ] Tidy by colour
-- [ ] Carried to another table
-- [ ] The existing bench task moved from `tasks.py` to a task file
+- [x] Task format, with the referee's checks (inside a region, on top of, upright, fixture open or closed, reported number within tolerance)
+- [x] Where is everyone
+- [x] How big is this place
+- [x] What is on the far leg
+- [x] What is on the shelf, and how high is it
+- [x] Fetch the hidden part
+- [x] Is the drawer open
+- [x] Tidy by colour
+- [x] Carried to another table (`moved_arm.toml`, task `carried`, swaps to `open_small`)
+- [x] The existing bench task moved from `tasks.py` to a task file (`bench.toml`, task `tidy`; `tasks.py` stays until the old API is retired)
 
 Operator API:
 
-- [ ] List, read, create, change and delete scene files over REST
-- [ ] Validate a scene over REST; an invalid edit is refused with its reason
-- [ ] Load a scene, swap scenes and reset while the world runs
-- [ ] Referee endpoints: true state, task goals, handing in an answer
+- [x] List, read, create, change and delete scene files over REST
+- [x] Validate a scene over REST; an invalid edit is refused with its reason
+- [x] Load a scene, swap scenes and reset while the world runs
+- [x] Referee endpoints: true state, task goals, handing in an answer
 
 Checks:
 
-- [ ] Scene validation suite written
-- [ ] Scene validation suite run, every scene and task passing
+- [x] Scene validation suite written (`sim/tests/test_scenes.py`, `sim/tests/test_operator_api.py`)
+- [x] Scene validation suite run, every scene and task passing (134 passed, 2026-11-14)
 
 ## Step 3. Markers
 
