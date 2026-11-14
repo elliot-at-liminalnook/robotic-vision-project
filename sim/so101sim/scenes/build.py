@@ -274,7 +274,7 @@ def build(scene: dict) -> Built:
     spec.option.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
     spec.option.impratio = 10
     g = spec.visual.global_
-    g.offwidth, g.offheight, g.azimuth, g.elevation = 1920, 1080, 150, -25
+    g.offwidth, g.offheight, g.azimuth, g.elevation = 2400, 1350, 150, -25      # room to render wider than the picture (lens.py)
     light = scene.get("light", {})
     amb = float(light.get("ambient", 0.25))
     spec.visual.headlight.ambient = [amb] * 3

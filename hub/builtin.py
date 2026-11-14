@@ -78,10 +78,14 @@ class Lens:
 
     def at(self, width: int, height: int) -> "Lens":
         """The same lens for a picture scaled to another size (same field of view)."""
-        sx, sy = width / self.width, height / self.height
-        return Lens(width, height, self.fx * sx, self.fy * sy, self.cx * sx, self.cy * sy, self.dist)
+        sx, sy = width / self.width, height / self.height           # (cx, cy are pixel-index coordinates)
+        return Lens(width, height, self.fx * sx, self.fy * sy, (self.cx + 0.5) * sx - 0.5, (self.cy + 0.5) * sy - 0.5, self.dist)
 
 
-# Raspberry Pi Camera Module 3 Wide, 1920x1080 mode: f = 2.75 mm over 2.8 um binned pixels.
-# Datasheet values. The real lens has barrel distortion these leave out (the hub corrects from what it sees).
-LENSES = {"cm3_wide": Lens(1920, 1080, 982.1, 982.1, 960.0, 540.0)}
+# Raspberry Pi Camera Module 3 Wide, 1920x1080 mode, from its datasheet alone:
+#   f = 2.75 mm over 2.8 um binned pixels -> 982.1 px; centre = the middle of the picture;
+#   barrel distortion from the stated field of view: 102 deg across the full sensor where a pinhole of
+#   this focal length gives 99 deg -> k1 = -0.033 (one term).
+# One unit differs from the next, so these are a starting point the hub corrects from what it sees.
+LENSES = {"cm3_wide": Lens(1920, 1080, 982.1, 982.1, 959.5, 539.5, (-0.033, 0.0, 0.0, 0.0, 0.0))}
+LENSES["pinhole"] = Lens(1920, 1080, 982.1, 982.1, 959.5, 539.5)      # no distortion at all: for comparison only

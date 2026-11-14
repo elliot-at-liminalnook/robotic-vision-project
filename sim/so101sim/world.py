@@ -19,6 +19,7 @@ import mujoco
 import numpy as np
 
 from . import scenes
+from .lens import FULL_H, FULL_W, Lens, lens_for
 from .scenes import geometry as G
 from .scenes import tasks as T
 from .scenes.build import JOINTS
@@ -44,6 +45,9 @@ class World:
         self.model = self.built.model
         self.generation += 1
         self.answers: dict[str, dict] = {}        # task name -> what was handed in
+        for r in getattr(self, "_renderers", {}).values():
+            r.close()
+        self._renderers, self._lenses, self._frames = {}, {}, 0
         self.reset()
         for hook in self.on_load:
             hook(self)
@@ -65,15 +69,40 @@ class World:
             mujoco.mj_step(self.model, self.data)
 
     # ---- pictures ------------------------------------------------------------
-    def render(self, camera: str, width: int = 1920, height: int = 1080) -> np.ndarray:
-        """What a camera sees now, as an ideal pinhole picture (RGB). The lens comes later (so101sim/lens.py)."""
+    def _pinhole(self, camera: str, width: int, height: int, fovy_deg: float | None = None) -> np.ndarray:
         key = (self.generation, width, height)
-        if getattr(self, "_renderer_key", None) != key:
-            if getattr(self, "_renderer", None) is not None:
-                self._renderer.close()
-            self._renderer, self._renderer_key = mujoco.Renderer(self.model, height, width), key
-        self._renderer.update_scene(self.data, camera=camera)
-        return self._renderer.render().copy()
+        if key not in self._renderers:
+            if len(self._renderers) >= 4:                       # (each holds a frame buffer)
+                self._renderers.pop(next(iter(self._renderers))).close()
+            self._renderers[key] = mujoco.Renderer(self.model, height, width)
+        c = self.model.camera(camera).id
+        keep = float(self.model.cam_fovy[c])
+        if fovy_deg is not None:
+            self.model.cam_fovy[c] = fovy_deg
+        try:
+            self._renderers[key].update_scene(self.data, camera=camera)
+            return self._renderers[key].render().copy()
+        finally:
+            self.model.cam_fovy[c] = keep
+
+    def lens(self, camera: str, width: int = FULL_W, height: int = FULL_H) -> Lens:
+        """This camera's lens at this picture size. Ground truth: the hub is never given it."""
+        key = (self.generation, camera, width, height)
+        if key not in self._lenses:
+            seed = int(self.scene.get("imperfections", {}).get("seed", 0))
+            self._lenses[key] = Lens(lens_for(camera, seed), width, height)
+        return self._lenses[key]
+
+    def render(self, camera: str, width: int = FULL_W, height: int = FULL_H, ideal: bool = False) -> np.ndarray:
+        """What a camera gives now (RGB): the scene through that camera's own lens and sensor (so101sim/lens.py).
+        ideal: the perfect pinhole picture instead, for checks that are not about the lens."""
+        if camera not in self.built.cameras:
+            raise KeyError(f"no camera '{camera}'; there are {sorted(self.built.cameras)}")
+        if ideal:
+            return self._pinhole(camera, width, height)
+        self._frames += 1
+        rng = np.random.default_rng([int(self.scene.get("imperfections", {}).get("seed", 0)), self.generation, self._frames])
+        return self.lens(camera, width, height).shoot(lambda w, h, fovy: self._pinhole(camera, w, h, fovy), rng)
 
     def camera_pose(self, camera: str, relative_to_body: str | None = None) -> np.ndarray:
         """The referee's: a camera's true pose (4x4; camera frame x right, y down, z forward) in the scene's

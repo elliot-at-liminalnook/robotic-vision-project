@@ -422,6 +422,25 @@ plate behind the wrist camera. Their places are written once, in [hardware/tags/
 - Reading them is the hub's job: [hub/README.md](../hub/README.md).
 - `World.render(camera, width, height)` gives a full-size still; 640x360 is too small for locating.
 
+## The lens: pictures are not perfect (`so101sim/lens.py`)
+
+MuJoCo draws an ideal pinhole picture. `World.render(camera, width, height)` passes it through that
+camera's own lens and sensor first:
+
+| Effect | How | Placeholder value |
+|---|---|---|
+| Distortion | The scene is rendered wider and larger than needed, then warped by OpenCV's lens model about the camera's true focal lengths and centre | k1 = −0.033, from the datasheet's 102° field where a pinhole gives 99° |
+| Darkening toward the corners | A gain that falls with distance from the centre | 35 % at the corner |
+| Blur | Gaussian, more off-centre | sigma 0.6 px at the centre, 1.4 px at the corner (at 1080p) |
+| Noise | Read noise plus shot noise, different in every frame | 1.5 grey levels + 0.25 × √level |
+
+- **Every camera has its own lens** (`lens_for(name, seed)`): focal length within about 1 %, centre within
+  about 6 px, distortion a little different. The seed is the scene's `[imperfections] seed`.
+- **The hub is never given these numbers.** It has the camera kind's nominal values (`hub/builtin.py`).
+- `render(..., ideal=True)` gives the pinhole picture, for checks that are not about the lens.
+- A full-size picture takes about 0.3 s (2.4 s the first time a size is used).
+- All values are placeholders until one of the real cameras is calibrated. JPEG is left to the camera port.
+
 ## Physical invariants: nothing clips, nothing jumps
 
 Enforced in layers, because each one fails differently (limits in `config/safety.toml`):
@@ -549,6 +568,7 @@ The tests go after classes of bugs, not single cases:
 | `test_scenes.py` | Scenes as files. Every scene in `sim/scenes/` is valid and survives being written and read back. The lip has no gap for any outline. `workcell.toml` is today's model plus the lip. Random right-angled outlines are tiled exactly. Seventeen kinds of fault (unknown field, a thing past the lip, an overlap, a thing in mid-air, a task about nothing, a task already done, a thing too big for its place, ...) are each named by the validator. An invalid scene is not saved |
 | `test_operator_api.py` | The operator's API. Scenes are listed and read back as they are; a patch changes only what it names; changing the loaded scene restarts the world. Twenty-four kinds of refused request each say why and change no file and nothing in the world. Fuzzed methods, paths and bodies never get a server error and never leave an invalid scene on disk. Loading another scene leaves nothing of the old one. Every arrangement goal of the bench task follows the things themselves; answers are scored against the truth and the caller is not told; a pose answer is scored in the named device's own frame; a task that swaps scenes is scored in the scene swapped to |
 | `test_markers.py` | Printed tags. The simulated tag is the printed file and the family's bits. The hub's belief about each tag (place, facing, which edge is up, size) is what the model has, and every tag lies flat on a face of the part that carries it. Each tag alone, seen from in front, gives the right pose with orientation. A mirrored or turned tag never yields a trusted wrong fix. Cameras in every scene, and at twelve seeded places no file knows, are located from the picture alone within the stated error, and the stated uncertainty covers the true error. Moving a camera 3 cm moves the estimate 3 cm. A flat reading is flagged, not believed. The hub imports nothing from the simulation |
+| `test_lens.py` | The lens model. Dots at known points come out where OpenCV's own projection puts them with the camera's true values (to 0.35 px). A straight line comes out bowed outward, evenly; the ideal lens leaves it straight. Corners are darker and the middle is not. Noise differs frame to frame and leaves the level alone. Every camera has its own lens, the same every time, and none is the nominal one. Cameras are still located through the lens within what is stated, with honest uncertainty |
 | `test_bus.py` | The servo bus in the loop. Packets: any packet round-trips, every packet is found in fuzzed garbage, no flipped bit is accepted. Register table equals the vendor spreadsheet; every register behaves by its row. No fuzzed instruction stream breaks a servo. Under injected faults the driver returns checked data or raises. Bus time equals the byte counts at three baud rates. Set-up mistakes are caught at connect, before any write. The arm moves the same with the bus as without. Teleop grasps and lifts through a clean bus and a faulty one, under the invariant monitor, without writing any register a servo ignores |
 
 ## Verified results (2026-11-09)

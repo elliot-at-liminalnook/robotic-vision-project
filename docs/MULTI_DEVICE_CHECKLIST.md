@@ -72,11 +72,11 @@ Plan: [5.4 Finding where the devices are](MULTI_DEVICE_PLAN.md#54-finding-where-
 
 Plan: [5.10 Keeping the gap small](MULTI_DEVICE_PLAN.md#510-keeping-the-gap-small)
 
-- [ ] Lens distortion on every camera's picture
-- [ ] Corner darkening, off-centre blur, sensor noise
-- [ ] A slightly different lens per simulated camera
-- [ ] Recorded: how much worse step 3's accuracy is through the lens
-- [ ] Tests written
+- [x] Lens distortion on every camera's picture
+- [x] Corner darkening, off-centre blur, sensor noise
+- [x] A slightly different lens per simulated camera
+- [x] Recorded: how much worse step 3's accuracy is through the lens (median 8 → 18 mm, worst 21 → 37 mm at 1080p; `hub/README.md`, DECISIONS MD22)
+- [x] Tests written (`sim/tests/test_lens.py`, not run)
 
 ## Step 5. Hub
 

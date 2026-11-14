@@ -27,6 +27,20 @@ How well it does, in the simulation's ideal pictures (no lens model yet), camera
 | 1920x1080 | 4 to 21 mm: within 3.5 % of the camera's distance | under 2 deg |
 | 1280x720 | 7 to 52 mm: within 8 % of the distance | under 4 deg |
 
+Through the lens model (`sim/so101sim/lens.py`: each camera's own distortion, darkening, blur and noise),
+corrected with the camera kind's nominal values only, 1920x1080, the same twelve placements:
+
+| | Median error | Worst error | Worst, as a share of distance | Error over stated uncertainty, worst |
+|---|---|---|---|---|
+| Ideal picture | 8 mm | 21 mm | 2.6 % | 1.2 |
+| Through the lens, nominal correction | 18 mm | 37 mm | 4.2 % | 1.7 |
+| Through the lens, no correction at all | 17 mm | 34 mm | 4.3 % | 2.0 |
+
+- About twice as bad through the lens. Correcting with the nominal distortion makes no difference to
+  position here: what dominates is that a unit's focal length differs from the datasheet's (the camera
+  in this check was 2.2 % long, which is 2.2 % of the distance). The hub has to find each camera's own
+  values from what it sees (step 12 of the plan); until then, 6 % of the distance and 2.5 deg is what is stated.
+
 - A fix is **trusted** only with two or more base tags that are not all in one plane, and a pose that
   explains them. Two front faces alone, or one tag, are reported as ambiguous with a very large
   uncertainty, not guessed.

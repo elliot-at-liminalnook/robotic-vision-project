@@ -28,6 +28,7 @@ from so101sim.world import World
 
 ARM_TAGS = builtin.tags("arm")
 BASE_TAGS = sorted(i for i, t in ARM_TAGS.items() if t.on == "base")
+PINHOLE = builtin.LENSES["pinhole"]
 LIMIT = {1080: (0.035, 2.0), 720: (0.08, 4.0)}           # stated error of a trusted fix: fraction of the camera's distance, degrees
 
 
@@ -38,6 +39,12 @@ def scene_with_camera(at, look, name="open_small"):
     s["devices"] = [d for d in s["devices"] if d["kind"] != "rover"]
     s.pop("tasks", None)                                      # (they are about the rover)
     return s, cam["name"]
+
+
+def locate_ideal(w, cam, height=1080):
+    """Locate from the ideal pinhole picture: these tests are about tags and geometry, not the lens (test_lens.py)."""
+    img = w.render(cam, height * 16 // 9, height, ideal=True)
+    return locate.camera_from_arm(img, PINHOLE.at(img.shape[1], img.shape[0]))
 
 
 def errors(fix, truth):
@@ -113,7 +120,7 @@ def tag_views():
         next(d for d in s["devices"] if d["kind"] == "camera")["post"] = False
         s["objects"] = []
         w = World(s)
-        out[i] = (w.render(cam, 1280, 720), w.camera_pose(cam, "base"))
+        out[i] = (w.render(cam, 1280, 720, ideal=True), w.camera_pose(cam, "base"))
     return out
 
 
@@ -123,8 +130,7 @@ def test_each_tag_alone_gives_the_right_pose_orientation_included(tag_views, tag
     image, truth = tag_views[tag_id]
     found = [d for d in V.detect(image) if d.id == tag_id]
     assert found and found[0].side_px > 60, f"tag {tag_id} is not seen from in front of it"
-    lens = builtin.LENSES["cm3_wide"].at(1280, 720)
-    fix = V.body_pose(found, {tag_id: ARM_TAGS[tag_id].corners()}, lens)
+    fix = V.body_pose(found, {tag_id: ARM_TAGS[tag_id].corners()}, PINHOLE.at(1280, 720))
     T = G.inv(fix.T_cam_body)
     assert np.linalg.norm(T[:3, 3] - truth[:3, 3]) < 0.006 and math.degrees(G.angle_between(T[:3, :3], truth[:3, :3])) < 2.5
 
@@ -135,14 +141,16 @@ def test_a_tampered_tag_never_gives_a_trusted_wrong_answer(how):
     or not be trusted: the tags no longer agree with each other."""
     s, cam = scene_with_camera([0.55, 0.50, 0.30], [0.14, 0.27, 0.02])
     w = World(s)
-    clean = locate.camera_from_arm(w.render(cam))
+    clean = locate_ideal(w, cam)
     victim = clean.tags[0]
     tex = w.model.texture(f"tag_{victim}")
     n = int(tex.height[0]) * int(tex.width[0]) * int(tex.nchannel[0])
     data = w.model.tex_data[int(tex.adr[0]):int(tex.adr[0]) + n].reshape(int(tex.height[0]), int(tex.width[0]), int(tex.nchannel[0]))
     data[:] = data[:, ::-1] if how == "mirrored" else np.rot90(data)
-    w._renderer_key = None                                   # (a new renderer: textures are loaded when it is made)
-    fix = locate.camera_from_arm(w.render(cam))
+    for r in w._renderers.values():                          # (new renderers: textures are loaded when one is made)
+        r.close()
+    w._renderers.clear()
+    fix = locate_ideal(w, cam)
     truth = w.camera_pose(cam, "base")
     if fix is not None and fix.trusted:
         e, a = errors(fix, truth)
@@ -161,7 +169,7 @@ def test_cameras_in_every_scene_are_located_from_the_picture_alone(name):
     for cam in [d["name"] for d in w.scene["devices"] if d["kind"] == "camera"]:
         truth = w.camera_pose(cam, "base")
         for height in (1080, 720):
-            fix = locate.camera_from_arm(w.render(cam, height * 16 // 9, height))
+            fix = locate_ideal(w, cam, height)
             if fix is None or not fix.trusted:
                 continue                                     # not in view, or too little to go on: said so, not guessed
             e, a = errors(fix, truth)
@@ -183,7 +191,7 @@ def test_a_camera_put_anywhere_is_followed(seed):
     truth = w.camera_pose(cam, "base")
     trusted = 0
     for height in (1080, 720):
-        fix = locate.camera_from_arm(w.render(cam, height * 16 // 9, height))
+        fix = locate_ideal(w, cam, height)
         if fix is None or not fix.trusted:
             continue
         trusted += 1
@@ -197,7 +205,7 @@ def test_moving_the_camera_three_centimetres_moves_the_estimate_three_centimetre
     a, cam = scene_with_camera([0.55, 0.50, 0.30], [0.14, 0.27, 0.02])
     b = copy.deepcopy(a)
     next(d for d in b["devices"] if d["kind"] == "camera")["at_m"] = [0.58, 0.50, 0.30]
-    fa, fb = (locate.camera_from_arm(World(s).render(cam)) for s in (a, b))
+    fa, fb = (locate_ideal(World(s), cam) for s in (a, b))
     moved = fb.T_base_cam[:3, 3] - fa.T_base_cam[:3, 3]
     assert abs(moved[0] - 0.03) < 0.008 and abs(moved[1]) < 0.008 and abs(moved[2]) < 0.008, moved
 
@@ -208,7 +216,7 @@ def test_a_flat_reading_is_flagged_not_believed():
     next(d for d in s["devices"] if d["kind"] == "camera")["post"] = False
     s["objects"] = []
     w = World(s)
-    fix = locate.camera_from_arm(w.render(cam, 1280, 720))
+    fix = locate_ideal(w, cam, 720)
     assert fix is not None and set(fix.tags) <= {1, 5}, fix
     if len(fix.tags) == 2 and not fix.ambiguous:
         e, a = errors(fix, w.camera_pose(cam, "base"))
@@ -219,7 +227,7 @@ def test_a_flat_reading_is_flagged_not_believed():
 
 def test_no_tag_in_view_is_no_answer():
     s, cam = scene_with_camera([0.55, 0.50, 0.30], [0.65, 0.10, 0.0])       # looking away from the arm
-    assert locate.camera_from_arm(World(s).render(cam)) is None
+    assert locate_ideal(World(s), cam) is None
 
 
 # ---------------------------------------------------------------- the hub knows no place
