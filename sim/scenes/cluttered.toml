@@ -106,8 +106,8 @@ looking_at_m = [0.45, 0.35, 0.0]
 [[devices]]
 kind = "rover"
 name = "rover"
-at_m = [0.74, 0.56]
-facing_deg = 200
+at_m = [0.74, 0.62]
+facing_deg = 250
 
 [[tasks]]
 name = "tidy_by_colour"

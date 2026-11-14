@@ -351,6 +351,9 @@ def build(scene: dict) -> Built:
             info = add_rover(spec, name, d["at_m"][0], d["at_m"][1], math.radians(d.get("facing_deg", 0.0)), CONTACT)
             built.devices.append({"kind": "rover", "name": name, "at_m": list(d["at_m"][:2]),
                                   "facing_deg": float(d.get("facing_deg", 0.0)), **info})
+            built.start.update(info["start"])
+            for cam in info["cameras"]:
+                built.cameras[cam["name"]] = {"device": name, "mounted_on": cam["body"]}
     try:
         built.model = spec.compile()
     except Exception as e:                       # MuJoCo's own message names the element

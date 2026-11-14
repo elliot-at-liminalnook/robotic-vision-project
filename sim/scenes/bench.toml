@@ -110,8 +110,8 @@ looking_at_m = [0.22, 0.0, 0.02]
 [[devices]]
 kind = "rover"
 name = "rover"
-at_m = [0.5, 0.3]
-facing_deg = 200
+at_m = [0.52, -0.25]
+facing_deg = 100
 
 [[tasks]]
 name = "tidy"

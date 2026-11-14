@@ -105,13 +105,13 @@ Plan: [5.4](MULTI_DEVICE_PLAN.md#54-finding-where-the-devices-are)
 
 Plan: [5.6 The rover](MULTI_DEVICE_PLAN.md#56-the-rover)
 
-- [ ] CAD scripts under `hardware/rover/`: chassis, mast and lift, head with slide and racks, wheels
-- [ ] Printable parts as STEP and STL
-- [ ] CAD checks: one solid each, nothing overlapping through full travel, wires long enough
-- [ ] Simulation model generated from the CAD: masses and inertia from the meshes, a joint per axis
-- [ ] Contacts: tyres, skid, lip, head against chassis, camera carriages and end stops
+- [x] CAD scripts under `hardware/rover/`: chassis, mast and lift, head with slide and racks, wheels
+- [x] Printable parts as STEP and STL
+- [x] CAD checks: one solid each, nothing overlapping through full travel, wires long enough
+- [x] Simulation model generated from the CAD: masses and inertia from the meshes, a joint per axis
+- [x] Contacts: tyres, skid, lip, head against chassis, camera carriages and end stops
 - [ ] Rover section in `docs/BOM.md`: real parts with links and prices, including head servos, controller board, 5 V regulator, fuse, charger
-- [ ] Tests written (stands, rolls, steers; head axes reach their ranges)
+- [x] Tests written (stands, rolls, steers; head axes reach their ranges): `sim/tests/test_rover_model.py`, not run as a suite
 
 ## Step 8. Rover controlled
 

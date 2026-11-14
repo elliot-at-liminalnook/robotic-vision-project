@@ -1,0 +1,186 @@
+{
+ "parts": {
+  "chassis_base": {
+   "solids": 1,
+   "volume_mm3": 99627.7,
+   "mass_g_printed": 49.4,
+   "body": "chassis"
+  },
+  "deck": {
+   "solids": 1,
+   "volume_mm3": 48960.0,
+   "mass_g_printed": 24.3,
+   "body": "chassis"
+  },
+  "wheel_left": {
+   "solids": 1,
+   "volume_mm3": 25688.2,
+   "mass_g_printed": 12.7,
+   "body": "wheel_left"
+  },
+  "wheel_right": {
+   "solids": 1,
+   "volume_mm3": 25688.2,
+   "mass_g_printed": 12.7,
+   "body": "wheel_right"
+  },
+  "turret": {
+   "solids": 1,
+   "volume_mm3": 9997.1,
+   "mass_g_printed": 5.0,
+   "body": "turret"
+  },
+  "lift_arm": {
+   "solids": 1,
+   "volume_mm3": 13274.5,
+   "mass_g_printed": 6.6,
+   "body": "arm"
+  },
+  "head_block": {
+   "solids": 1,
+   "volume_mm3": 4401.7,
+   "mass_g_printed": 2.2,
+   "body": "head_block"
+  },
+  "head_beam": {
+   "solids": 1,
+   "volume_mm3": 44347.7,
+   "mass_g_printed": 22.0,
+   "body": "head"
+  },
+  "pinion": {
+   "solids": 1,
+   "volume_mm3": 4284.2,
+   "mass_g_printed": 2.1,
+   "body": "head"
+  },
+  "head_tag_plate": {
+   "solids": 1,
+   "volume_mm3": 1800.0,
+   "mass_g_printed": 0.9,
+   "body": "head"
+  },
+  "carriage_left": {
+   "solids": 1,
+   "volume_mm3": 28957.2,
+   "mass_g_printed": 14.4,
+   "body": "carriage_left"
+  },
+  "carriage_right": {
+   "solids": 1,
+   "volume_mm3": 31117.2,
+   "mass_g_printed": 15.4,
+   "body": "carriage_right"
+  }
+ },
+ "bodies": {
+  "chassis": {
+   "mass_g": 596.7
+  },
+  "wheel_left": {
+   "mass_g": 20.7
+  },
+  "wheel_right": {
+   "mass_g": 20.7
+  },
+  "turret": {
+   "mass_g": 57.0
+  },
+  "arm": {
+   "mass_g": 6.6
+  },
+  "head_block": {
+   "mass_g": 54.2
+  },
+  "head": {
+   "mass_g": 77.0
+  },
+  "carriage_left": {
+   "mass_g": 30.4
+  },
+  "carriage_right": {
+   "mass_g": 31.4
+  }
+ },
+ "total_mass_g": 894.7,
+ "centre_of_mass_mm": {
+  "head stowed": [
+   68.1,
+   -0.7,
+   44.3
+  ],
+  "head raised": [
+   44.8,
+   -0.7,
+   74.6
+  ],
+  "head stowed, turned 90 deg, cameras apart": [
+   31.8,
+   37.1,
+   44.3
+  ],
+  "head stowed, turned 170 deg": [
+   -5.5,
+   7.2,
+   44.3
+  ],
+  "support": "wheels touch at x = 0, y = +/-65; the caster at x = 128; the rear skid at x = -42 is 1.5 mm clear"
+ },
+ "ranges": {
+  "lens_height_mm": [
+   26.5,
+   165.0
+  ],
+  "lens_spacing_mm": [
+   60.0,
+   200.0
+  ],
+  "pan_deg": [
+   -170.0,
+   170.0
+  ],
+  "lift_deg": [
+   -15.0,
+   90.0
+  ],
+  "tilt_deg": [
+   -60.0,
+   30.0
+  ],
+  "lowest_point_of_head_stowed_mm": 10.5,
+  "lowest_point_stowed_and_tilted_down_mm": -41.8,
+  "lens_ahead_of_axle_stowed_mm": 244.8
+ },
+ "wires": {
+  "pan servo to lift servo (across pan)": {
+   "ends_apart_at_most_mm": 57.2,
+   "needs_mm": 101.0,
+   "stock_lead_mm": 200,
+   "ok": true
+  },
+  "lift servo to tilt servo (along the arm)": {
+   "ends_apart_at_most_mm": 129.4,
+   "needs_mm": 192.0,
+   "stock_lead_mm": 200,
+   "ok": true
+  },
+  "tilt servo to spacing servo (across tilt)": {
+   "ends_apart_at_most_mm": 86.6,
+   "needs_mm": 138.0,
+   "stock_lead_mm": 200,
+   "ok": true
+  },
+  "head to a camera board (across the slide)": {
+   "ends_apart_at_most_mm": 104.8,
+   "needs_mm": 161.0,
+   "stock_lead_mm": 200,
+   "ok": true
+  },
+  "note": "needs = 25 % slack plus 30 mm for the plugs. The lead across pan must also take a turn of +/-170 deg: leave a loop. Routing is not designed."
+ },
+ "interference_mm3": {
+  "poses_checked": 93,
+  "pairs_that_overlap": {}
+ },
+ "all_parts_one_solid": true
+}

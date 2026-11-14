@@ -114,3 +114,50 @@ on = "wrist_camera_assembly"
 at_m = [0.002, 0.10436, -0.01245]
 normal = [0, 0.70169, 0.71248]
 up = [0, -0.71248, 0.70169]
+
+# ---- the rover (ids 10 to 19) ------------------------------------------------------------------
+# Four tags on its chassis (top of the cover over its controller board, its rear plate, a plate on
+# each side ahead of the wheels) and one on its head, on top of the camera-spacing servo. Frames:
+# the chassis's has its origin on the surface under the middle of the wheel axle, x forward, y left,
+# z up; the head's has its origin on the tilt axis (hardware/rover/build_rover.py).
+[devices.rover]
+
+[[devices.rover.tags]]
+id = 10
+size_m = 0.024
+on = "chassis"
+at_m = [-0.033, 0.0, 0.065]
+normal = [0, 0, 1]
+up = [1, 0, 0]
+
+[[devices.rover.tags]]
+id = 11
+size_m = 0.03
+on = "chassis"
+at_m = [-0.048, 0.0, 0.0285]
+normal = [-1, 0, 0]
+up = [0, 0, 1]
+
+[[devices.rover.tags]]
+id = 12
+size_m = 0.03
+on = "chassis"
+at_m = [0.089, 0.054, 0.0285]
+normal = [0, 1, 0]
+up = [0, 0, 1]
+
+[[devices.rover.tags]]
+id = 13
+size_m = 0.03
+on = "chassis"
+at_m = [0.089, -0.054, 0.0285]
+normal = [0, -1, 0]
+up = [0, 0, 1]
+
+[[devices.rover.tags]]
+id = 14
+size_m = 0.024
+on = "head"
+at_m = [0.064, -0.01225, 0.040]
+normal = [0, 0, 1]
+up = [1, 0, 0]

@@ -75,7 +75,7 @@ looking_at_m = [0.45, 0.38, 0.0]
 kind = "rover"
 name = "rover"
 at_m = [0.62, 0.16]
-facing_deg = 120
+facing_deg = 20
 
 [[tasks]]
 name = "fetch_from_shelf"
