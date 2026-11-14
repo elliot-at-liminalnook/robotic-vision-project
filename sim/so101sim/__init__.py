@@ -5,11 +5,16 @@ for checks on machines without Newton.
     sim = load_backend("newton")          # or "mujoco"
     sim.reset(); sim.set_targets(q); sim.step(n); images = sim.render()
 """
-from .config import ROOT, SIM, MODEL_DIR, WORKCELL, CameraSpec, load_cameras, load_servos
-from .servo import ServoMap, SlewLimiter
+import sys as _sys
+from pathlib import Path as _Path
 
-ARM_JOINTS = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll")
-JOINTS = ARM_JOINTS + ("gripper",)
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:      # the hub package is at the repo's top level
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from hub.arm import ARM_JOINTS, JOINTS  # noqa: E402  (the arm's controller-side code lives in hub/arm)
+from hub.arm.servo import ServoMap, SlewLimiter  # noqa: E402
+
+from .config import ROOT, SIM, MODEL_DIR, WORKCELL, CameraSpec, load_cameras, load_servos  # noqa: E402
 
 
 def load_backend(name: str, **kwargs):
