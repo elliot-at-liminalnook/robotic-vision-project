@@ -130,11 +130,14 @@ Plan: [5.6](MULTI_DEVICE_PLAN.md#56-the-rover), [5.9 Safety when nothing is know
 
 Plan: [5.5 Finding out what the place is](MULTI_DEVICE_PLAN.md#55-finding-out-what-the-place-is), [5.3](MULTI_DEVICE_PLAN.md#53-the-knowledge-rule-nothing-about-the-surroundings)
 
-- [ ] Survey routine: pan sweeps at several tilts, spacings and heights, wheels still
-- [ ] Size from the head's own motion, with the other rulers checked against it
-- [ ] The rover in the locator: its cameras, its tags, its odometry
-- [ ] A first map with sizes and the devices in view, from a standing start
-- [ ] Tests written
+- [x] Survey routine: pan sweeps at several tilts, spacings and heights, wheels still (`hub/survey.py`; `POST /survey`, or at start with `--survey`)
+- [x] Size from the head's own motion, with the other rulers checked against it (tags' printed size, the lift's height; the wheels are not checked: they do not move)
+- [x] The rover in the locator: its cameras, its tags, its odometry
+- [x] A first map with sizes and the devices in view, from a standing start (`GET /place/state`, `/place/picture`; distances good to about 5 % until the pair is calibrated in step 12)
+- [x] Tests written (`sim/tests/test_survey.py`, not run as a suite; each test called directly once, passing)
+
+Found on the way, and dealt with: the head's blind swing spinning the rover (pan torque cut to 5 %, the survey checks at the end that it stood still); pictures taken while the head was still swinging.
+Left open: a gyro for the rover (DECISIONS MD56); the survey does not see behind the rover.
 
 ## Step 10. Map
 

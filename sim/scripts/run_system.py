@@ -3,6 +3,7 @@
 
     python sim/scripts/run_system.py                       # scene open_small
     python sim/scripts/run_system.py --scene shelf
+    python sim/scripts/run_system.py --scene bench --survey    # a rover, if there is one, looks all round before the API opens
     curl http://127.0.0.1:8765/                            # the hub's API: give this guide to the model
     curl http://127.0.0.1:8766/                            # the operator's API: scenes, truth, scoring (never for the model)
 
@@ -36,6 +37,8 @@ def main() -> int:
     ap.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this machine only)")
     ap.add_argument("--hub-port", type=int, default=8765, help="the hub's API, for the model")
     ap.add_argument("--operator-port", type=int, default=8766, help="the operator's API: scenes and ground truth")
+    ap.add_argument("--survey", action="store_true", help="if a rover is found, it looks all round from where it stands first "
+                                                         "(about a minute); otherwise POST /survey does the same when asked")
     ap.add_argument("--quiet", action="store_true", help="don't log each request")
     a = ap.parse_args()
     try:
@@ -43,7 +46,7 @@ def main() -> int:
     except (FileNotFoundError, ValueError) as e:
         ap.error(str(e))
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))          # a kill leaves through the same finally
-    hub = Hub(world.ports)
+    hub = Hub(world.ports, survey=a.survey)
     hub_server = HTTPServer((a.host, a.hub_port), hub_api.make_handler(hub, verbose=not a.quiet))
     op_server = HTTPServer((a.host, a.operator_port), operator_api.make_handler(operator_api.Operator(world), verbose=not a.quiet))
     hub_server.timeout = op_server.timeout = 0.02

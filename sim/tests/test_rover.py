@@ -331,10 +331,10 @@ def test_a_head_joint_that_cannot_follow_stops_pushing(system):
     assert abs(pan.torque) < 0.3 * pan.torque_limit_nm, "it is still pushing against the stop"
 
 
-def test_the_heads_servos_are_held_to_a_third_of_their_torque(system):
+def test_the_heads_servos_are_held_to_a_third_of_their_torque_and_the_pan_to_a_twentieth(system):
     world, _ = system
     for s in world.buses[0].servos:
-        assert s.get("max_torque_limit") == (350 if s.id >= 21 else 1000), s.id
+        assert s.get("max_torque_limit") == (50 if s.id == 21 else 350 if s.id >= 21 else 1000), s.id
         assert s.get("operating_mode") == (1 if s.id in (11, 12) else 0)
 
 

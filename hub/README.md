@@ -62,8 +62,10 @@ about a scene is read.
 /devices/camera_1            picture
 /groups/cameras              every camera, wherever it is mounted
 /groups/movers               everything that can move itself
-/place                       what has been found of the surroundings (nothing yet)
+/place                       what has been found of the surroundings: nothing until something has looked
 ```
+
+With a rover there is also `/devices/rover/...` (below) and a root command `survey`.
 
 Reading a node gives the state of everything under it; `stop` at a node freezes everything under it.
 
@@ -111,9 +113,13 @@ Reading a node gives the state of everything under it; `stop` at a node freezes 
   it within 6 mm of the surface; a head joint 12° behind for 0.5 s is held where it is; a wheel servo at
   its limit for 0.4 s stops the wheels; nothing moves below 3.3 V per cell; six reads lost in a row is
   "the rover has not answered". The rover's own board stops the wheels after 0.4 s without a word.
-- **Not solved here:** the rover is light. A head that meets something turns the whole rover instead of
-  stopping, and wheels that spin against something are counted as distance. Only looking tells. The head's
-  servos are held to 35 % of their torque so such a push is at least gentle.
+- **The rover is light.** A head that meets something can turn the whole rover instead of stopping, and
+  the wheels do not count it; wheels that spin against something are counted as distance. Only looking
+  tells. The lift, tilt and spacing servos are held to 35 % of their torque. The pan, which swings the
+  head's whole length into places no camera has seen, is held to 5 %: against a post it stalls and is
+  noticed, and the rover is turned 3 to 5° where at 35 % it was turned right round.
+- `settle()` waits until the head has been still for 0.3 s. The two cameras are separate boards: anything
+  measured across both pictures needs a head that is not still swinging.
 
 Smoke-checked: 0.05 to 0.40 m drives within 2 % and counted within 1 %; turns within 4° and counted within
 2.5 %; a 0.12 m square ends within 30 mm and 8° of where it began; every head command against the true
@@ -128,13 +134,25 @@ an age and what supports it; or `known: false` and why.
 |---|---|
 | fixed camera → arm | Every sighting by that camera of the arm's tags: the blocks beside its base, and the tag behind its wrist camera at each pose the arm showed it in. All of one camera's sightings are solved together, as points known in the arm's frame against where they fell in the pictures |
 | arm → its wrist camera, its gripper | The joint angles and the arm's own shape (`arm/kinematics.py`), now |
-| anything → anything | Chained through the arm: a camera to another camera, a camera to the wrist camera |
+| fixed camera → rover, arm's wrist camera → rover | The rover's five tags in that camera's picture: where the rover was then |
+| rover → arm | The arm's tags in one of the rover's own pictures, through where the head's joints put that camera |
+| rover → its two cameras | The head's joint angles and the rover's own shape (`rover/description.py`), now |
+| anything → anything | Chained through the arm or the rover, by whichever chain is surest: two cameras with no arm between them are related through the rover both can see |
+
+A sighting of the rover is of where it was. Its wheels carry the link forward to now, and the link
+loosens by 3 % of the distance and of the angle they say it has gone since. A newer sighting is
+preferred unless an older one is clearly surer. If the rover turns out to have been moved without its
+wheels counting it (below), what it saw and what saw it during that time is dropped.
 
 - `POST /locate` takes a fresh full-size picture on every fixed camera. With `{"show_wrist_tag": true}` the
   arm goes to its home and turns its wrist tag through six poses, with a picture at each: a camera that
   cannot see the arm's base is located that way.
-- `GET /where?of=A&relative_to=B`: names are a device's name, `arm/wrist_camera`, `arm/gripper`. It answers
-  from what has been seen so far; if nothing links the two it takes one fresh look first.
+- `GET /where?of=A&relative_to=B`: names are a device's name, `arm/wrist_camera`, `arm/gripper`,
+  `rover/head/left`, `rover/head/right`. It answers from what has been seen so far; if nothing links the two
+  it takes one fresh look first (every camera, the rover's included). Asked the other way round it gives
+  the inverse through the same chain.
+- `POST /locate` says for each fixed camera whether it is placed against the arm (or, with no arm, the
+  rover) by any chain, and for the rover whether it is placed against the arm.
 - **Not known** when: there is no arm; a camera has seen none of the arm's tags; all it saw lies in one
   plane (the reading could be tilted either way); or the sightings do not agree.
 - **Moved:** if new sightings fall more than 12 px from where the old pose puts them, what was seen before
@@ -145,6 +163,64 @@ an age and what supports it; or `known: false` and why.
 
 Smoke-checked in the seven scenes with an arm and a camera and at eight seeded camera places with their
 own lenses: errors 6 to 17 mm at 0.5 to 0.85 m, every one inside 3.5 times what was stated.
+
+## The start-up survey, and the place (`survey.py`, `place.py`, `vision/stereo.py`)
+
+`POST /survey` (or `Hub(provider, survey=True)`, `run_system.py --survey`): the rover looks all round
+from where it stands. Its wheels do not move. About 75 s.
+
+| Pass | Lens height | Tilt | Lens spacing | For |
+|---|---|---|---|---|
+| 1 | 0.10 m | 25° down | 60 mm | what stands under and between things |
+| 2 | 0.16 m | 38° down | 60 mm | what is near, from above |
+| 3 | 0.16 m | 12° down | 100 mm | further out |
+
+In each pass the head turns outward from straight ahead in 40° steps, one way and then the other, and
+at each stop, once it is still, both cameras take a full-size picture. From each pair:
+
+- **Depth** (`vision/stereo.py`). The two lenses differ, so the rows of the two pictures are first lined
+  up from the pictures themselves. Matching runs at half size and again at quarter size, where the
+  same search reaches twice as near; where they disagree the coarser is believed. Only the middle of
+  the picture (31° each side) and the nearer part (7 times the spacing: 0.42 m, 0.7 m) go into the map.
+- **Level.** The flat ground in each cloud is found and heights are measured from it, not from what the
+  head's joints say is level.
+- **The map** (`place.py`): a 10 mm grid in the rover's frame as it stood. Each cell is seen free, seen
+  occupied (with how high), or never seen. From it: the surface's seen area and outline; long straight
+  thin runs (a raised edge has the surface on one side only); things, each with where, how big, how
+  high; and which ways nothing has looked. `GET /place/state`, `GET /place/picture` (PNG).
+- **The locator**: any arm tag in view relates the arm to the rover.
+- **The rulers.** Everything is sized by the spacing drive. Checked against it: a tag's side measured
+  across the pair over its printed side, and the lenses' height above the ground as the pair measures
+  it over what the lift says. A ruler more than 4 % out is reported as disagreeing.
+
+**The head swings into places no camera has looked at.** Its end is 0.22 m ahead of the pan axis and
+leads the view. So the pan pushes with 5 % of its torque: against a post it stalls, the lag is
+noticed, the survey does not turn that way again (at any height), and the rover has been turned
+3 to 5°. At the end the first view is taken again and set against what it was: a picture that has slid
+says how far the rover was turned (`stood_still`). Up to 8° the map is kept with a warning; beyond
+that, or if the two pictures cannot be matched, the map and what the rover saw of other devices are
+dropped, and the answer says so.
+
+What it gives, smoke-checked against the referee (not known to the hub):
+
+| Scene | Views used | Found |
+|---|---|---|
+| `no_arm` | 23 of 27 | All four raised edges, straight, 5 to 30 mm out; the cube and cylinder within 10 mm, heights within 2 mm; both cameras related through the rover |
+| `bench` | 17 of 27 | The arm 5 mm from where it is (stated 16 mm); the stack of things at the right place; tags measure 1.016 of their printed size |
+| `shelf`, `cluttered` | 9 to 14 | The rover stands beside tall things; the head meets one, the rover is turned 1.4° and 8°: a warning in one, the map dropped in the other |
+
+What it does not do yet:
+
+- **The pair is not calibrated.** The two lenses' centres are a few pixels apart, which shifts every
+  disparity by the same amount: distances from the rover are 2 to 5 % long or short. Finding the
+  shift from the spacing drive alone was tried and does not work with a printed rack (DECISIONS MD52).
+  Step 12 does it from tags.
+- **Very near things.** Nearer than about 2.7 times the spacing a tenth to a third of what is matched
+  is matched wrongly. Cells whose points scatter below the surface are left as never seen.
+- **Plain things.** A plain surface gives no depth. A plain straight edge gives depth only where it
+  crosses the picture's rows at an angle; such an edge is placed within about 70 mm.
+- **Behind the rover** (beyond 160° each way) and within about 0.15 m of it are never seen.
+- A short 'edge of the surface' may be the hidden side of something standing on the surface.
 
 ## How well locating does
 

@@ -82,6 +82,8 @@ def guide(hub: Hub) -> str:
              "    POST /{node}/{command}          an action; the body is JSON with its parameters",
              "    POST /{node}/stop               freeze everything under the node; POST /stop freezes everything",
              "    GET  /where?of=A&relative_to=B  where device A is in B's own frame: an estimate with its uncertainty, or known = false",
+             "    GET  /place/state               what has been found of the surroundings: the surface, things, and what is still unseen",
+             "    GET  /place/picture             the same as a picture (PNG)",
              "    POST /wait                      {\"seconds\": s}: let time pass",
              "    POST /discover                  look again for what is plugged in",
              "  Units: metres, radians, seconds. Every answer is JSON with \"ok\"; when ok is false, \"error\" says why and nothing was changed.",
@@ -91,7 +93,9 @@ def guide(hub: Hub) -> str:
              "  device carries each. /where uses them: it answers from what the cameras have seen so far, with an uncertainty, how",
              "  old the newest sighting is and what supports it; or known = false and why. POST /locate looks afresh; with",
              "  show_wrist_tag the arm shows a tag at several poses, which locates cameras that cannot see its base.",
-             "  Names for /where: a device's name, and arm/wrist_camera and arm/gripper for those parts of the arm.", "",
+             "  Names for /where: a device's name, and arm/wrist_camera, arm/gripper, rover/head/left and rover/head/right for those parts.",
+             "  The place starts empty. POST /survey has the rover look all round from where it stands and build the map; the map is in",
+             "  the rover's frame as it stood then.", "",
              "What was found"]
     devices = hub.root.children["devices"].children
     if not devices:
@@ -119,8 +123,10 @@ def guide(hub: Hub) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _picture(node: Node, query: dict):
+def _picture(node: Node, query: dict, hub: Hub | None = None):
     cam = node.camera
+    if cam is None and hub is not None and node is hub.root.children.get("place"):
+        return 200, "image/png", hub.place.picture()
     if cam is None:
         raise Refused(f"/{node.path} is not a camera", 404)
     width = query.get("width")
@@ -170,7 +176,7 @@ def dispatch(hub: Hub, method: str, url: str, body_bytes: bytes = b"") -> tuple[
                 if last == "state":
                     result = {"ok": True, "path": "/" + head, **hub.node(head).state()}
                 elif last == "picture":
-                    return _picture(hub.node(head), query)
+                    return _picture(hub.node(head), query, hub)
                 else:
                     result = {"ok": True, **hub.node(path).describe()}
         else:

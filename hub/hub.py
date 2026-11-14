@@ -21,6 +21,10 @@ from .bus import BusError
 from .camera import Camera
 from .errors import Refused
 from .locator import Locator
+from .place import Place
+from . import geometry as G
+from . import survey as S
+from .vision import tags as V
 from .ports import PortError, PortProvider
 from .rover.device import RoverDevice
 from .tree import Command, Node, Param
@@ -29,8 +33,10 @@ WIGGLE_MIN = 4.0               # grey levels: the wrist camera's picture changes
 
 
 class Hub:
-    def __init__(self, provider: PortProvider):
+    def __init__(self, provider: PortProvider, survey: bool = False):
+        """survey: when a rover is found, have it look all round from where it stands before anything else."""
         self.provider = provider
+        self.survey_at_start = survey
         self.arm: ArmDevice | None = None
         self.rover: RoverDevice | None = None
         self.cameras: dict[str, Camera] = {}            # fixed cameras, by the name the hub gave each
@@ -81,9 +87,24 @@ class Hub:
         if self.locator is None:
             self.locator = Locator(self.clock)
         self.locator.clock = self.clock
-        self.locator.reset(self.arm is not None, {name: c.lens(1920, 1080) for name, c in self.cameras.items()})   # nothing seen yet
+        self.locator.reset(self.arm is not None, {name: c.lens(1920, 1080) for name, c in self.cameras.items()},     # nothing seen yet
+                           rover_now=(lambda: (self.rover.head_now(), self.rover.pose.copy())) if self.rover is not None else None)
+        self.place = Place()                                # and nothing known of the place: it may be another one
+        self.map_origin = np.zeros(3)
+        self.last_survey: list[dict] = []                   # every view of the last survey, in detail
         self._build_tree()
-        return self.found()
+        out = self.found()
+        if self.survey_at_start and self.rover is not None and len(self.rover.cameras) == 2:
+            try:
+                out["survey"] = S.survey(self)
+            except Refused as e:
+                self.notes.append(f"the start-up survey was not made: {e}")
+        return out
+
+    def map_from_rover(self) -> np.ndarray:
+        """The rover's frame now, in the map's frame (the rover's frame as it stood when the map was begun)."""
+        se2 = lambda p: G.pose(G.rot_z(float(p[2])), [float(p[0]), float(p[1]), 0.0])      # noqa: E731
+        return G.inv(se2(self.map_origin)) @ se2(self.rover.pose)
 
     def _find_wrist_camera(self, cams: list[Camera]) -> Camera | None:
         """Which camera rides on the arm's wrist? Turn the wrist a little: its picture changes, the others' barely do."""
@@ -121,8 +142,10 @@ class Hub:
         self.root = Node("", "root", "everything this hub has found", state=lambda: {"time_s": round(float(self.clock.now()), 3)})
         devices = self.root.add(Node("devices", "branch", "each device that answered, by the name the hub gave it"))
         groups = self.root.add(Node("groups", "branch", "the same parts, gathered by kind of interest across devices"))
-        self.root.add(Node("place", "branch", "what has been found of the surroundings",
-                           state=lambda: {"found": "nothing yet: the hub does not map its surroundings yet"}))
+        self.root.add(Node("place", "branch", "what has been found of the surroundings: the surface, things on it, and where "
+                                              "nothing has looked yet", state=lambda: self.place.summary(),
+                           about={"picture": "GET /place/picture gives the map as a PNG: grey = never seen, light = seen free, "
+                                             "red = something stands there (brighter = higher). The rover began at the centre, facing right."}))
         cams = groups.add(Node("cameras", "group", "every camera, wherever it is mounted"))
         movers = groups.add(Node("movers", "group", "everything that can move itself"))
         if self.arm is not None:
@@ -145,6 +168,12 @@ class Hub:
                 cams.links[f"rover_{side}"] = node
         self.root.commands["wait"] = Command("Let time pass with every device holding still.", self.wait,
                                              {"seconds": Param("number", "how long", True, 0.0, 30.0)})
+        if self.rover is not None:
+            self.root.commands["survey"] = Command(
+                "The rover looks all round from where it stands, without driving: its head turns through its range at a few "
+                "heights, tilts and camera spacings, taking a pair of pictures at each. From them come the map (GET /place), "
+                "the devices whose tags it saw (GET /where), and a check of its rulers. Takes a few minutes.",
+                lambda: S.survey(self))
         self.root.commands["locate"] = Command(
             "Take a fresh full-size picture on every fixed camera and work out again where the devices are relative to each "
             "other, from the printed tags in view. With show_wrist_tag the arm also turns the tag behind its wrist camera "
@@ -195,11 +224,20 @@ class Hub:
         for name, cam in self.cameras.items():
             frame = cam.grab()
             out[name] = self.locator.see(name, frame.image, frame.t, q)
+        if self.rover is not None and self.wrist is not None:      # the arm's own camera may have the rover in view
+            frame = self.wrist.grab()
+            self.locator.see_from_wrist(V.detect(frame.image), frame.t, q, self.wrist.lens(frame.image.shape[1], frame.image.shape[0]))
+        if self.rover is not None and self.arm is not None:        # and the rover's cameras may have the arm in view
+            head = self.rover.head_now()
+            for side, cam in self.rover.cameras.items():
+                frame = cam.grab()
+                self.locator.see_from_rover(side, V.detect(frame.image), frame.t, head, q, self.rover.pose.copy(),
+                                            cam.lens(frame.image.shape[1], frame.image.shape[0]))
         return out
 
     def locate(self, show_wrist_tag: bool = False) -> dict:
         """Look, and work out again where the devices are (hub/locator.py)."""
-        if not self.cameras:
+        if not self.cameras and self.rover is None:
             return {"ok": True, "cameras": {}, "note": "there is no fixed camera to look with", "time_s": round(float(self.clock.now()), 3)}
         seen = [self._look()]
         shown = 0
@@ -219,14 +257,14 @@ class Hub:
                 seen.append(self._look())
                 shown += 1 if r.get("ok") else 0
             self.arm.actions.move_joints(shoulder_pan=float(home[0]), wrist_roll=float(home[4]), timeout_s=4.0)
-        return {"ok": True, "cameras": self.locator.summary(), "pictures_per_camera": len(seen), "wrist_tag_poses": shown,
+        return {"ok": True, **self.locator.summary(), "pictures_per_camera": len(seen), "wrist_tag_poses": shown,
                 "tags_seen": {name: sorted({t for look in seen for t in look[name]["tags_seen"]}) for name in self.cameras},
                 "time_s": round(float(self.clock.now()), 3)}
 
     def where(self, of: str, relative_to: str = "arm") -> dict:
         """Where one device is in another's frame, from what has been seen of the devices' tags.
         If nothing links them yet, one fresh look is taken first."""
-        alias = {"wrist_camera": "arm/wrist_camera", "gripper": "arm/gripper"}
+        alias = {"wrist_camera": "arm/wrist_camera", "gripper": "arm/gripper", "rover/left": "rover/head/left", "rover/right": "rover/head/right"}
         of, relative_to = alias.get(of, of), alias.get(relative_to, relative_to)
         names = self.locator.names()
         for n in (of, relative_to):
@@ -236,7 +274,7 @@ class Hub:
             raise Refused("of and relative_to are the same device")
         q = self.arm.link.q() if self.arm is not None else None
         out = self.locator.where(of, relative_to, q)
-        if not out["known"] and self.arm is not None and self.cameras:
+        if not out["known"] and (self.cameras or (self.rover is not None and self.arm is not None)):
             self._look()
             out = self.locator.where(of, relative_to, q)
         if not out["known"] and self.arm is not None:

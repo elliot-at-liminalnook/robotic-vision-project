@@ -170,7 +170,8 @@ def test_the_hub_finds_what_is_there_in_every_scene(name):
     else:
         assert hub.wrist is None and hub.arm is None
     members = call(hub, "GET", "/groups/cameras")[1]["under_it"]
-    assert len(members) == kinds.count("camera") + ("arm" in kinds)
+    assert len(members) == kinds.count("camera") + ("arm" in kinds) + 2 * ("rover" in kinds)       # (a rover carries two)
+    assert ("rover" in devices) == ("rover" in kinds)
 
 
 PICKS = [("workcell", "cube", 0.03), ("open_small", "red_cube", 0.03), ("moved_arm", "red_cube", 0.03),
@@ -210,7 +211,7 @@ def test_where_gives_an_estimate_with_honest_uncertainty_or_says_it_cannot_tell(
     truth = world.camera_pose(world.scene["devices"][1]["name"], "base")
     err = np.linalg.norm(np.array(r["position_m"]) - truth[:3, 3])
     assert err < 0.06 * np.linalg.norm(truth[:3, 3]) and err < 3.5 * r["uncertainty_m"], (err, r)
-    assert np.dot(r["looking_along"], truth[:3, 2]) > 0.995
+    assert np.dot(r["axes"]["z"], truth[:3, 2]) > 0.995                 # (a camera's z axis is the way it looks)
     back = call(hub, "GET", "/where?of=arm&relative_to=camera_1")[1]
     assert back["known"] and abs(np.linalg.norm(back["position_m"]) - np.linalg.norm(r["position_m"])) < 0.02
     for q, code in (("of=camera_9", 404), ("of=arm&relative_to=arm", 400), ("relative_to=arm", 400)):
@@ -311,11 +312,11 @@ def test_devices_that_vanish_are_said_to_have_vanished_and_are_found_again():
         status, r = call(hub, method, path, body)
         assert status == 503 and "did not answer" in r["error"] and "discover" in r["error"], (path, status, r)
     r = call(hub, "POST", "/discover")[1]
-    assert sorted(r["devices"]) == ["camera_1", "camera_2"] and hub.arm is None
+    assert sorted(r["devices"]) == ["camera_1", "camera_2", "rover"] and hub.arm is None
     assert call(hub, "GET", "/devices/arm")[0] == 404
     assert call(hub, "GET", "/devices/camera_2/picture?width=320")[0] == 200
     world.load("moved_arm")
-    assert sorted(call(hub, "POST", "/discover")[1]["devices"]) == ["arm", "camera_1"]
+    assert sorted(call(hub, "POST", "/discover")[1]["devices"]) == ["arm", "camera_1", "rover"]
     assert call(hub, "POST", "/devices/arm/move_joints", {"shoulder_pan": 0.2})[1]["reached"]
 
 
@@ -338,7 +339,8 @@ def test_pictures_come_as_jpeg_or_json_with_tags(started):
     assert status == 200 and ctype == "image/jpeg" and out[:2] == b"\xff\xd8"
     r = call(hub, "GET", "/devices/camera_1/picture?tags=true&width=320&base64=true")[1]
     assert r["width"] == 320 and r["media_type"] == "image/jpeg" and r["data"]
-    assert r["tags"] and all(t["on_a"] == "arm" and len(t["corners_px"]) == 4 for t in r["tags"])
+    assert r["tags"] and all(t["on_a"] in ("arm", "rover") and len(t["corners_px"]) == 4 for t in r["tags"])
+    assert any(t["on_a"] == "arm" for t in r["tags"])
 
 
 def test_it_works_over_a_real_socket_and_the_launcher_answers_help(started):

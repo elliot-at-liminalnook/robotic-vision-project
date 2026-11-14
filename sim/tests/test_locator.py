@@ -215,9 +215,12 @@ def test_stated_uncertainty_covers_the_error_wherever_the_camera_is(seed):
 
 # ---------------------------------------------------------------- not known, and no longer true
 def test_nothing_links_two_cameras_without_an_arm():
-    hub = Hub(World("no_arm").ports)
+    s = scenes.read("no_arm")
+    s.pop("tasks")
+    s["devices"] = [d for d in s["devices"] if d["kind"] == "camera"]          # (with its rover they are linked through the rover:
+    hub = Hub(World(s).ports)                                                    #  test_survey.py)
     r = call(hub, "GET", "/where?of=camera_2&relative_to=camera_1")[1]
-    assert r["ok"] and r["known"] is False and "no arm" in r["why"]
+    assert r["ok"] and r["known"] is False and "nothing here carries tags" in r["why"]
     assert call(hub, "POST", "/locate", {"show_wrist_tag": True})[0] == 400
     assert call(hub, "POST", "/locate")[1]["ok"]
 
@@ -241,7 +244,7 @@ def test_age_counts_from_the_newest_sighting():
     later = call(hub, "GET", "/where?of=camera_1&relative_to=arm")[1]
     assert later["age_s"] >= first["age_s"] + 1.9 and later["position_m"] == first["position_m"]
     call(hub, "POST", "/locate")
-    assert call(hub, "GET", "/where?of=camera_1&relative_to=arm")[1]["age_s"] < 0.5
+    assert call(hub, "GET", "/where?of=camera_1&relative_to=arm")[1]["age_s"] < 1.5      # (a look takes a picture from every camera)
 
 
 def test_a_camera_that_was_moved_is_not_believed_to_be_where_it_was():

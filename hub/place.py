@@ -8,6 +8,10 @@ cell is one of three things, and the third matters most:
     seen occupied   something stands there, or the surface's raised edge (with how high)
     never seen      nothing has looked there: where to look next, and where to be careful
 
+A cell is left as never seen when a view's points in it disagree with there being a surface at all
+(a fifth of them well below it): that is what mismatched points look like, and stereo mismatches
+whatever is very near the lenses.
+
 Depth comes from the rover's two cameras (hub/vision/stereo.py). Each cloud is first levelled by the
 ground it contains: the rover knows it stands on a surface, and what it sees of that surface near
 itself is where zero height is, not what its head's joints say (they sag a few millimetres).
@@ -25,7 +29,9 @@ CELL_M = 0.01
 HALF_CELLS = 150                       # the grid reaches this many cells each way from the origin (1.5 m)
 MIN_POINTS = 12                        # points in a cell before one view says anything about it
 GROUND_BAND_M = 0.006                  # the surface, give or take
+BELOW_M = 0.012                        # a cell with a fifth of its points this far under the surface is not believed
 HIGH_M = 0.010                         # this far above the surface is something standing on it
+EDGE_MIN_M = 0.18                      # a straight thin run of occupied cells at least this long is reported as an edge
 MAX_RANGE_M = 1.2                      # points further than this from the camera are not used
 UNSEEN, FREE, OCCUPIED = 0, 1, 2
 
@@ -60,12 +66,15 @@ class Place:
         order = np.argsort(flat)
         flat, z = flat[order], z[order]
         cells, starts, counts = np.unique(flat, return_index=True, return_counts=True)
-        added = {"free": 0, "occupied": 0}
+        added = {"free": 0, "occupied": 0, "doubtful": 0}
         for c, s, n in zip(cells, starts, counts):
             if n < MIN_POINTS:
                 continue
             zs = z[s:s + n]
             i, j = divmod(int(c), 2 * HALF_CELLS)
+            if np.mean(zs < -BELOW_M) > 0.2:
+                added["doubtful"] += 1                       # nothing is seen under the surface: these points are mismatched
+                continue                                     # (or it is past the surface's edge: either way, not known)
             if np.percentile(zs, 70) > HIGH_M:
                 self.high[i, j] += 1
                 self.height[i, j] = max(self.height[i, j], float(np.percentile(zs, 90)))
@@ -87,44 +96,71 @@ class Place:
     def _xy(self, i, j):
         return ((np.asarray(i) - HALF_CELLS + 0.5) * CELL_M, (np.asarray(j) - HALF_CELLS + 0.5) * CELL_M)
 
+    def _split(self) -> tuple[list[dict], np.ndarray]:
+        """The occupied cells as (long straight thin runs, the mask of what is left). A raised edge round the surface
+        shows as a long straight thin run; so does the face of something long. Which it is shows in what is beside it."""
+        c = self.cells()
+        left = ndimage.binary_closing(c == OCCUPIED, structure=np.ones((3, 3)))
+        occupied, runs = left.copy(), []
+        for _ in range(16):
+            lines = cv2.HoughLinesP(left.astype(np.uint8) * 255, 1, np.pi / 180, threshold=14,
+                                    minLineLength=int(EDGE_MIN_M / CELL_M), maxLineGap=5)
+            if lines is None:
+                break
+            j1, i1, j2, i2 = max(lines.reshape(-1, 4), key=lambda l: (l[2] - l[0]) ** 2 + (l[3] - l[1]) ** 2)   # (x = column j, y = row i)
+            near, wide = (np.zeros(left.shape, np.uint8) for _ in range(2))
+            cv2.line(near, (int(j1), int(i1)), (int(j2), int(i2)), 1, 5)
+            cv2.line(wide, (int(j1), int(i1)), (int(j2), int(i2)), 1, 15)
+            on = occupied & (near > 0)
+            if (occupied & (wide > 0)).sum() > 1.7 * on.sum():       # not thin: the side of something broad
+                left &= near == 0
+                continue
+            left &= near == 0
+            a, b = np.array(self._xy(i1, j1), float), np.array(self._xy(i2, j2), float)
+            along = (b - a) / max(float(np.linalg.norm(b - a)), 1e-9)
+            normal = np.array([-along[1], along[0]])
+            sides = []
+            for sign in (1, -1):                                  # is the surface seen on this side of it?
+                pts = [a + along * t + normal * sign * 0.04 for t in np.arange(0.0, float(np.linalg.norm(b - a)), CELL_M)]
+                ij = np.floor(np.array(pts) / CELL_M).astype(int) + HALF_CELLS
+                ij = ij[(ij >= 0).all(axis=1) & (ij < 2 * HALF_CELLS).all(axis=1)]
+                sides.append(float((c[ij[:, 0], ij[:, 1]] == FREE).mean()) if len(ij) else 0.0)
+            h = self.height[on]
+            one_sided = max(sides) > 0.3 and min(sides) < 0.15
+            inward = normal * (1 if sides[0] >= sides[1] else -1)
+            runs.append({"from_m": [round(float(v), 3) for v in a], "to_m": [round(float(v), 3) for v in b],
+                         "length_m": round(float(np.linalg.norm(b - a)), 3),
+                         "height_m": round(float(np.percentile(h[h > 0], 80)) if (h > 0).any() else 0.0, 3),
+                         "direction_deg": round(math.degrees(math.atan2(along[1], along[0])) % 180.0, 1),
+                         "kind": "edge of the surface" if one_sided else "straight side of something",
+                         **({"surface_is_towards": [round(float(v), 2) for v in inward]} if one_sided else {})})
+        return runs, left
+
     def things(self) -> list[dict]:
-        """Each connected patch of occupied cells: where, how big, how high, and whether it looks like an edge of the surface."""
-        occ = ndimage.binary_closing(self.cells() == OCCUPIED, structure=np.ones((3, 3)))
+        """Each connected patch of occupied cells that is not a long straight thin run: where, how big, how high."""
+        _, occ = self._split()
         labels, n = ndimage.label(occ, structure=np.ones((3, 3)))
         out = []
         for k in range(1, n + 1):
             i, j = np.nonzero(labels == k)
-            if len(i) < 4:
-                continue                                         # a speck: one view's noise
+            if len(i) < 4 or (len(i) < 8 and self.high[i, j].max() < 2):
+                continue                                         # a speck: a few cells that only one view saw
             x, y = self._xy(i, j)
             pts = np.c_[x, y]
             centre = pts.mean(axis=0)
             _, _, axes = np.linalg.svd(pts - centre, full_matrices=False)
             along, across = (pts - centre) @ axes[0], (pts - centre) @ axes[1]
-            length, width = float(np.ptp(along) + CELL_M), float(np.ptp(across) + CELL_M)
             h = self.height[i, j]
-            height = float(np.percentile(h[h > 0], 80)) if (h > 0).any() else 0.0
-            edge = length > 0.20 and width < 0.06 and height < 0.045
-            out.append({"at_m": [round(float(centre[0]), 3), round(float(centre[1]), 3)], "length_m": round(length, 3),
-                        "width_m": round(width, 3), "height_m": round(height, 3),
-                        "long_axis_deg": round(math.degrees(math.atan2(axes[0][1], axes[0][0])) % 180.0, 1),
-                        "kind": "edge of the surface" if edge else "thing", "cells": int(len(i))})
+            out.append({"at_m": [round(float(centre[0]), 3), round(float(centre[1]), 3)],
+                        "length_m": round(float(np.ptp(along) + CELL_M), 3), "width_m": round(float(np.ptp(across) + CELL_M), 3),
+                        "height_m": round(float(np.percentile(h[h > 0], 80)) if (h > 0).any() else 0.0, 3),
+                        "long_axis_deg": round(math.degrees(math.atan2(axes[0][1], axes[0][0])) % 180.0, 1), "cells": int(len(i))})
         return sorted(out, key=lambda t: -t["cells"])
 
     def surface(self) -> dict:
-        """The surface as far as it has been seen: its area, how far it reaches, and an outline."""
+        """The surface as far as it has been seen: its area, how far it reaches, an outline, and the straight edges found."""
         c = self.cells()
-        things = self.things()
-        inside = c == FREE
-        for t in things:                                         # a thing stands on the surface; an edge is its boundary
-            if t["kind"] == "thing":
-                pass
-        seen = ndimage.binary_closing(inside | (c == OCCUPIED), structure=np.ones((5, 5)))
-        seen = ndimage.binary_fill_holes(seen)
-        edges = np.zeros_like(seen)
-        labels, n = ndimage.label(ndimage.binary_closing(c == OCCUPIED, structure=np.ones((3, 3))), structure=np.ones((3, 3)))
-        for k, t in zip(range(1, n + 1), [None] * n):
-            pass
+        seen = ndimage.binary_fill_holes(ndimage.binary_closing(c != UNSEEN, structure=np.ones((5, 5))))
         i, j = np.nonzero(seen)
         if len(i) == 0:
             return {"seen": False}
@@ -133,11 +169,14 @@ class Place:
         big = max(contours, key=cv2.contourArea)
         poly = cv2.approxPolyDP(big, 3.0, True).reshape(-1, 2)   # (points are (column j, row i))
         outline = [[round(float(v), 3) for v in self._xy(pi, pj)] for pj, pi in poly]
+        runs, _ = self._split()
         return {"seen": True, "area_seen_m2": round(float(seen.sum()) * CELL_M ** 2, 4),
                 "reaches_m": {"x": [round(float(x.min()), 3), round(float(x.max()), 3)], "y": [round(float(y.min()), 3), round(float(y.max()), 3)]},
                 "outline_m": outline,
-                "edges_found": [t for t in things if t["kind"] == "edge of the surface"],
-                "note": "area_seen is what has been seen so far, edges included; where no edge was found the surface may go on"}
+                "edges_found": runs,
+                "note": "area_seen is what has been seen so far, edges included; where no edge was found the surface may go on. "
+                        "An 'edge of the surface' has the surface seen on one side of it only: a long one is the surface's "
+                        "raised edge; a short one may be the hidden side of something standing on it"}
 
     def unseen(self) -> dict:
         """Where nothing has looked: inside the box the seen cells fill, and which ways from the map's origin."""
@@ -171,11 +210,12 @@ class Place:
                          "left, z up from the surface, metres). GET /where?of=rover&relative_to=... relates it to other devices",
                 "cell_m": CELL_M, "views": {"taken": self.views, "used": self.used},
                 "surface": self.surface(),
-                "things": [t for t in things if t["kind"] == "thing"],
+                "things": things,
                 "unseen": self.unseen(),
                 "rulers": self.rulers,
-                "note": "from the rover's two cameras: distances are good to about 5 %, heights to about 5 mm; a thing's far side "
-                        "and what stands behind it are not seen"}
+                "note": "from the rover's two cameras, out to about 0.7 m from where it stood: distances from there are good to "
+                        "about 5 % (the pair is not yet calibrated), heights to about 5 mm; a thing's far side and what stands "
+                        "behind it are not seen"}
 
     def picture(self, scale: int = 3) -> bytes:
         """The grid as a PNG: grey = never seen, light = free, dark = occupied (brighter red = higher). The rover began at the centre, facing right."""

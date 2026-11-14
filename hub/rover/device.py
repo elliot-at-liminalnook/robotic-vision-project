@@ -44,6 +44,11 @@ LAG_S = 0.5
 LOW_CELL_V, CELLS = 3.3, 3
 GONE_AFTER = 6                             # reads failing in a row: the rover is not answering
 HEAD_TORQUE_LIMIT = 350                    # of 1000: the head's servos push with about a third of what they could.
+PAN_TORQUE_LIMIT = 50                      # of 1000. The pan carries no weight, and it swings the head's whole width into places no
+                                           # camera has looked at yet. At 35 % a head that met a post turned the rover right round
+                                           # (175 deg) and every move reported "reached"; at 5 % the pan stalls against less than the
+                                           # tyres' grip, the lag is noticed, and the rover is turned 3 to 5 deg. At 2.5 % it cannot
+                                           # reliably move the head at all.
 #                                            The head weighs 0.2 kg; at full torque a servo shoves the whole rover aside
 NUM, BOOL = "number", "boolean"
 ABOUT = {
@@ -82,7 +87,7 @@ class RoverDevice:
         self.group.connect()
         self.group.configure()
         for s in self.head_servo.values():
-            self.group._ensure(s["id"], "max_torque_limit", HEAD_TORQUE_LIMIT)
+            self.group._ensure(s["id"], "max_torque_limit", PAN_TORQUE_LIMIT if s is self.head_servo.get("pan") else HEAD_TORQUE_LIMIT)
         fb = self._read()
         self.head_goal = self._head_from(fb)
         self.group.write_angles({self.head_servo[j]["id"]: self.head_goal[j] / self.head_servo[j]["ratio"] for j in HEAD_JOINTS})
@@ -223,6 +228,23 @@ class RoverDevice:
             out["why_not_reached"] = (held_back or (f"{self.last_block} stayed behind its goal: something is in the head's way. It holds "
                                                     "where it is." if self.last_block else f"the {timeout_s:g} s allowed ran out"))
         return out
+
+    def settle(self, timeout_s: float = 2.5) -> bool:
+        """Wait until the head is still: every joint within a tick and a half of where it was over the last 0.3 s.
+        A move is 'reached' once it is within a few degrees, and the head goes on swinging for a moment after. The two
+        cameras are separate boards and do not take their pictures at the same instant: from a head still moving, one
+        picture is several pixels beside the other, and everything measured across the pair is that much out."""
+        tol = {j: (0.0003 if j == "spacing" else 1.5 * 2 * math.pi / 4096 * abs(self.head_servo[j]["ratio"])) for j in HEAD_JOINTS}
+        seen, t0 = [], self.clock.now()
+        while self.clock.now() - t0 < timeout_s:
+            fb = self._tick()
+            if fb is None:
+                continue
+            seen.append(self._head_from(fb))
+            last = seen[-max(2, int(round(0.3 / TICK_S))):]
+            if len(last) * TICK_S >= 0.3 and all(max(h[j] for h in last) - min(h[j] for h in last) <= tol[j] for j in HEAD_JOINTS):
+                return True
+        return False
 
     def point(self, pan_deg=None, tilt_deg=None, timeout_s=6.0) -> dict:
         t = {}
