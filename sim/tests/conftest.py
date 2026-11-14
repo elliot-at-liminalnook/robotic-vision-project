@@ -21,6 +21,6 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")     # pygame without a window
 
 SIM = Path(__file__).resolve().parents[1]
 ROOT = SIM.parent
-for p in (SIM, SIM / "scripts", SIM / "tools", SIM / "tests", ROOT / "hardware" / "wrist_mount"):
+for p in (ROOT, SIM, SIM / "scripts", SIM / "tools", SIM / "tests", ROOT / "hardware" / "wrist_mount"):      # ROOT: the hub package
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))

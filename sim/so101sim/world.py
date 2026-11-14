@@ -64,6 +64,32 @@ class World:
         for _ in range(max(0, int(round(seconds / self.model.opt.timestep)))):
             mujoco.mj_step(self.model, self.data)
 
+    # ---- pictures ------------------------------------------------------------
+    def render(self, camera: str, width: int = 1920, height: int = 1080) -> np.ndarray:
+        """What a camera sees now, as an ideal pinhole picture (RGB). The lens comes later (so101sim/lens.py)."""
+        key = (self.generation, width, height)
+        if getattr(self, "_renderer_key", None) != key:
+            if getattr(self, "_renderer", None) is not None:
+                self._renderer.close()
+            self._renderer, self._renderer_key = mujoco.Renderer(self.model, height, width), key
+        self._renderer.update_scene(self.data, camera=camera)
+        return self._renderer.render().copy()
+
+    def camera_pose(self, camera: str, relative_to_body: str | None = None) -> np.ndarray:
+        """The referee's: a camera's true pose (4x4; camera frame x right, y down, z forward) in the scene's
+        frame, or in a body's."""
+        m, d = self.model, self.data
+        c = m.camera(camera).id
+        T = np.eye(4)
+        T[:3, :3] = d.cam_xmat[c].reshape(3, 3) @ np.diag([1.0, -1.0, -1.0])
+        T[:3, 3] = d.cam_xpos[c]
+        if relative_to_body is not None:
+            b = m.body(relative_to_body).id
+            Tb = np.eye(4)
+            Tb[:3, :3], Tb[:3, 3] = d.xmat[b].reshape(3, 3), d.xpos[b]
+            T = np.linalg.inv(Tb) @ T
+        return T
+
     # ---- the referee -------------------------------------------------------
     def truth(self) -> dict:
         """Where everything really is, in the scene's frame. For tests and scoring: never for the model."""

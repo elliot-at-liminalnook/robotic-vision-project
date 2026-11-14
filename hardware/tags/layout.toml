@@ -1,0 +1,116 @@
+# Where the printed tags are on each device, and how big.
+#
+# This is part of what a device IS: its maker fixes it, it is the same wherever the device is put
+# down, and the device's driver in the hub ships with it (docs/MULTI_DEVICE_PLAN.md, 5.3 and 5.4).
+# The simulation's model of each device is generated from the same numbers
+# (sim/tools/build_model.py for the arm), so the two cannot drift apart.
+#
+# A tag: `id` in the family below; `size_m` = side of its black square; `on` = the part of the
+# device it is fixed to (a body of the device's own model); `at_m` = its centre in that part's
+# frame; `normal` = the way it faces; `up` = the top of the artwork. A tag's own frame is then
+# x = right, y = up, z = out of its face, seen from in front.
+family = "tag36h11"
+quiet_zone_cells = 1            # white border round the black square, in cells (the square is 8 cells across)
+
+# ---- the arm (ids 0 to 9) ----------------------------------------------------------------------
+# Two tag blocks, one each side of the base, standing on the same surface as the base. Each is a
+# 38 mm cube with a 30 mm tag on its top, front, back and outer face, so that from any direction a
+# camera sees at least two tags of one rigid body: never one small tag alone (a flat tag read alone
+# can come out tilted the wrong way). The base's frame has x forward, y left, z up, and its origin
+# 2.4 mm above the surface.
+[devices.arm]
+
+[[devices.arm.parts]]
+name = "tag_block_left"
+on = "base"
+box_m = [0.038, 0.038, 0.038]
+at_m = [-0.012, 0.083, 0.0166]
+
+[[devices.arm.parts]]
+name = "tag_block_right"
+on = "base"
+box_m = [0.038, 0.038, 0.038]
+at_m = [-0.012, -0.083, 0.0166]
+
+[[devices.arm.tags]]
+id = 0
+size_m = 0.03
+on = "base"
+at_m = [-0.012, 0.083, 0.0356]
+normal = [0, 0, 1]
+up = [1, 0, 0]
+
+[[devices.arm.tags]]
+id = 1
+size_m = 0.03
+on = "base"
+at_m = [0.007, 0.083, 0.0166]
+normal = [1, 0, 0]
+up = [0, 0, 1]
+
+[[devices.arm.tags]]
+id = 2
+size_m = 0.03
+on = "base"
+at_m = [-0.031, 0.083, 0.0166]
+normal = [-1, 0, 0]
+up = [0, 0, 1]
+
+[[devices.arm.tags]]
+id = 3
+size_m = 0.03
+on = "base"
+at_m = [-0.012, 0.102, 0.0166]
+normal = [0, 1, 0]
+up = [0, 0, 1]
+
+[[devices.arm.tags]]
+id = 4
+size_m = 0.03
+on = "base"
+at_m = [-0.012, -0.083, 0.0356]
+normal = [0, 0, 1]
+up = [1, 0, 0]
+
+[[devices.arm.tags]]
+id = 5
+size_m = 0.03
+on = "base"
+at_m = [0.007, -0.083, 0.0166]
+normal = [1, 0, 0]
+up = [0, 0, 1]
+
+[[devices.arm.tags]]
+id = 6
+size_m = 0.03
+on = "base"
+at_m = [-0.031, -0.083, 0.0166]
+normal = [-1, 0, 0]
+up = [0, 0, 1]
+
+[[devices.arm.tags]]
+id = 7
+size_m = 0.03
+on = "base"
+at_m = [-0.012, -0.102, 0.0166]
+normal = [0, -1, 0]
+up = [0, 0, 1]
+
+# One tag on a 30 mm cover plate over the back of the wrist camera's board: it faces away from the
+# lens, so with the fingers pointing down it looks up and outward. Frame: the gripper's.
+# Centre = the board's outer face (hardware/wrist_mount) plus 0.8 mm.
+[[devices.arm.parts]]
+name = "wrist_tag_plate"
+on = "wrist_camera_assembly"
+box_m = [0.030, 0.030, 0.001]
+at_m = [0.002, 0.10401, -0.01281]
+normal = [0, 0.70169, 0.71248]       # the plate's thin direction
+up = [0, -0.71248, 0.70169]
+
+[[devices.arm.tags]]
+id = 8
+size_m = 0.024
+on = "wrist_camera_assembly"
+at_m = [0.002, 0.10436, -0.01245]
+normal = [0, 0.70169, 0.71248]
+up = [0, -0.71248, 0.70169]

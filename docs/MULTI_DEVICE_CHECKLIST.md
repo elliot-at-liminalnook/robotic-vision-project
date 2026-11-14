@@ -61,12 +61,12 @@ Checks:
 
 Plan: [5.4 Finding where the devices are](MULTI_DEVICE_PLAN.md#54-finding-where-the-devices-are), [4. Probe](MULTI_DEVICE_PLAN.md#4-probe-do-printed-markers-work-in-these-pictures)
 
-- [ ] OpenCV added to the requirements
-- [ ] Tag files that can be printed, the same files the simulation shows
-- [ ] Tags on the arm's base (a pair) and on the wrist camera holder, in the model
-- [ ] Tag detection in full-size stills
-- [ ] Each fixed camera located relative to the arm from pictures alone
-- [ ] Tests written (mirrored or rotated tag, flipped reading, no scene numbers in the code)
+- [x] OpenCV added to the requirements
+- [x] Tag files that can be printed, the same files the simulation shows
+- [x] Tags on the arm's base (a pair) and on the wrist camera holder, in the model
+- [x] Tag detection in full-size stills
+- [x] Each fixed camera located relative to the arm from pictures alone
+- [x] Tests written (mirrored or rotated tag, flipped reading, no scene numbers in the code): `sim/tests/test_markers.py`, not run
 
 ## Step 4. Lens
 

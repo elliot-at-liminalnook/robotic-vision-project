@@ -7,6 +7,7 @@ scipy        # used by trimesh when Newton loads meshes (else a noisy fallback)
 pygame       # teleop.py window
 pytest       # sim/tests
 openpyxl     # sim/tests/test_bus.py: reads the vendor's HX register spreadsheet
+opencv-python-headless   # hub/vision: printed tags (cv2.aruco), lens models; hardware/tags/make_tags.py
 # Model generator and studies:
 trimesh      # tools/build_model.py (wrist-mount meshes); tests/test_invariants.py (true-mesh clearances)
 rtree        # trimesh's distance queries (tests/test_invariants.py)

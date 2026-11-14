@@ -96,12 +96,7 @@ class CommandFilter:
                 if m.geom_bodyid[g] != b or not m.geom_contype[g]:
                     continue
                 R_g, p_g = d.geom_xmat[g].reshape(3, 3), d.geom_xpos[g]
-                if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH:
-                    v = _hull_vertices(m, m.geom_dataid[g])
-                elif m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX:
-                    v = np.array([[sx, sy, sz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]) * m.geom_size[g]
-                else:
-                    raise ValueError(f"collision shape type {m.geom_type[g]} on {m.body(b).name} is not handled")
+                v = _shape_vertices(m, g)
                 pts.append((R_b.T @ ((R_g @ v.T).T + p_g - p_b).T).T)
             if pts:
                 self.points[b] = np.vstack(pts)
@@ -110,7 +105,7 @@ class CommandFilter:
         if not self.base_geoms:
             raise ValueError("the robot model's base has no collision shapes (rebuild sim/model)")
         # A box around the base's shapes: only poses that reach into it need the exact check.
-        corners = np.vstack([(d.geom_xmat[g].reshape(3, 3) @ _hull_vertices(m, m.geom_dataid[g]).T).T + d.geom_xpos[g]
+        corners = np.vstack([(d.geom_xmat[g].reshape(3, 3) @ _shape_vertices(m, g).T).T + d.geom_xpos[g]
                              for g in self.base_geoms])
         self.base_lo, self.base_hi = corners.min(0) - 0.01, corners.max(0) + 0.01
         for g in self.base_geoms:                    # so the check reports shapes closer than the margin, not only overlaps
@@ -332,6 +327,15 @@ class CommandFilter:
             f"{k} {self.started[k]} time(s), {v * self._dt:.2f} s in all" for k, v in self.interventions.most_common())]
         lines += ["  " + self.describe(e) for e in list(self.events)[-8:]]
         return "\n".join(lines)
+
+
+def _shape_vertices(m, g: int) -> np.ndarray:
+    """Corner points of a collision shape (a mesh's hull or a box), in the geom's frame."""
+    if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH:
+        return _hull_vertices(m, m.geom_dataid[g])
+    if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX:
+        return np.array([[sx, sy, sz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]) * m.geom_size[g]
+    raise ValueError(f"collision shape type {m.geom_type[g]} on {m.body(m.geom_bodyid[g]).name} is not handled")
 
 
 def _hull_vertices(m, mesh_id: int) -> np.ndarray:

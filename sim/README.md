@@ -411,6 +411,17 @@ the hub is never given it.
 - `so101sim/world.py` is the running scene. Until the hub exists no device is driven in it: the arm holds
   its starting pose and the rover stands still.
 
+## Printed tags on the arm
+
+The arm carries nine AprilTag 36h11 tags so that other devices' cameras can find it: two 38 mm tag blocks
+beside its base (a 30 mm tag on the top, front, back and outer face of each) and a 24 mm tag on a cover
+plate behind the wrist camera. Their places are written once, in [hardware/tags/layout.toml](../hardware/tags/layout.toml);
+`tools/build_model.py` puts them in the arm's model (step 4c) and the hub reads the same file.
+
+- The blocks and the plate have collision shapes, so the command filter's base keep-out includes the blocks.
+- Reading them is the hub's job: [hub/README.md](../hub/README.md).
+- `World.render(camera, width, height)` gives a full-size still; 640x360 is too small for locating.
+
 ## Physical invariants: nothing clips, nothing jumps
 
 Enforced in layers, because each one fails differently (limits in `config/safety.toml`):
@@ -537,6 +548,7 @@ The tests go after classes of bugs, not single cases:
 | `test_stop.py` | The stop path, on direct joint targets, a clean bus and a faulty one. A stop from any motion (click, keys, joint jog, home) leaves the arm at rest where it was, even with the keys still held, and keeps a gripped cube gripped. With torque off no servo delivers any torque and nothing a person presses gets through. Torque on holds the arm where it lies. A broadcast a servo missed is noticed and repaired, or the servo is named; no goal is written while torque is off. The real program leaves torque off on Esc, an exception, Ctrl-C and SIGTERM |
 | `test_scenes.py` | Scenes as files. Every scene in `sim/scenes/` is valid and survives being written and read back. The lip has no gap for any outline. `workcell.toml` is today's model plus the lip. Random right-angled outlines are tiled exactly. Seventeen kinds of fault (unknown field, a thing past the lip, an overlap, a thing in mid-air, a task about nothing, a task already done, a thing too big for its place, ...) are each named by the validator. An invalid scene is not saved |
 | `test_operator_api.py` | The operator's API. Scenes are listed and read back as they are; a patch changes only what it names; changing the loaded scene restarts the world. Twenty-four kinds of refused request each say why and change no file and nothing in the world. Fuzzed methods, paths and bodies never get a server error and never leave an invalid scene on disk. Loading another scene leaves nothing of the old one. Every arrangement goal of the bench task follows the things themselves; answers are scored against the truth and the caller is not told; a pose answer is scored in the named device's own frame; a task that swaps scenes is scored in the scene swapped to |
+| `test_markers.py` | Printed tags. The simulated tag is the printed file and the family's bits. The hub's belief about each tag (place, facing, which edge is up, size) is what the model has, and every tag lies flat on a face of the part that carries it. Each tag alone, seen from in front, gives the right pose with orientation. A mirrored or turned tag never yields a trusted wrong fix. Cameras in every scene, and at twelve seeded places no file knows, are located from the picture alone within the stated error, and the stated uncertainty covers the true error. Moving a camera 3 cm moves the estimate 3 cm. A flat reading is flagged, not believed. The hub imports nothing from the simulation |
 | `test_bus.py` | The servo bus in the loop. Packets: any packet round-trips, every packet is found in fuzzed garbage, no flipped bit is accepted. Register table equals the vendor spreadsheet; every register behaves by its row. No fuzzed instruction stream breaks a servo. Under injected faults the driver returns checked data or raises. Bus time equals the byte counts at three baud rates. Set-up mistakes are caught at connect, before any write. The arm moves the same with the bus as without. Teleop grasps and lifts through a clean bus and a faulty one, under the invariant monitor, without writing any register a servo ignores |
 
 ## Verified results (2026-11-09)
