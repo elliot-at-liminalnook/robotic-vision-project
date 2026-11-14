@@ -295,3 +295,14 @@ See `sim/README.md`, "teleop.py" (Stop path). Tests: `sim/tests/test_stop.py`.
 | E9 | Assumed: a servo with torque off coasts (no back-EMF braking), in both MuJoCo backends | Unknown for the HX. Coasting is the worse case: the arm falls faster. Check on a servo |
 | E10 | The API refuses actions while torque is off (hands-on mode); it has no stop endpoints | A remote caller must not switch on what the person at the arm switched off. A stop request has no meaning in a turn-based API where time only runs inside an action |
 | E11 | Not done: Newton backend (no `torque_off`; teleop reports it), `pick_demo.py`, and stops triggered by servo feedback (temperature, status bits, lost replies) | Newton cannot be run on this machine; the feedback watchdog is the next piece |
+
+## Rover (2026-11-14, with the user)
+
+See `MULTI_DEVICE_PLAN.md`, section 5.6. Nothing is built or bought.
+
+| # | Decision | Why |
+|---|---|---|
+| RV1 | The rover runs from a battery: Gens ace 5000 mAh 3S 60C LiPo with XT60 (11.1 V, 154 × 42.5 × 24.7 mm, 355 g, $70.09) | User's choice. A 3S pack's 9.9 to 12.6 V is the HX-30HM's own range, so the wheel servos take it directly. Larger than needed by my estimate (55 Wh against roughly 5 to 15 W), and it makes the rover about 170 mm long and 570 g |
+| RV2 | Follows from RV1: the rover's data goes by Wi-Fi, through a board on the rover that also drives the wheel servos | A battery with a data cable is still a tether. Needs new firmware, a 5 V regulator for the boards, a fuse at the pack and a balance charger; none chosen yet |
+| RV3 | The hub reads the battery's voltage from the wheel servos (register 62) and stops the rover before about 3.3 V per cell | No extra part, and the servo's own under-voltage threshold (4.0 V by default) is far too low to protect a LiPo |
+
