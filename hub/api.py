@@ -82,7 +82,10 @@ def guide(hub: Hub) -> str:
              "    POST /{node}/{command}          an action; the body is JSON with its parameters",
              "    POST /{node}/stop               freeze everything under the node; POST /stop freezes everything",
              "    GET  /where?of=A&relative_to=B  where device A is in B's own frame: an estimate with its uncertainty, or known = false",
-             "    GET  /place/state               what has been found of the surroundings: the surface, things, and what is still unseen",
+             "    GET  /place                     what has been found of the surroundings, from every device: the surface and its edges,",
+             "                                    things (where, how big, how high, what colour, where in each fixed camera's picture),",
+             "                                    what the arm has touched, and what is still unseen",
+             "    GET  /place?relative_to=arm     the same with every position in that device's own frame, if the two are related",
              "    GET  /place/picture             the same as a picture (PNG)",
              "    POST /wait                      {\"seconds\": s}: let time pass",
              "    POST /discover                  look again for what is plugged in",
@@ -95,7 +98,9 @@ def guide(hub: Hub) -> str:
              "  show_wrist_tag the arm shows a tag at several poses, which locates cameras that cannot see its base.",
              "  Names for /where: a device's name, and arm/wrist_camera, arm/gripper, rover/head/left and rover/head/right for those parts.",
              "  The place starts empty. POST /survey has the rover look all round from where it stands and build the map; the map is in",
-             "  the rover's frame as it stood then.", "",
+             "  the rover's frame as it stood then. POST /devices/rover/head/look adds one more view from wherever the rover and its",
+             "  head are now. POST /devices/arm/probe lowers the arm's tip until it rests on something: a height good to 3 mm, and a",
+             "  thing both the arm and the map have found relates the two even if neither can see the other.", "",
              "What was found"]
     devices = hub.root.children["devices"].children
     if not devices:
@@ -167,6 +172,8 @@ def dispatch(hub: Hub, method: str, url: str, body_bytes: bytes = b"") -> tuple[
                 return 200, "text/plain; charset=utf-8", guide(hub).encode()
             if path == "tree":
                 result = {"ok": True, "tree": hub.root.outline()}
+            elif path in ("place", "place/state"):
+                result = {"ok": True, "path": "/place", **hub.place_state(query.get("relative_to"))}
             elif path == "where":
                 if "of" not in query:
                     raise Refused("say which device: /where?of=camera_1&relative_to=arm")

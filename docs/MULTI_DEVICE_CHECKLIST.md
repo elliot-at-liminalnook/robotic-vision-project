@@ -143,11 +143,11 @@ Left open: a gyro for the rover (DECISIONS MD56); the survey does not see behind
 
 Plan: [5.5](MULTI_DEVICE_PLAN.md#55-finding-out-what-the-place-is)
 
-- [ ] Map of the place from every device: surface and lip, things, never-seen space
-- [ ] Touch: the arm's stall guard as a probe
-- [ ] Landmarks as links between devices that cannot see each other
-- [ ] `GET /place`
-- [ ] Tests written
+- [x] Map of the place from every device: surface and lip, things, never-seen space (rover: depth from any standpoint, `head/look`; arm: touch; fixed cameras: where each thing is in their pictures. The wrist camera adds no depth yet, and fixed cameras say nothing about cells the rover has not seen: DECISIONS MD69)
+- [x] Touch: the arm as a probe (`POST /devices/arm/probe`; it stops on the tip no longer following, well before the stall guard would)
+- [x] Landmarks as links between devices that cannot see each other (`hub/landmarks.py`)
+- [x] `GET /place`, and `GET /place?relative_to=<device>`
+- [x] Tests written (`sim/tests/test_map.py`, not run as a suite; each test called directly once, passing)
 
 ## Step 11. Safety
 

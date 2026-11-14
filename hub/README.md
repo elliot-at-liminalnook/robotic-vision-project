@@ -65,6 +65,8 @@ about a scene is read.
 /place                       what has been found of the surroundings: nothing until something has looked
 ```
 
+`/devices/arm` also has `probe` (touch).
+
 With a rover there is also `/devices/rover/...` (below) and a root command `survey`.
 
 Reading a node gives the state of everything under it; `stop` at a node freezes everything under it.
@@ -221,6 +223,38 @@ What it does not do yet:
   crosses the picture's rows at an angle; such an edge is placed within about 70 mm.
 - **Behind the rover** (beyond 160° each way) and within about 0.15 m of it are never seen.
 - A short 'edge of the surface' may be the hidden side of something standing on the surface.
+
+## The map from every device (`place.py`, `landmarks.py`, `arm/actions.py`)
+
+`GET /place` is what has been found, from everything that can find it. `GET /place?relative_to=arm` gives
+every position in that device's own frame, if something relates the two (409 and why, if not).
+
+| Device | What it adds |
+|---|---|
+| Rover | Depth. The start-up survey, and `POST /devices/rover/head/look`: one more pair of pictures with the head where it is, from wherever the rover has driven to. The map stays in the frame it was begun in; a later view is laid into it by what the wheels say the rover has done since (3 % of that is added to what is said of it) |
+| Arm | Touch. `POST /devices/arm/probe {x, y}` lowers the tip at 30 mm/s until it stops following its command down, then lifts it back. It answers how high the gripper's lowest point stopped: within 5 mm of the thing's top (it reads a few millimetres high), or that the tip reached the surface. The thing is pressed lightly and not moved. A thing in the map that has been touched carries `touched_height_m` |
+| Fixed cameras | No depth of their own. Once related to the rover, each thing carries where it is in each camera's picture (`in_picture`, full-size pixels), so the picture can be looked at there. They look again after every survey and every `look` |
+
+- **Things** are occupied cells that touch and stand within 15 mm of each other's height: a hand hovering
+  over a block is not the block. Each has where, how long and wide, how high, a colour (the mean of its
+  own points, and the word for it), and `this_is: the arm itself, or something under it` when it lies
+  where the arm's own shape is.
+- **Edges of the surface** are long straight thin runs with the surface seen on one side only; they are
+  not things. A straight run with the surface on both sides or neither is reported as the side of
+  something and stays part of that thing.
+- **Landmarks.** If no chain of tag sightings relates the arm to the rover, things the arm has touched
+  are laid over the things in the map: a turn about the vertical and a shift along the surface, from two
+  or more things matched by height and by how far apart they are. It then answers `/where` like a
+  sighting does, and is carried forward by the wheels. It is refused, with the reason, when the touches
+  fit the map about equally well in more than one way (two things of one height fit both ways round).
+
+Smoke-checked: a cube seen again after the rover turned 20° and backed 60 mm stays within 35 mm and stays
+one cube; on the bench the cylinder and peg come out within 30 mm in the arm's frame, and things are
+within 45 px of where the map says in both cameras' pictures; with every tag link cut, two touches place
+the arm 7 mm from where it is in the rover's frame (stated 83 mm).
+
+Not done: the wrist camera adds no depth yet (two pictures from two arm poses would); the fixed cameras
+say nothing about cells the rover has not seen.
 
 ## How well locating does
 

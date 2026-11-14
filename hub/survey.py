@@ -82,6 +82,68 @@ def turned(before: np.ndarray, after: np.ndarray, lens) -> float | None:
     return math.degrees(math.atan(4.0 * dx / lens.fx))       # the picture slides right when the camera turns left
 
 
+def take_view(hub, ratios: dict, heights: list, arm_q=None) -> tuple[dict, np.ndarray, object]:
+    """One pair of pictures with the head where it is: into the map, into the locator, into the rulers.
+    Returns what the view gave, the left picture and its lens."""
+    rover, place, locator = hub.rover, hub.place, hub.locator
+    left, right = rover.cameras["left"], rover.cameras["right"]
+    rover.settle()                                           # the two pictures are not taken at the same instant
+    head = rover.head_now()
+    fl, fr = left.grab(), right.grab()
+    lens_l, lens_r = left.lens(fl.image.shape[1], fl.image.shape[0]), right.lens(fr.image.shape[1], fr.image.shape[0])
+    baseline = rover.rover.lens_spacing(head)
+    found_l, found_r = V.detect(fl.image), V.detect(fr.image)
+    for side, found, frame in (("left", found_l, fl), ("right", found_r, fr)):
+        locator.see_from_rover(side, found, frame.t, head, arm_q, rover.pose.copy(), (left if side == "left" else right).lens(1920, 1080))
+    for tag, ratio in measure_tags(found_l, found_r, lens_l, lens_r, baseline).items():
+        ratios.setdefault(tag, []).append(ratio)
+    cloud = stereo.depth(fl.image, fr.image, lens_l, lens_r, baseline)
+    T_cam = rover.rover.camera("left", head)
+    view = {"lens_height_m": round(float(T_cam[2, 3]), 3), "tilt_deg": round(math.degrees(head["tilt"]), 1),
+            "lens_spacing_m": round(baseline, 3), "pan_deg": round(math.degrees(head["pan"]), 1),
+            "tags": sorted({d.id for d in found_l} | {d.id for d in found_r})}
+    if cloud is None:
+        view.update(used=False, why="too little detail in view to line the two pictures up")
+        return view, fl.image, lens_l
+    if place.empty:
+        hub.map_origin = rover.pose.copy()                   # the map's frame is the rover's as it stands at its first view
+    T = hub.map_from_rover() @ T_cam
+    keep = (np.abs(cloud.points[:, 0]) < USE_FIELD * cloud.points[:, 2]) & (np.linalg.norm(cloud.points, axis=1) < REACH_PER_SPACING * baseline)
+    seen = cloud.points[keep]
+    pts = seen @ T[:3, :3].T + T[:3, 3]
+    ground = stereo.ground_plane(seen, T_cam[:3, :3].T @ np.array([0.0, 0.0, -1.0]), float(T_cam[2, 3]))
+    if ground is not None:                                   # heights from the ground that is in the picture
+        pts[:, 2] = (1.0 - seen @ ground) / np.linalg.norm(ground)
+        heights.append(1.0 / float(np.linalg.norm(ground)) / float(T_cam[2, 3]))
+    view.update(place.add_cloud(pts, T[:3, 3], None if cloud.colours is None else cloud.colours[keep]), matched=True)
+    return view, fl.image, lens_l
+
+
+def look(hub) -> dict:
+    """One pair of pictures with the rover's head where it is now, added to the map. For looking again at something, or
+    from somewhere the rover has driven to: the map stays in the frame it was begun in, and the new view is placed in it
+    by what the wheels say the rover has done since."""
+    rover = hub.rover
+    if rover is None:
+        raise Refused("there is no rover to look with")
+    if "left" not in rover.cameras or "right" not in rover.cameras:
+        raise Refused("the rover's two cameras did not both answer, so it cannot measure depth")
+    if rover.stowed():
+        raise Refused("the head is stowed: its cameras are 26 mm above the surface and see almost nothing of it. Raise it first "
+                      "(POST /devices/rover/head/raise), then point it")
+    heights: list[float] = []
+    view, _, _ = take_view(hub, {}, heights, hub.arm.link.q() if hub.arm is not None else None)
+    hub.last_survey.append(view)
+    if hub.cameras:
+        hub._look()                                          # the fixed cameras look too: where the rover is, for them, now
+    went = float(np.linalg.norm(hub.map_from_rover()[:2, 3]))
+    return {"ok": True, "view": view,
+            "driven_since_the_map_was_begun_m": round(went, 3),
+            **({"note": "this view is placed in the map by the rover's wheels: about 3 % of what they say it has driven and turned "
+                        "since the map was begun, on top of the map's own error"} if went > 0.01 else {}),
+            "place": hub.place_state()}
+
+
 def _sweep(side_first: int, pans, limit: dict[int, float]):
     """The pan angles of one pass, in order: outward on one side, then outward on the other, no further on either side
     than where the head met something earlier in this survey."""
@@ -102,10 +164,8 @@ def survey(hub, passes=PASSES, pans=PANS) -> dict:
     rover._may_move()
     t0 = hub.clock.now()
     place, locator = hub.place, hub.locator
-    start = rover.pose.copy()                                # the wheels stay still: the map's frame is where it stands now
-    if place.empty:
-        hub.map_origin = start.copy()
-    left, right = rover.cameras["left"], rover.cameras["right"]
+    start = rover.pose.copy()                                # the wheels stay still
+    left = rover.cameras["left"]
     ratios: dict[int, list[float]] = {}
     heights: list[float] = []
     views, skipped, met, stopped = [], [], [], None
@@ -133,34 +193,10 @@ def survey(hub, passes=PASSES, pans=PANS) -> dict:
                         blocked_side, limit[side] = side, abs(pan) - (pans[1] - pans[0])
                         met.append({"lens_height_m": height, "pan_deg": round(math.degrees(rover.head_now()["pan"]), 1)})
                     continue
-                rover.settle()                               # the two pictures are not taken at the same instant
-                head = rover.head_now()
-                fl, fr = left.grab(), right.grab()
-                lens_l, lens_r = left.lens(fl.image.shape[1], fl.image.shape[0]), right.lens(fr.image.shape[1], fr.image.shape[0])
-                baseline = rover.rover.lens_spacing(head)
-                found_l, found_r = V.detect(fl.image), V.detect(fr.image)
-                for cam_side, found, frame in (("left", found_l, fl), ("right", found_r, fr)):
-                    locator.see_from_rover(cam_side, found, frame.t, head, arm_q, rover.pose.copy(), (left if cam_side == "left" else right).lens(1920, 1080))
-                for tag, ratio in measure_tags(found_l, found_r, lens_l, lens_r, baseline).items():
-                    ratios.setdefault(tag, []).append(ratio)
-                cloud = stereo.depth(fl.image, fr.image, lens_l, lens_r, baseline)
-                view = {"lens_height_m": height, "tilt_deg": tilt, "lens_spacing_m": round(baseline, 3), "pan_deg": pan,
-                        "tags": sorted({d.id for d in found_l} | {d.id for d in found_r})}
-                if cloud is None:
-                    view.update(used=False, why="too little detail in view to line the two pictures up")
-                else:
-                    if reference is None:
-                        reference = (height, tilt, spacing, pan, fl.image, lens_l)
-                    T_cam = rover.rover.camera("left", head)
-                    T = hub.map_from_rover() @ T_cam
-                    seen = cloud.points[(np.abs(cloud.points[:, 0]) < USE_FIELD * cloud.points[:, 2])
-                                        & (np.linalg.norm(cloud.points, axis=1) < REACH_PER_SPACING * baseline)]
-                    pts = seen @ T[:3, :3].T + T[:3, 3]
-                    ground = stereo.ground_plane(seen, T_cam[:3, :3].T @ np.array([0.0, 0.0, -1.0]), float(T_cam[2, 3]))
-                    if ground is not None:                   # heights from the ground that is in the picture
-                        pts[:, 2] = (1.0 - seen @ ground) / np.linalg.norm(ground)
-                        heights.append(1.0 / float(np.linalg.norm(ground)) / float(T_cam[2, 3]))
-                    view.update(place.add_cloud(pts, T[:3, 3]))
+                view, picture, lens_l = take_view(hub, ratios, heights, arm_q)
+                view.update(lens_height_m=height, tilt_deg=tilt, pan_deg=pan)
+                if view["used"] is not False and reference is None and view.get("matched"):
+                    reference = (height, tilt, spacing, pan, picture, lens_l)
                 views.append(view)
         # Has the rover been turned where it stands? Its wheels cannot say: a head that meets something pushes the whole
         # rover round on its tyres. The first view is taken again and set against what it was.
@@ -182,6 +218,8 @@ def survey(hub, passes=PASSES, pans=PANS) -> dict:
             rover.stow()
         except (BusError, Refused):
             pass
+    if hub.cameras:
+        hub._look()                                          # the fixed cameras look too: where the rover is, for them, now
     kept = True
     if check["checked"] and (not check["matched"] or abs(check["turned_deg"]) > TURNED_DROP_DEG):
         kept = False                                         # what was mapped before and after it moved does not fit together
@@ -219,7 +257,7 @@ def survey(hub, passes=PASSES, pans=PANS) -> dict:
             **({"stopped_early": stopped} if stopped else {}),
             "tags_seen": sorted({t for v in views for t in v["tags"]}),
             "head_met_something_at": met, "stood_still": check, "map_kept": kept,
-            "place": place.summary(), "elapsed_s": round(hub.clock.now() - t0, 2),
+            "place": hub.place_state(), "elapsed_s": round(hub.clock.now() - t0, 2),
             "wheels_moved": bool(np.abs(rover.pose - start).max() > 1e-3),
             **({"note": "the head met something and did not look further that way. What is there is not in the map: it is nearer "
                         "than the cameras can see, or in a direction the head could not turn to"} if met else {})}

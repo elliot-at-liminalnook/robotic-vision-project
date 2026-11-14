@@ -20,6 +20,10 @@ from . import controller as C
 from . import grasp as G
 
 FRAME = 1.0 / C.FRAME_HZ
+PROBE_SPEED = 0.03              # m/s: the tip's speed going down in a probe
+PROBE_WINDOW_S = 0.3            # the tip has stopped if over this long ...
+PROBE_LAG_M = 0.005             # ... its command went down this far and it did not follow
+PROBE_SURFACE_M = 0.006         # a hand whose lowest point stopped lower than this is on the surface, not on a thing
 
 
 class ArmActions:
@@ -273,6 +277,57 @@ class ArmActions:
         self._goal_point = point
         reached, elapsed = self._run(timeout_s, lambda: np.linalg.norm(self.tip() - point) <= tolerance_m)
         return self._action(reached, elapsed)
+
+    def probe(self, x, y, from_z=0.12, timeout_s=12.0) -> dict:
+        """Touch: lower the tip slowly, straight down at (x, y), until it rests on something or reaches the surface. Says
+        how high it stopped. It stops as soon as the tip has stopped following its command down, long before the stall
+        guard would, so what it rests on is pressed only lightly."""
+        self._need_torque()
+        app = self.app
+        above = self.move_tip(x, y, from_z, timeout_s=min(6.0, timeout_s), tolerance_m=0.006)
+        if not above["reached"]:
+            return {**above, "touched": None, "note": "the tip could not be brought above that point, so nothing was touched there"}
+        t0, top = app.sim.time, self.tip()
+        end = np.array(app.target, float)
+        end[2] = C.MIN_TIP_Z - float(self._mid(app.goal, float(app.ik.jaw_gap(float(app.sim.q()[5]))))[2])
+        app.set_mode("cartesian")
+        app.failed_point = app.last_block = None
+        app.move, app.move_roll = C.CartesianMove(app.target, end, PROBE_SPEED, float(app.gov_cfg["click_accel_m_s2"])), None
+        # Resting on something: the command has gone on down over the last PROBE_WINDOW_S while the tip itself has not.
+        # (The gap between the two is no measure: the tip trails its command by several millimetres when nothing is there.)
+        window = max(3, int(round(PROBE_WINDOW_S / FRAME)))
+        told, went, touched = [float(app.target[2])], [float(app.tip_pos(app.sim.q())[2])], False
+        for _ in range(int(round(timeout_s / FRAME))):
+            self._frame()
+            told.append(float(app.target[2]))
+            went.append(float(app.tip_pos(app.sim.q())[2]))
+            moving = went[0] - went[-1] > 0.004                     # (it has got going: not the moment it sets off)
+            if app.last_block is not None or (moving and len(told) > window and told[-window] - told[-1] > PROBE_LAG_M
+                                              and went[-window] - went[-1] < 0.0012):
+                touched = True
+                break
+            if app.move is None:
+                for _ in range(window):                             # the command is at the bottom: let the tip arrive
+                    self._frame()
+                break                                               # all the way down: nothing but the surface
+        app.hold_here(app.sim.q())                                  # stop pressing
+        for _ in range(6):
+            self._frame()
+        at = self.tip()
+        safety = getattr(app.sim, "safety", None)
+        if safety is not None:                                      # what touched is the hand's lowest point, not the pads
+            low = safety.lowest_of_hand(app.sim.q())
+            at = np.array([low[0], low[1], low[2]])
+        on_surface = at[2] < PROBE_SURFACE_M
+        back = self.move_tip(float(top[0]), float(top[1]), float(top[2]), timeout_s=6.0, tolerance_m=0.008)
+        return {"ok": True, "touched": bool(touched and not on_surface),
+                "at_m": [round(float(v), 4) for v in at[:2]], "height_m": round(float(max(at[2], 0.0)), 4),
+                "meaning": ("the tip came to rest on something this high above the surface the arm stands on" if touched and not on_surface
+                            else "the tip went down to the surface: nothing stands at this point"),
+                "elapsed_s": round(app.sim.time - t0, 3), "lifted_back": bool(back["reached"]),
+                "accuracy": "at_m and height_m are the lowest point of the gripper where it stopped, from the arm's joint angles: "
+                            "good to about 5 mm, and it reads a few millimetres high",
+                "state": self.state()}
 
     def move_joints(self, timeout_s=6.0, **angles) -> dict:
         self._need_torque()

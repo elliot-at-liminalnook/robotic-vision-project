@@ -50,6 +50,7 @@ class Cloud:
     matched: float                 # share of the picture that found a match
     scale: float                   # the size the pictures were matched at, relative to full size
     disparity: np.ndarray | None = None      # as matched, before any offset: how far left each point is in the right picture [px at that size]; < 0 = none
+    colours: np.ndarray | None = None        # N x 3 (RGB, 0 to 255): what the left picture shows at each point
 
 
 def _level(image: np.ndarray, lens: Lens, scale: float) -> np.ndarray:
@@ -151,7 +152,11 @@ def depth(left: np.ndarray, right: np.ndarray, lens_left: Lens, lens_right: Lens
     lens = lens_left.at(w, h)
     Z = lens.fx * baseline_m / d
     pts = np.c_[(u - lens.cx) * Z / lens.fx, (v - lens.cy) * Z / lens.fy, Z]
-    return Cloud(pts, np.c_[u, v], shift, stretch, float(ok.mean()), scale, raw)
+    colours = None
+    if left.ndim == 3:
+        small = cv2.resize(cv2.undistort(left, lens_left.K(), np.asarray(lens_left.dist, float)), (w, h), interpolation=cv2.INTER_AREA)
+        colours = small[v, u]
+    return Cloud(pts, np.c_[u, v], shift, stretch, float(ok.mean()), scale, raw, colours)
 
 
 def ground_plane(points: np.ndarray, down: np.ndarray, height_m: float, band_m: float = 0.03, reach_m: float = 0.5):

@@ -31,9 +31,55 @@ MIN_POINTS = 12                        # points in a cell before one view says a
 GROUND_BAND_M = 0.006                  # the surface, give or take
 BELOW_M = 0.012                        # a cell with a fifth of its points this far under the surface is not believed
 HIGH_M = 0.010                         # this far above the surface is something standing on it
+STEP_M = 0.015                         # neighbouring cells whose heights differ by more than this are different things
 EDGE_MIN_M = 0.18                      # a straight thin run of occupied cells at least this long is reported as an edge
 MAX_RANGE_M = 1.2                      # points further than this from the camera are not used
 UNSEEN, FREE, OCCUPIED = 0, 1, 2
+
+
+def colour_of(rgb) -> dict:
+    """A mean colour as numbers and as a word: what a person would call it, roughly."""
+    r, g, b = (float(v) / 255.0 for v in rgb)
+    hi, lo = max(r, g, b), min(r, g, b)
+    if hi - lo < 0.18 * max(hi, 1e-6) or hi < 0.12:
+        word = "black" if hi < 0.2 else "white" if hi > 0.8 else "grey"
+    else:
+        hue = (60.0 * ((g - b) / (hi - lo)) % 360.0 if hi == r else 60.0 * ((b - r) / (hi - lo)) + 120.0 if hi == g
+               else 60.0 * ((r - g) / (hi - lo)) + 240.0)
+        word = next(name for top, name in ((18, "red"), (45, "orange"), (70, "yellow"), (165, "green"), (200, "cyan"), (262, "blue"),
+                                           (300, "purple"), (340, "pink"), (361, "red")) if hue < top)
+        if word in ("orange", "yellow") and hi < 0.45:
+            word = "brown"
+    return {"colour": word, "rgb": [int(round(v * 255)) for v in (r, g, b)]}
+
+
+def re_frame(summary: dict, T: np.ndarray, frame: str) -> dict:
+    """A place's summary with every position and direction given in another frame: T is the map's frame in that frame
+    (4 x 4). Both frames stand on the same surface, so heights do not change."""
+    if "surface" not in summary:
+        return summary
+    yaw = math.degrees(math.atan2(T[1, 0], T[0, 0]))
+    pt = lambda p: [round(float(v), 3) for v in (T @ [p[0], p[1], 0.0, 1.0])[:2]]            # noqa: E731
+    way = lambda d: [round(float(v), 2) for v in (T[:2, :2] @ np.asarray(d, float))]         # noqa: E731
+    out = dict(summary)
+    out["frame"] = frame
+    out["things"] = [{**t, "at_m": pt(t["at_m"]), "long_axis_deg": round((t["long_axis_deg"] + yaw) % 180.0, 1)} for t in summary["things"]]
+    surface = dict(summary["surface"])
+    if surface.get("seen"):
+        surface["outline_m"] = [pt(p) for p in surface["outline_m"]]
+        xs, ys = zip(*surface["outline_m"])
+        surface["reaches_m"] = {"x": [min(xs), max(xs)], "y": [min(ys), max(ys)]}
+        surface["edges_found"] = [{**e, "from_m": pt(e["from_m"]), "to_m": pt(e["to_m"]),
+                                   "direction_deg": round((e["direction_deg"] + yaw) % 180.0, 1),
+                                   **({"surface_is_towards": way(e["surface_is_towards"])} if "surface_is_towards" in e else {})}
+                                  for e in surface["edges_found"]]
+    out["surface"] = surface
+    unseen = dict(summary["unseen"])
+    if "directions_never_looked_deg" in unseen:
+        unseen["note"] = ("directions are from where the rover stood when the map was begun, which is at "
+                          f"{pt([0.0, 0.0])} in this frame; 0 = the way it faced then, which is {round(yaw, 1)} deg in this frame; left positive")
+    out["unseen"] = unseen
+    return out
 
 
 class Place:
@@ -42,6 +88,8 @@ class Place:
         self.ground = np.zeros((n, n), np.int32)        # views that saw the surface in each cell
         self.high = np.zeros((n, n), np.int32)          # views that saw something standing in it
         self.height = np.zeros((n, n), np.float32)      # how high the highest thing seen there is
+        self.rgb = np.zeros((n, n, 3), np.float64)      # the colours of what stands in each cell, summed ...
+        self.rgb_n = np.zeros((n, n), np.int64)         # ... over this many points
         self.views, self.used, self.levels = 0, 0, []
         self.rulers: dict = {}
 
@@ -50,10 +98,12 @@ class Place:
         return self.used == 0
 
     # ---- taking in what was seen -------------------------------------------------
-    def add_cloud(self, points: np.ndarray, camera_at: np.ndarray) -> dict:
-        """Points (N x 3) in the map's frame, seen from camera_at. Returns what this view added."""
+    def add_cloud(self, points: np.ndarray, camera_at: np.ndarray, colours: np.ndarray | None = None) -> dict:
+        """Points (N x 3) in the map's frame, seen from camera_at, and (N x 3) what colour each was. Returns what this view added."""
         self.views += 1
-        p = points[np.linalg.norm(points - camera_at, axis=1) < MAX_RANGE_M]
+        within = np.linalg.norm(points - camera_at, axis=1) < MAX_RANGE_M
+        p = points[within]
+        colours = None if colours is None else np.asarray(colours)[within]
         near = p[(np.abs(p[:, 2]) < 0.02) & (np.linalg.norm(p[:, :2] - camera_at[:2], axis=1) < 0.6)]
         if len(near) < 500:
             return {"used": False, "why": "too little of the surface in view to level the cloud by"}
@@ -65,6 +115,7 @@ class Place:
         flat = ij[:, 0] * (2 * HALF_CELLS) + ij[:, 1]
         order = np.argsort(flat)
         flat, z = flat[order], z[order]
+        rgb = None if colours is None else colours[ok][order].astype(np.float64)
         cells, starts, counts = np.unique(flat, return_index=True, return_counts=True)
         added = {"free": 0, "occupied": 0, "doubtful": 0}
         for c, s, n in zip(cells, starts, counts):
@@ -79,6 +130,10 @@ class Place:
                 self.high[i, j] += 1
                 self.height[i, j] = max(self.height[i, j], float(np.percentile(zs, 90)))
                 added["occupied"] += 1
+                if rgb is not None:
+                    up = zs > HIGH_M                         # the thing's own surface, not the ground beside it
+                    self.rgb[i, j] += rgb[s:s + n][up].sum(axis=0)
+                    self.rgb_n[i, j] += int(up.sum())
             elif abs(float(np.median(zs))) < GROUND_BAND_M:
                 self.ground[i, j] += 1
                 added["free"] += 1
@@ -97,17 +152,44 @@ class Place:
         return ((np.asarray(i) - HALF_CELLS + 0.5) * CELL_M, (np.asarray(j) - HALF_CELLS + 0.5) * CELL_M)
 
     def _split(self) -> tuple[list[dict], np.ndarray]:
-        """The occupied cells as (long straight thin runs, the mask of what is left). A raised edge round the surface
-        shows as a long straight thin run; so does the face of something long. Which it is shows in what is beside it."""
+        """The occupied cells as (long straight thin runs, the mask of what is a thing). A raised edge round the surface
+        shows as a long straight thin run; so does the face of something long. Which it is shows in what is beside it: an
+        edge of the surface has the surface on one side only, and is taken out of the things; a thing's side stays in it."""
         c = self.cells()
         left = ndimage.binary_closing(c == OCCUPIED, structure=np.ones((3, 3)))
-        occupied, runs = left.copy(), []
+        occupied, things, runs = left.copy(), left.copy(), []
         for _ in range(16):
             lines = cv2.HoughLinesP(left.astype(np.uint8) * 255, 1, np.pi / 180, threshold=14,
                                     minLineLength=int(EDGE_MIN_M / CELL_M), maxLineGap=5)
             if lines is None:
                 break
             j1, i1, j2, i2 = max(lines.reshape(-1, 4), key=lambda l: (l[2] - l[0]) ** 2 + (l[3] - l[1]) ** 2)   # (x = column j, y = row i)
+            # The segment found is often only part of the run (a line a few degrees off the grid is a staircase): follow
+            # the run along its own line, both ways, as far as occupied cells go on without a gap.
+            ii, jj = np.nonzero(left)
+            cells_ji = np.c_[jj, ii].astype(float)
+            a0, b0 = np.array([j1, i1], float), np.array([j2, i2], float)
+            for width in (3.0, 2.5):
+                u = (b0 - a0) / max(float(np.linalg.norm(b0 - a0)), 1e-9)
+                rel = cells_ji - a0
+                t, off = rel @ u, rel @ np.array([-u[1], u[0]])
+                on = np.abs(off) < width
+                ts = np.sort(t[on])
+                mid = float(np.linalg.norm(b0 - a0)) / 2
+                k = int(np.argmin(np.abs(ts - mid)))
+                lo = hi = k
+                while lo > 0 and ts[lo] - ts[lo - 1] <= 6.0:
+                    lo -= 1
+                while hi < len(ts) - 1 and ts[hi + 1] - ts[hi] <= 6.0:
+                    hi += 1
+                pick = cells_ji[on & (t >= ts[lo]) & (t <= ts[hi])]
+                if len(pick) < 3:
+                    break
+                centre = pick.mean(axis=0)
+                u = np.linalg.svd(pick - centre, full_matrices=False)[2][0]
+                span = (pick - centre) @ u
+                a0, b0 = centre + u * span.min(), centre + u * span.max()
+            j1, i1, j2, i2 = (int(round(v)) for v in (a0[0], a0[1], b0[0], b0[1]))
             near, wide = (np.zeros(left.shape, np.uint8) for _ in range(2))
             cv2.line(near, (int(j1), int(i1)), (int(j2), int(i2)), 1, 5)
             cv2.line(wide, (int(j1), int(i1)), (int(j2), int(i2)), 1, 15)
@@ -127,6 +209,8 @@ class Place:
                 sides.append(float((c[ij[:, 0], ij[:, 1]] == FREE).mean()) if len(ij) else 0.0)
             h = self.height[on]
             one_sided = max(sides) > 0.3 and min(sides) < 0.15
+            if one_sided:
+                things &= near == 0                              # the surface's edge is not a thing on it; a thing's side is part of it
             inward = normal * (1 if sides[0] >= sides[1] else -1)
             runs.append({"from_m": [round(float(v), 3) for v in a], "to_m": [round(float(v), 3) for v in b],
                          "length_m": round(float(np.linalg.norm(b - a)), 3),
@@ -134,12 +218,36 @@ class Place:
                          "direction_deg": round(math.degrees(math.atan2(along[1], along[0])) % 180.0, 1),
                          "kind": "edge of the surface" if one_sided else "straight side of something",
                          **({"surface_is_towards": [round(float(v), 2) for v in inward]} if one_sided else {})})
-        return runs, left
+        return runs, things
+
+    def _by_height(self, occ: np.ndarray) -> tuple[np.ndarray, int]:
+        """Occupied cells gathered into things: neighbours belong together if their heights are within STEP_M. Things that
+        touch in the map but stand at different heights (a hand hovering over a block, a tall thing beside a low one) are
+        told apart; a thing whose top slopes is not."""
+        filled = np.where(self.height > 0, self.height, ndimage.maximum_filter(self.height, size=3))   # (cells the closing added
+        #                                                                                                take a neighbour's height)
+        labels, n = np.zeros(occ.shape, np.int32), 0
+        for i0, j0 in zip(*np.nonzero(occ)):
+            if labels[i0, j0]:
+                continue
+            n += 1
+            labels[i0, j0] = n
+            stack = [(i0, j0)]
+            while stack:
+                i, j = stack.pop()
+                for di in (-1, 0, 1):
+                    for dj in (-1, 0, 1):
+                        a, b = i + di, j + dj
+                        if (di or dj) and 0 <= a < occ.shape[0] and 0 <= b < occ.shape[1] and occ[a, b] and not labels[a, b] \
+                                and not abs(filled[a, b] - filled[i, j]) > STEP_M:
+                            labels[a, b] = n
+                            stack.append((a, b))
+        return labels, n
 
     def things(self) -> list[dict]:
         """Each connected patch of occupied cells that is not a long straight thin run: where, how big, how high."""
         _, occ = self._split()
-        labels, n = ndimage.label(occ, structure=np.ones((3, 3)))
+        labels, n = self._by_height(occ)
         out = []
         for k in range(1, n + 1):
             i, j = np.nonzero(labels == k)
@@ -151,10 +259,12 @@ class Place:
             _, _, axes = np.linalg.svd(pts - centre, full_matrices=False)
             along, across = (pts - centre) @ axes[0], (pts - centre) @ axes[1]
             h = self.height[i, j]
+            seen = int(self.rgb_n[i, j].sum())
             out.append({"at_m": [round(float(centre[0]), 3), round(float(centre[1]), 3)],
                         "length_m": round(float(np.ptp(along) + CELL_M), 3), "width_m": round(float(np.ptp(across) + CELL_M), 3),
                         "height_m": round(float(np.percentile(h[h > 0], 80)) if (h > 0).any() else 0.0, 3),
-                        "long_axis_deg": round(math.degrees(math.atan2(axes[0][1], axes[0][0])) % 180.0, 1), "cells": int(len(i))})
+                        "long_axis_deg": round(math.degrees(math.atan2(axes[0][1], axes[0][0])) % 180.0, 1), "cells": int(len(i)),
+                        **(colour_of(self.rgb[i, j].sum(axis=0) / seen) if seen >= 30 else {})})
         return sorted(out, key=lambda t: -t["cells"])
 
     def surface(self) -> dict:

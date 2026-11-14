@@ -37,8 +37,17 @@ class ArmDevice:
         self.ctrl = C.ArmController(self.link)
         self.ctrl.start(q)
         self.actions = ArmActions(self.ctrl)
+        self.touches: list[dict] = []                    # where the tip has been lowered until it stopped, in the arm's frame
 
     # ---- commands -------------------------------------------------------------
+    def _probe(self, x, y, from_z: float = 0.12, timeout_s: float = 12.0) -> dict:
+        out = self.actions.probe(x, y, from_z=from_z, timeout_s=timeout_s)
+        if out.get("touched") is not None:
+            self.touches.append({"at_m": out["at_m"], "height_m": out["height_m"] if out["touched"] else 0.0,
+                                 "touched_something": out["touched"]})
+            del self.touches[:-100]
+        return out
+
     def _home(self, timeout_s: float = 6.0) -> dict:
         x, y, z = C.HOME_TIP
         return self.actions.move_tip(x, y, z, roll=self.ctrl._roll_default(), timeout_s=timeout_s, tolerance_m=0.01)
@@ -96,6 +105,15 @@ class ArmDevice:
                    for k, j in enumerate(JOINTS[:5])},
                 "timeout_s": Param(NUM, "give up after this much time", minimum=0.1, maximum=30, default=6.0),
             })
+        n.commands["probe"] = Command(
+            "Touch: lower the tip slowly, straight down at a point in the arm's own frame, until it rests on something or reaches "
+            "the surface, then lift it back. Answers how high it stopped: the height of what stands there, good to about 3 mm, "
+            "or that nothing does. Close the gripper first for a finer point. Things the arm has touched are kept (GET /place) "
+            "and, when the rover's map has them too, relate the arm to the map without either seeing the other.", self._probe, {
+                "x": Param(NUM, "metres forward of the arm's base", True, -0.5, 0.7),
+                "y": Param(NUM, "metres to the arm's left", True, -0.6, 0.6),
+                "from_z": Param(NUM, "the height the tip starts down from, and returns to", minimum=0.03, maximum=0.4, default=0.12),
+                "timeout_s": Param(NUM, "give up after this much time", minimum=1.0, maximum=30, default=12.0)})
         n.commands["home"] = Command("Move the tip to the arm's home: 16 cm up, 20 cm ahead of its base, fingers down.", self._home,
                                      {"timeout_s": Param(NUM, "give up after this much time", minimum=0.1, maximum=30, default=6.0)})
         n.commands["torque_off"] = Command("Switch the servos' torque off. The arm goes limp and sags; nothing can be commanded "

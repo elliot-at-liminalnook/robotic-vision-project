@@ -192,6 +192,16 @@ class Locator:
         """Drop what was seen of the rover, or by it, from `since` on: it has been moved without its wheels counting it."""
         self.rover_seen = [s for s in self.rover_seen if s.link.t < since]
 
+    def rover_placed(self, other: str, T_other_rover: np.ndarray, sigma_m: float, sigma_rad: float, support: str):
+        """The rover placed in another device's frame by something other than a tag in a picture (things both have found:
+        hub/landmarks.py). Kept like a sighting: of where the rover is now, carried forward by its wheels afterwards."""
+        if not self.has_rover:
+            return
+        _, odometry = self.rover_now()
+        cov = np.diag([sigma_rad ** 2] * 3 + [sigma_m ** 2] * 3)
+        self.rover_seen.append(RoverSighting(other, Link(np.asarray(T_other_rover, float), cov, float(self.clock.now()), [support]),
+                                             np.array(odometry, float)))
+
     def see_from_wrist(self, found, t: float, arm_q, lens: Lens) -> list[int]:
         """The arm's wrist camera's picture: is the rover in it?"""
         if not self.has_arm or arm_q is None:
@@ -317,13 +327,12 @@ class Locator:
                     why.append(f"{other} and the rover: neither has seen the other's tags.")
         return edges, why
 
-    def where(self, of: str, relative_to: str, arm_q=None) -> dict:
-        """`of`'s frame in `relative_to`'s, or known = False and why."""
+    def chain(self, of: str, relative_to: str, arm_q=None) -> tuple[Link | None, str]:
+        """`of`'s frame in `relative_to`'s as a link (or None), and if none, why."""
         known = self.names()
         for n in (of, relative_to):
             if n not in known:
                 raise KeyError(n)
-        out = {"ok": True, "of": of, "relative_to": relative_to}
         (root_a, part_a), (root_b, part_b) = self._part(relative_to, arm_q), self._part(of, arm_q)
         edges, why = self._edges()
         # The surest chain of links from one device to the other (few devices: try every simple path). Always searched
@@ -340,16 +349,23 @@ class Locator:
             for (a, b), step in edges.items():
                 if a == node and b not in seen:
                     stack.append((b, link.then(step), seen | {b}))
-        if best is not None and start != root_a:
-            best = best.inverse()
         if best is None:
-            return {**out, "known": False, "why": "no chain of sightings links them. " + " ".join(why)
-                    if why else "no chain of sightings links them: nothing here carries tags that the other could see."}
-        link = best
+            return None, ("no chain of sightings links them. " + " ".join(why) if why
+                          else "no chain of sightings links them: nothing here carries tags that the other could see.")
+        if start != root_a:
+            best = best.inverse()
         if part_a is not None:
-            link = part_a.inverse().then(link)
+            best = part_a.inverse().then(best)
         if part_b is not None:
-            link = link.then(part_b)
+            best = best.then(part_b)
+        return best, ""
+
+    def where(self, of: str, relative_to: str, arm_q=None) -> dict:
+        """`of`'s frame in `relative_to`'s, or known = False and why."""
+        out = {"ok": True, "of": of, "relative_to": relative_to}
+        link, why = self.chain(of, relative_to, arm_q)
+        if link is None:
+            return {**out, "known": False, "why": why}
         T = link.T
         support = list(dict.fromkeys(link.support))
         return {**out, "known": True,

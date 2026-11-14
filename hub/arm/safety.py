@@ -134,6 +134,30 @@ class CommandFilter:
                         base, self.base_body = self.base_margin - c.dist, int(m.geom_bodyid[other])
         return np.array([self.table_z - low, base])
 
+    def footprint(self, q) -> np.ndarray:
+        """Every corner of the arm's shapes in the pose q, base included, as x, y (N x 2): where the arm itself is, seen from above."""
+        m, d = self.m, self.d
+        d.qpos[self.qadr] = q
+        mujoco.mj_kinematics(m, d)
+        pts = [p @ d.xmat[b].reshape(3, 3).T + d.xpos[b] for b, p in self.points.items()]
+        pts += [(d.geom_xmat[g].reshape(3, 3) @ _shape_vertices(m, g).T).T + d.geom_xpos[g] for g in self.base_geoms]
+        return np.vstack(pts)[:, :2]
+
+    def lowest_of_hand(self, q) -> np.ndarray:
+        """The lowest point of the hand (gripper and jaw) in the pose q: its x, y, and its height above the surface."""
+        m, d = self.m, self.d
+        d.qpos[self.qadr] = q
+        mujoco.mj_kinematics(m, d)
+        best = None
+        for b in self.hand_bodies:
+            if b in self.points:
+                w = self.points[b] @ d.xmat[b].reshape(3, 3).T + d.xpos[b]
+                k = int(np.argmin(w[:, 2]))
+                if best is None or w[k, 2] < best[2]:
+                    best = w[k].copy()
+        best[2] -= self.table_z
+        return best
+
     def depth(self, q) -> tuple[float, str]:
         """The deeper of the two, and which one it is."""
         dd = self.depths(q)
