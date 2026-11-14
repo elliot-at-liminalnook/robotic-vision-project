@@ -110,7 +110,7 @@ Plan: [5.6 The rover](MULTI_DEVICE_PLAN.md#56-the-rover)
 - [x] CAD checks: one solid each, nothing overlapping through full travel, wires long enough
 - [x] Simulation model generated from the CAD: masses and inertia from the meshes, a joint per axis
 - [x] Contacts: tyres, skid, lip, head against chassis, camera carriages and end stops
-- [ ] Rover section in `docs/BOM.md`: real parts with links and prices, including head servos, controller board, 5 V regulator, fuse, charger
+- [x] Rover section in `docs/BOM.md`: real parts with links and prices, including head servos, controller board, 5 V regulator, fuse, charger (prices read 2026-11-14; DigiKey rows and the fuse unconfirmed; nothing ordered)
 - [x] Tests written (stands, rolls, steers; head axes reach their ranges): `sim/tests/test_rover_model.py`, not run as a suite
 
 ## Step 8. Rover controlled

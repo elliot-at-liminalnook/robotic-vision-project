@@ -109,6 +109,21 @@ class Built:
         return next((d for d in self.devices if d["kind"] == kind), None)
 
 
+def grain(colour, seed: int, size: int = 2048) -> np.ndarray:
+    """A surface that is not one flat colour: speckle at several scales and faint streaks about a base colour,
+    like a wooden or laminate top. Two cameras need it to tell which point is which: a flat colour gives
+    them nothing to match (and so would a plain white table in life)."""
+    import cv2
+    rng = np.random.default_rng(seed)
+
+    def noise(sigma, sigma_y=None):
+        n = cv2.GaussianBlur(rng.normal(0.0, 1.0, (size, size)).astype(np.float32), (0, 0), sigmaX=sigma, sigmaY=sigma_y or sigma)
+        return n / (n.std() + 1e-9)
+    v = 1.0 + 0.10 * noise(0.7) + 0.09 * noise(2.5) + 0.07 * noise(8) + 0.05 * noise(60, 2.0)
+    rgb = np.clip(np.asarray(colour[:3], np.float32)[None, None, :] * v[..., None], 0.0, 1.0)
+    return (rgb * 255).astype(np.uint8)
+
+
 class SceneError(ValueError):
     """The scene cannot be built. str() is one sentence saying why."""
 
@@ -299,9 +314,18 @@ def build(scene: dict) -> Built:
     col = rgba(surface.get("colour"), "wood")
     fr = [float(surface.get("friction", 0.5)), 0.005, 0.0001]
     wb.add_geom(name="floor", type=PLANE, pos=[cx, cy, FLOOR_Z], size=[3, 3, 0.05], rgba=[0.33, 0.33, 0.36, 1], **CONTACT)
+    textured = surface.get("texture", "grain") == "grain"
+    if textured:
+        import zlib
+        tex = spec.add_texture(name="surface", type=mujoco.mjtTexture.mjTEXTURE_2D, width=2048, height=2048, nchannel=3)
+        tex.data = grain(col, zlib.crc32(scene["name"].encode())).tobytes()
+        mat = spec.add_material(name="surface")
+        mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "surface"
+        mat.specular, mat.shininess = 0.0, 0.0
     for k, (x0, y0, x1, y1) in enumerate(rects):
         wb.add_geom(name="table" if len(rects) == 1 else f"table_{k}", type=BOX, pos=[(x0 + x1) / 2, (y0 + y1) / 2, -depth / 2],
-                    size=[(x1 - x0) / 2, (y1 - y0) / 2, depth / 2], rgba=col, friction=fr, contype=3, **CONTACT)
+                    size=[(x1 - x0) / 2, (y1 - y0) / 2, depth / 2], rgba=[1, 1, 1, 1] if textured else col, friction=fr, contype=3,
+                    **({"material": "surface"} if textured else {}), **CONTACT)
     lh, lt = float(surface["lip_height_m"]), float(surface.get("lip_thickness_m", 0.008))
     ccw = G.signed_area(outline) > 0
     for k, (a, b) in enumerate(G.edges(outline)):
