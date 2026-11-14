@@ -1,0 +1,43 @@
+# The easiest place to orient in: a small bare surface, one arm, one camera, the rover, two objects.
+name = "open_small"
+description = "A small bare surface with one arm, one fixed camera, the rover and two objects."
+
+[surface]
+outline_m = [[0.0, 0.0], [0.7, 0.0], [0.7, 0.55], [0.0, 0.55]]
+lip_height_m = 0.02
+friction = 0.5
+colour = "wood"
+
+[[objects]]
+name = "red_cube"
+shape = "box"
+size_m = [0.03, 0.03, 0.03]
+mass_kg = 0.03
+colour = "red"
+at_m = [0.38, 0.33]
+
+[[objects]]
+name = "blue_cylinder"
+shape = "cylinder"
+size_m = [0.03, 0.06]
+mass_kg = 0.025
+colour = "blue"
+at_m = [0.33, 0.18]
+
+[[devices]]
+kind = "arm"
+name = "arm"
+at_m = [0.14, 0.27]
+facing_deg = 0
+
+[[devices]]
+kind = "camera"
+name = "camera_1"
+at_m = [0.66, 0.50, 0.36]
+looking_at_m = [0.30, 0.27, 0.0]
+
+[[devices]]
+kind = "rover"
+name = "rover"
+at_m = [0.52, 0.12]
+facing_deg = 150

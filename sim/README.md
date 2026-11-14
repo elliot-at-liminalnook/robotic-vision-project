@@ -332,6 +332,37 @@ What building it taught, all now in the scene's layout or the API:
 
 A scene is a file in `sim/scene/`; a task is a class in `so101sim/tasks.py` with a description and goals.
 
+## Scenes as files (`sim/scenes/*.toml`)
+
+A scene is a config file: the surface's outline and lip, fixtures, loose objects, where each device was
+put down, and tasks. It is built into a MuJoCo model in memory, so a scene can be loaded, changed and
+loaded again while the program runs. Part of the multi-device work: [docs/MULTI_DEVICE_PLAN.md](../docs/MULTI_DEVICE_PLAN.md), 5.7.
+
+```python
+from so101sim import scenes
+scenes.names()                         # ['open_small', 'workcell', ...]
+scene = scenes.read("open_small")      # a dict, as the file has it
+scenes.validate(scene)                 # [] if it is a place that can exist; else sentences saying what is wrong
+built = scenes.build(scene)            # built.model, plus what the referee needs (objects, regions, devices)
+```
+
+| Part of the file | What it says |
+|---|---|
+| `[surface]` | `outline_m`: corners of the surface, right-angled, any shape made of rectangles. `lip_height_m`: every scene has a lip. Friction, colour |
+| `[[fixtures]]` | Things fixed to the surface: `box`, `bin`, `socket`, `cabinet` (with a sliding drawer), `shelf`, or free `parts` |
+| `[[objects]]` | Loose things: `box` or `cylinder`, size, mass, colour, `at_m` or `on = "<fixture>"` |
+| `[[devices]]` | Where each device was put down: `arm`, `camera`, `rover`. Ground truth: the hub is never told |
+| `[[regions]]` | Named places for task goals (bins, drawers and tops of fixtures are regions already) |
+| `[[tasks]]` | A request in words, and goals the referee checks (`so101sim/scenes/tasks.py`) |
+
+- **Valid** means: the fields are right; the model compiles; everything is inside the lip; nothing
+  overlaps; nothing moves when the scene is left alone for a second; every task names things that exist,
+  starts not done, and has goals that could hold. Checked without running any device.
+- **`workcell.toml`** is the original workcell in this form: the same model as `sim/model/workcell.xml`
+  plus the lip and a housing and post for each fixed camera (a test compares them).
+- **The rover in a scene is a placeholder box** until it is designed (`so101sim/rover_model.py`).
+- The old path (`load_backend`, `--scene`, `sim/scene/*.xml`) is unchanged and does not read these files yet.
+
 ## Physical invariants: nothing clips, nothing jumps
 
 Enforced in layers, because each one fails differently (limits in `config/safety.toml`):
@@ -456,6 +487,7 @@ The tests go after classes of bugs, not single cases:
 | `test_cables.py` | Every wire is long enough over the whole joint range. The slack layout meets both ends for fuzzed inputs. At a reset, for any arm pose, the wires reach their sockets, come to rest, stay above the table and leave the arm and the clock alone. Moving through random poses with wires: monitor clean, no wire pulled hard, the arm ends where it does without wires. The cabled model is the plain robot plus wires |
 | `test_camera_fw.py` | The camera firmware in the loop (skipped without a C compiler). Every frame that reaches the PC is the frame the sensor took, at every size. Frame rate and delay are what the sensor, encoder and link allow; a slow link lowers the rate and corrupts nothing. Close, reopen, resume, suspend and size changes shut down and restart cleanly with nothing leaked. No camera, stalled sensor, failed encodes, encoder queue errors, misaligned buffers. Seeded fuzzing of PC actions and faults: never stuck, never leaking, never misusing a device. Each build option does what it says (flips keep colours, fixed exposure holds, JPEG quality). The stand-in hardware really reports misuse. The same run gives the same result. A smaller size is the centre of the larger picture. Teleop shows the firmware's frames |
 | `test_stop.py` | The stop path, on direct joint targets, a clean bus and a faulty one. A stop from any motion (click, keys, joint jog, home) leaves the arm at rest where it was, even with the keys still held, and keeps a gripped cube gripped. With torque off no servo delivers any torque and nothing a person presses gets through. Torque on holds the arm where it lies. A broadcast a servo missed is noticed and repaired, or the servo is named; no goal is written while torque is off. The real program leaves torque off on Esc, an exception, Ctrl-C and SIGTERM |
+| `test_scenes.py` | Scenes as files. Every scene in `sim/scenes/` is valid and survives being written and read back. The lip has no gap for any outline. `workcell.toml` is today's model plus the lip. Random right-angled outlines are tiled exactly. Seventeen kinds of fault (unknown field, a thing past the lip, an overlap, a thing in mid-air, a task about nothing, a task already done, a thing too big for its place, ...) are each named by the validator. An invalid scene is not saved |
 | `test_bus.py` | The servo bus in the loop. Packets: any packet round-trips, every packet is found in fuzzed garbage, no flipped bit is accepted. Register table equals the vendor spreadsheet; every register behaves by its row. No fuzzed instruction stream breaks a servo. Under injected faults the driver returns checked data or raises. Bus time equals the byte counts at three baud rates. Set-up mistakes are caught at connect, before any write. The arm moves the same with the bus as without. Teleop grasps and lifts through a clean bus and a faulty one, under the invariant monitor, without writing any register a servo ignores |
 
 ## Verified results (2026-11-09)

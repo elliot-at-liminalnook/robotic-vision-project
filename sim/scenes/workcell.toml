@@ -1,0 +1,53 @@
+# The original workcell: the arm on a table with three loose objects and two fixed cameras.
+# Scene frame: the arm's base is at the origin, facing +x. Everything here is ground truth:
+# the hub never reads this file (docs/MULTI_DEVICE_PLAN.md, 5.7).
+name = "workcell"
+description = "The arm on a table with three loose objects and two fixed cameras."
+
+[surface]
+outline_m = [[-0.15, -0.45], [0.65, -0.45], [0.65, 0.45], [-0.15, 0.45]]
+lip_height_m = 0.02
+friction = 0.5
+colour = "wood"
+
+[[objects]]
+name = "cube"
+shape = "box"
+size_m = [0.03, 0.03, 0.03]
+mass_kg = 0.03
+colour = "red"
+at_m = [0.24, 0.06]
+
+[[objects]]
+name = "cylinder"
+shape = "cylinder"
+size_m = [0.03, 0.06]            # diameter, length; it stands upright
+mass_kg = 0.025
+colour = "blue"
+at_m = [0.27, -0.08]
+
+[[objects]]
+name = "block"
+shape = "box"
+size_m = [0.04, 0.025, 0.02]
+mass_kg = 0.02
+colour = "green"
+at_m = [0.18, -0.03]
+
+[[devices]]
+kind = "arm"
+name = "arm"
+at_m = [0.0, 0.0]
+facing_deg = 0
+
+[[devices]]
+kind = "camera"
+name = "scene_front"
+at_m = [0.62, 0.0, 0.38]
+looking_at_m = [0.22, 0.0, 0.02]
+
+[[devices]]
+kind = "camera"
+name = "scene_side"               # stands off the table, on a post from the floor
+at_m = [0.24, -0.55, 0.32]
+looking_at_m = [0.22, 0.0, 0.02]

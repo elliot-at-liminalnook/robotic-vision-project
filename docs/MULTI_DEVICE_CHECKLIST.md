@@ -3,7 +3,7 @@
 Every tangible deliverable of [the multi-device plan](MULTI_DEVICE_PLAN.md), one box each. The plan has
 the design and the reasons; this file only tracks what exists. Tick a box when the thing is in the repo.
 
-Started 2026-11-14. Nothing is built yet.
+Started 2026-11-14.
 
 Tests are written with each step and run only when the user asks. Step 2's small suite is already asked for.
 
@@ -11,13 +11,13 @@ Tests are written with each step and run only when the user asks. Step 2's small
 
 Plan: [steps](MULTI_DEVICE_PLAN.md#6-steps-in-order), [5.7 Scenes and tasks are config files](MULTI_DEVICE_PLAN.md#57-scenes-and-tasks-are-config-files)
 
-- [ ] Scene file format (TOML), written down
-- [ ] Loader that builds the simulation model from a scene file at run time
-- [ ] A lip on every scene
-- [ ] Validator: fields and ranges; the model compiles; nothing overlaps; everything inside the lip; nothing moves when left alone
-- [ ] `workcell` converted to a scene file
-- [ ] `open_small` scene
-- [ ] Tests written
+- [x] Scene file format (TOML), written down
+- [x] Loader that builds the simulation model from a scene file at run time
+- [x] A lip on every scene
+- [x] Validator: fields and ranges; the model compiles; nothing overlaps; everything inside the lip; nothing moves when left alone
+- [x] `workcell` converted to a scene file
+- [x] `open_small` scene
+- [x] Tests written (`sim/tests/test_scenes.py`)
 
 ## Step 2. Environments, tasks, operator API
 
