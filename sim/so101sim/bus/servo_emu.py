@@ -23,6 +23,11 @@ ASSUMPTIONS (check each on a real servo):
   * Torque off: the motor coasts (no output and no back-EMF braking); only the
     joint's friction is left. If the real servo shorts the motor instead, a
     limp arm sags more slowly than here.
+  * Operating mode 1 ("constant-speed motor mode"): the shaft is driven at the speed in register 46
+    (steps/s, bit 15 = direction) by a speed loop with proportional and integral terms scaled by
+    registers 37 and 39 (their units are not documented: at the defaults the loop settles in about
+    50 ms with no steady error). The present position then reads the angle within one turn
+    (0..4095): the turn count is not kept. Mode 2 (open-loop PWM) is not modelled.
   * Position calibration (register 31) is added to the encoder reading;
     torque switch = 128 sets it so the present position reads 2048.
 """
@@ -45,7 +50,7 @@ TEMPERATURE_C = 30
 GOAL_NOTE_TICKS = 20            # a goal this far from the shaft, written with torque off, is worth a note
 UNMODELLED = {"overtemperature_threshold", "overvoltage_threshold", "undervoltage_threshold", "led_alarm_condition",
               "position_i_gain", "min_startup_torque", "overcurrent_threshold", "overcurrent_protection_time",
-              "speed_p_gain", "speed_i_gain", "pwm_open_loop_speed"}
+              "pwm_open_loop_speed"}
 
 
 class ServoEmulator:
@@ -94,6 +99,7 @@ class ServoEmulator:
         self.pending: tuple[int, bytes] | None = None       # REG_WRITE waiting for ACTION
         self.setpoint = None                                # profile position [ticks]; None until torque is on
         self.setpoint_vel = 0.0
+        self.speed_integral = 0.0
         self.torque = 0.0
         self._apply_registers()
         self.bank = ServoBank(1, self.spec)
@@ -131,6 +137,8 @@ class ServoEmulator:
         for r in touched:
             value = r.decode(self.mem[r.addr:r.addr + r.size])
             clamped = min(max(value, r.lo), r.hi)
+            if r.name == "motion_speed":            # bit 15 is the direction in motor mode: only the speed itself is limited
+                clamped = (value & 0x8000) | min(value & 0x7FFF, r.hi)
             if clamped != value:
                 self.log("warn", f"servo {self.id}: {r.name} = {value} is outside {r.lo}..{r.hi}, clamped")
                 self.mem[r.addr:r.addr + r.size] = r.encode(clamped)
@@ -159,8 +167,10 @@ class ServoEmulator:
               and abs(self.get("target_position") - self.get("current_position")) > GOAL_NOTE_TICKS):
             self.log("info", f"servo {self.id}: goal far from the present position written while torque is off "
                              "(no motion here; Feetech STS firmware would switch torque on and move, HX unverified)")
-        elif r.name == "operating_mode" and self.mem[r.addr] != 0:
-            self.log("warn", f"servo {self.id}: operating mode {self.mem[r.addr]} is not modelled; output is off")
+        elif r.name == "operating_mode":
+            self.speed_integral = 0.0
+            if self.mem[r.addr] not in (0, 1):
+                self.log("warn", f"servo {self.id}: operating mode {self.mem[r.addr]} is not modelled; output is off")
 
     # ---- packets -----------------------------------------------------------
     def receive(self, pkt: P.Packet) -> tuple[bytes, int] | None:
@@ -232,9 +242,20 @@ class ServoEmulator:
         calib = self.get("position_calibration")
         ticks = int(round(self.mount_zero + self.mount_dir * q_joint / RAD_PER_TICK)) + calib   # the encoder reading
         speed = self.mount_dir * qd_joint                                                       # shaft [rad/s]
-        on = self.mem[R.BY_NAME["torque_switch"].addr] == 1 and self.get("operating_mode") == 0
+        mode = self.get("operating_mode")
+        on = self.mem[R.BY_NAME["torque_switch"].addr] == 1 and mode in (0, 1)
         tau = 0.0
-        if on:
+        if on and mode == 1:                                    # motor mode: a speed loop
+            raw = self.get("motion_speed")
+            want = (-1 if raw & 0x8000 else 1) * (raw & 0x7FFF) * RAD_PER_TICK          # rad/s at the shaft
+            err = (want - speed) / self.spec.w0
+            self.speed_integral = float(np.clip(self.speed_integral + err * dt, -0.05, 0.05))
+            kp, ki = 2.0 * self.get("speed_p_gain") / 10.0, 40.0 * self.get("speed_i_gain") / 10.0
+            volt = float(np.clip(kp * err + ki * self.speed_integral, -1.0, 1.0))
+            tau = float(self.bank.torque_from_voltage([volt], [speed], dt)[0])
+            self.setpoint = None
+            ticks = ticks % TICKS_PER_REV                       # within one turn: the count of turns is not kept
+        elif on:
             sp = self._profile(ticks, dt)
             if math.isinf(self.spec.sat_error_deg):             # P gain 0: no output
                 tau = 0.0

@@ -89,7 +89,8 @@ def add_rover(spec: mujoco.MjSpec, name: str, x: float, y: float, yaw_rad: float
                 act.biasprm = [0.0, -kp / ratio ** 2, 0.0] + [0.0] * 7
                 act.forcelimited, act.forcerange = True, [-stall / ratio, stall / ratio]
                 joints.append({"name": jname, "joint": j["name"], "servo": int(j["servo"]), "direction": int(j.get("direction", 1)),
-                               "ratio": ratio, "mode": j.get("mode", "position"), "range": rng})
+                               "ratio": ratio, "mode": j.get("mode", "position"), "range": rng,
+                               "zero_ticks": int(j.get("zero_ticks", 2048))})
             start[jname] = STOW.get(j["name"], 0.0) if "coupled_to" not in j else STOW.get(j["coupled_to"], 0.0) * float(j["ratio"])
         for part in b["prints"]:
             mesh = f"{name}_{part}"

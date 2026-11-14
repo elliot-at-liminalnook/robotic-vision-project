@@ -50,6 +50,7 @@ DEVICE = {
     "kind": F(str, True, choices=DEVICE_KINDS), "name": F(str, True), "at_m": F("vec", True, -3, 3, n=(2, 3)),
     "facing_deg": F(NUM, lo=-360, hi=360), "looking_at_m": F("vec", lo=-3, hi=3, n=3),
     "joints_rad": F("vec", lo=-3.2, hi=3.2, n=6), "post": F(bool),
+    "battery_charge": F(NUM, lo=0.0, hi=1.0),                       # a rover's battery, as a fraction of full (default 0.9)
 }
 REGION = {"name": F(str, True), "rect_m": F("vec", True, -3, 3, n=4), "z_m": F("vec", lo=-1, hi=2, n=2)}
 GOAL = {

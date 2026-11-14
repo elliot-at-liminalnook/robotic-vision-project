@@ -22,6 +22,7 @@ from .camera import Camera
 from .errors import Refused
 from .locator import Locator
 from .ports import PortError, PortProvider
+from .rover.device import RoverDevice
 from .tree import Command, Node, Param
 
 WIGGLE_MIN = 4.0               # grey levels: the wrist camera's picture changes by at least this when the wrist turns
@@ -31,7 +32,8 @@ class Hub:
     def __init__(self, provider: PortProvider):
         self.provider = provider
         self.arm: ArmDevice | None = None
-        self.cameras: dict[str, Camera] = {}            # by the name the hub gave each
+        self.rover: RoverDevice | None = None
+        self.cameras: dict[str, Camera] = {}            # fixed cameras, by the name the hub gave each
         self.notes: list[str] = []                      # what discovery found worth saying
         self.locator: Locator | None = None
         self.discover()
@@ -42,7 +44,7 @@ class Hub:
         ports = self.provider()
         self.clock = ports.clock
         self.notes = []
-        self.arm, self.cameras, self.wrist = None, {}, None
+        self.arm, self.rover, self.cameras, self.wrist = None, None, {}, None
         for k, port in enumerate(ports.serial):
             ids = discovery.scan(port)
             kinds, strangers = discovery.match(ids)
@@ -55,11 +57,22 @@ class Hub:
                     self.arm = arm
                 except BusError as e:
                     self.notes.append(f"serial port {k}: an arm answers but could not be taken over: {e}")
-            if "rover" in kinds:
-                self.notes.append(f"serial port {k}: a rover answers; this hub has no rover driver yet")
+            if "rover" in kinds and self.rover is None:
+                rover = RoverDevice(port, self.clock)
+                try:
+                    rover.start()
+                    self.rover = rover
+                except BusError as e:
+                    self.notes.append(f"serial port {k}: a rover answers but could not be taken over: {e}")
             if not ids:
                 self.notes.append(f"serial port {k}: nothing answers")
         cams = sorted((Camera(p) for p in ports.cameras), key=lambda c: c.serial)
+        mine = [c for c in cams if c.identity.get("part_of") == "rover"]          # a rover's cameras say they are its own, and which
+        cams = [c for c in cams if c not in mine]
+        if self.rover is not None:
+            self.rover.cameras = {c.identity.get("role"): c for c in mine if c.identity.get("role") in ("left", "right")}
+        elif mine:
+            self.notes.append(f"{len(mine)} camera(s) say they belong to a rover, but no rover answered")
         wrist = self._find_wrist_camera(cams) if self.arm is not None and cams else None
         self.wrist = wrist
         for c in cams:
@@ -123,6 +136,13 @@ class Hub:
             node.kind = "device"
             node.about["device"] = "camera"
             cams.links[name] = node
+        if self.rover is not None:
+            rover = devices.add(self.rover.node("rover"))
+            movers.links["rover"] = rover
+            groups.add(Node("power", "group", "everything with a supply to watch")).links["rover_power"] = rover.children["power"]
+            for side, cam in self.rover.cameras.items():
+                node = rover.children["head"].add(self._camera_node(side, cam, f"the head's {side} camera: it moves with the head"))
+                cams.links[f"rover_{side}"] = node
         self.root.commands["wait"] = Command("Let time pass with every device holding still.", self.wait,
                                              {"seconds": Param("number", "how long", True, 0.0, 30.0)})
         self.root.commands["locate"] = Command(
@@ -153,6 +173,8 @@ class Hub:
             self.arm.actions.wait(seconds)                  # the arm's controller keeps running while it holds
         else:
             self.clock.sleep_until(self.clock.now() + float(seconds))
+        if self.rover is not None and self.rover.low_battery():
+            self.rover.stop()
         return {"ok": True, "time_s": round(float(self.clock.now()), 3)}
 
     def stop(self, path: str = "") -> dict:
@@ -160,7 +182,8 @@ class Hub:
 
     def shutdown(self) -> str:
         """Leave every servo with torque off. For every way out of the program; never raises."""
-        return self.arm.shutdown() if self.arm is not None else "no servos to switch off"
+        said = [d.shutdown() for d in (self.arm, self.rover) if d is not None]
+        return "; ".join(said) if said else "no servos to switch off"
 
     # ---- where things are ------------------------------------------------------
     SHOW_POSES = ((-0.7, -1.5708), (0.0, -1.5708), (0.7, -1.5708), (-0.35, -0.6), (0.35, -2.2), (0.0, 0.3))   # (pan, wrist roll) [rad]

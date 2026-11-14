@@ -120,7 +120,12 @@ class ServoBank:
         db = math.radians(s.deadband_deg)
         err = np.where(np.abs(err) <= db, 0.0, err - np.sign(err) * db)
         volt = np.clip((err + s.d_time_s * err_rate) / math.radians(s.sat_error_deg), -1.0, 1.0)  # fraction of supply
-        demand = s.tau_s * volt - (s.tau_s / s.w0) * np.asarray(qd)
+        return self.torque_from_voltage(volt, qd, dt)
+
+    def torque_from_voltage(self, volt, qd, dt: float) -> np.ndarray:
+        """The motor and its protections, given the fraction of the supply voltage the loop applies (-1..1)."""
+        s = self.spec
+        demand = s.tau_s * np.asarray(volt, float) - (s.tau_s / s.w0) * np.asarray(qd)
         tmax = s.torque_limit * s.tau_s
         demand = np.clip(demand, -tmax, tmax)
         # Overload protection: the timer runs while the (uncapped) output is above

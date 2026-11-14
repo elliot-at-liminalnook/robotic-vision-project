@@ -98,9 +98,9 @@ def guide(hub: Hub) -> str:
         lines.append("  nothing answered on any port")
     for name, n in devices.items():
         lines.append(f"  /devices/{name}: {n.summary}")
-        for k in ("frame", "tip", "reach", "servos", "tags"):
-            if k in n.about:
-                lines.append(f"      {k}: {n.about[k]}")
+        for k, text in n.about.items():
+            if k not in ("device", "lens", "pictures"):
+                lines.append(f"      {k}: {text}")
     for note in hub.notes:
         lines.append(f"  note: {note}")
     lines += ["", "Every command"]

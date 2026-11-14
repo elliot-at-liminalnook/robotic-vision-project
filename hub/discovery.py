@@ -19,7 +19,7 @@ KINDS = {
 
 def scan(port) -> list[int]:
     """The servo ids that answer on a port."""
-    bus = FeetechBus(port, reply_timeout_s=SCAN_TIMEOUT_S, retries=0)
+    bus = FeetechBus(port, reply_timeout_s=SCAN_TIMEOUT_S + float(getattr(port, "reply_time_s", 0.0)), retries=0)
     found = []
     for i in SCAN_IDS:
         try:

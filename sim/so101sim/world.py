@@ -22,7 +22,7 @@ from __future__ import annotations
 import copy
 import math
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import cv2
 import mujoco
@@ -51,6 +51,19 @@ USB_BYTES_PER_S = 8.0e6                 # what the camera's USB link carries
 JPEG_QUALITY = 85
 
 
+RADIO = dict(delay_s=0.004, jitter_s=0.003, spike_prob=0.01, spike_s=0.08)      # each way, for a rover's Wi-Fi link (placeholders)
+WIFI_BYTES_PER_S = 2.5e6                # what a rover's camera gets through over Wi-Fi (placeholder)
+BOARD_WATCHDOG_S = 0.4                  # a rover's own board stops its wheels after this long without a word from the hub
+BATTERY = dict(capacity_ah=5.0, cells=3, resistance_ohm=0.03, idle_a=0.35)        # the Gens ace 5000 mAh 3S pack; boards draw idle_a
+TICKS = 4096
+
+
+def cell_voltage(charge: float) -> float:
+    """A LiPo cell's resting voltage against how full it is (0..1): a rough curve, good enough to run low on."""
+    pts = [(0.0, 3.0), (0.05, 3.3), (0.15, 3.6), (0.5, 3.8), (0.9, 4.1), (1.0, 4.2)]
+    return float(np.interp(charge, [p[0] for p in pts], [p[1] for p in pts]))
+
+
 @dataclass
 class Bus:
     """One servo bus: emulated servos on a simulated wire, each driving one joint of the model."""
@@ -60,8 +73,15 @@ class Bus:
     act: np.ndarray                     # actuator ids
     qadr: np.ndarray
     dof: np.ndarray
-    hold: np.ndarray                    # the pose the servos were left holding [rad]
-    smap: ServoMap
+    hold: np.ndarray                    # the pose the servos were left holding (joint units)
+    zero: np.ndarray                    # servo ticks at joint value 0
+    ratio: np.ndarray                   # joint units per radian of the servo's shaft (1 for a hinge)
+    device: str = "arm"
+    radio: bool = False                 # reached over a radio link, through a board on the device
+    link_up: bool = True                # (tests take a radio link down)
+    last_word: float = 0.0              # when the hub's last bytes reached the device's board
+    wheels: tuple = ()                  # indices of servos the board's watchdog stops
+    board_stops: int = 0
 
 
 class WirePort:
@@ -101,6 +121,55 @@ class WirePort:
             wire.host_discard(self.world.t)
 
 
+class RadioPort(WirePort):
+    """A serial port reached over a rover's radio link: every byte is late by a few milliseconds each way, now
+    and then by much more, and nothing passes while the link is down. `reply_time_s` tells a driver how much
+    longer than on a wire a reply may take."""
+
+    reply_time_s = 0.05
+
+    def __init__(self, world: "World", index: int):
+        super().__init__(world, index)
+        self.rng = np.random.default_rng([world.generation, index, 77])
+        self._last_arrival = -1.0
+
+    def _delay(self) -> float:
+        d = RADIO["delay_s"] + self.rng.exponential(RADIO["jitter_s"])
+        return d + (RADIO["spike_s"] * self.rng.random() if self.rng.random() < RADIO["spike_prob"] else 0.0)
+
+    def write(self, data: bytes):
+        wire, w = self._wire(), self.world
+        if wire is None or not w.buses[self.index].link_up:
+            return
+        arrival = max(self._last_arrival, w.t + self._delay())       # bytes arrive in the order they were sent
+        self._last_arrival = arrival
+        wire.host_write(data, arrival)
+        w.buses[self.index].last_word = arrival
+
+    def read(self, n: int, timeout_s: float) -> bytes:
+        w, wire = self.world, self._wire()
+        deadline = w.t + timeout_s
+        if wire is None or not w.buses[self.index].link_up:
+            w.advance_to(deadline)
+            return b""
+        back = self._delay()
+        while wire.available(w.t - back) < n:
+            times = [a + back for a, _, _ in wire._rx if a > w.t - back + 1e-12]
+            if wire._tx:
+                times.append(max(wire._tx[0][0], w.t))
+            nxt = min(times) if times else None
+            if nxt is None or nxt > deadline:
+                w.advance_to(deadline)
+                break
+            w.advance_to(max(nxt, w.t + 1e-6))
+        return wire.host_read(n, w.t - back) if w.buses[self.index].link_up else b""
+
+    def reset_input(self):
+        wire = self._wire()
+        if wire is not None:
+            wire.host_discard(self.world.t - RADIO["delay_s"])
+
+
 class WorldClock:
     def __init__(self, world: "World"):
         self.world = world
@@ -115,11 +184,14 @@ class WorldClock:
 class WorldCamera:
     """A camera port: one fresh full-size picture per grab, through the camera's lens and JPEG, costing clock time."""
 
-    def __init__(self, world: "World", camera: str):
-        self.world, self.camera, self.generation = world, camera, world.generation
+    def __init__(self, world: "World", camera: str, part_of: str | None = None, role: str | None = None, bus: int | None = None):
+        """part_of, role: for a camera that is one of a device's own parts and says so ("rover", "left").
+        bus: the index of the radio bus it shares a link with, if it is reached by radio."""
+        self.world, self.camera, self.generation, self.bus = world, camera, world.generation, bus
         seed = int(world.scene.get("imperfections", {}).get("seed", 0))
         self.identity = {"serial": f"P4CAM-{zlib.crc32(f'{camera}:{seed}'.encode()) & 0xFFFFFF:06X}",
-                         "product": "ESP32-P4 UVC camera (Camera Module 3 Wide)", "kind": "cm3_wide"}
+                         "product": "ESP32-P4 camera (Camera Module 3 Wide)" + (f", {part_of} {role}" if part_of else ", UVC"),
+                         "kind": "cm3_wide", **({"part_of": part_of, "role": role} if part_of else {})}
 
     def grab(self) -> Frame:
         w = self.world
@@ -129,7 +201,12 @@ class WorldCamera:
         t = w.t
         image = w.render(self.camera)
         ok, buf = cv2.imencode(".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-        w.advance_to(w.t + len(buf) / USB_BYTES_PER_S)          # the frame crossing the USB link
+        if self.bus is not None:                                 # over the rover's Wi-Fi: slower, and not at all if the link is down
+            if not w.buses[self.bus].link_up:
+                raise PortError(f"camera {self.identity['serial']} does not answer (its radio link is down)")
+            w.advance_to(w.t + len(buf) / WIFI_BYTES_PER_S + 2 * RADIO["delay_s"])
+        else:
+            w.advance_to(w.t + len(buf) / USB_BYTES_PER_S)      # the frame crossing the USB link
         return Frame(cv2.cvtColor(cv2.imdecode(buf, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB), t)
 
 
@@ -186,7 +263,31 @@ class World:
             self.buses.append(Bus(wire, servos, ARM_JOINTS, act,
                                   np.array([m.joint(n).qposadr[0] for n in ARM_JOINTS]),
                                   np.array([m.joint(n).dofadr[0] for n in ARM_JOINTS]),
-                                  np.array([self.built.start[n] for n in ARM_JOINTS]), smap))
+                                  np.array([self.built.start[n] for n in ARM_JOINTS]), smap.zero.copy(), np.ones(len(ARM_JOINTS))))
+        rover = self.built.device("rover")
+        self.battery = None
+        if rover is not None:
+            joints = rover["joints"]
+            names = tuple(j["name"] for j in joints)
+            act = np.array([m.actuator(n).id for n in names])
+            ratio = np.array([j["ratio"] for j in joints])
+            for a, r in zip(act, ratio):                         # ctrl = the servo's torque at its shaft
+                m.actuator_gaintype[a] = mujoco.mjtGain.mjGAIN_FIXED
+                m.actuator_gainprm[a, :] = 0
+                m.actuator_gainprm[a, 0] = 1.0 / r
+                m.actuator_biastype[a] = mujoco.mjtBias.mjBIAS_NONE
+                m.actuator_biasprm[a, :] = 0
+                m.actuator_ctrllimited[a] = 0
+            zero_joint_damping(m, names)
+            spec = ServoSpec.from_config(d_time_s=0.0)
+            zero = np.array([j["zero_ticks"] for j in joints], float)
+            servos = [ServoEmulator(j["servo"], spec, mount_zero_ticks=z, mount_direction=j["direction"]) for j, z in zip(joints, zero)]
+            wire = VirtualBus(servos, **{k: cfg[k] for k in _WIRE_KEYS if k in cfg})
+            self.buses.append(Bus(wire, servos, names, act, np.array([m.joint(n).qposadr[0] for n in names]),
+                                  np.array([m.joint(n).dofadr[0] for n in names]), np.array([self.built.start[n] for n in names]),
+                                  zero, ratio, device="rover", radio=True,
+                                  wheels=tuple(k for k, j in enumerate(joints) if j["mode"] == "wheel")))
+            self.battery = {"charge": float(rover["battery_charge"]), "bus": len(self.buses) - 1, "volts": 0.0, "next": 0.0}
 
     def reset(self):
         """The running scene back to its start. Answers handed in are kept."""
@@ -196,10 +297,16 @@ class World:
         for bus in self.buses:
             self.data.ctrl[bus.act] = 0.0
             bus.wire.reset()
-            for s, ticks in zip(bus.servos, bus.smap.rad_to_ticks(bus.hold)):
+            bus.last_word, bus.board_stops = 0.0, 0
+            for s, hold, zero, ratio in zip(bus.servos, bus.hold, bus.zero, bus.ratio):
                 s.power_cycle()
-                s._write(goal.addr, goal.encode(int(ticks)))    # left powered, holding the starting pose
+                ticks = int(round(zero + s.mount_dir * (hold / ratio) * TICKS / (2 * math.pi)))
+                s._write(goal.addr, goal.encode(ticks))         # left powered, holding the starting pose
                 s._write(torque.addr, b"\x01")
+        if self.battery is not None:
+            self.battery["charge"] = float(self.built.device("rover")["battery_charge"])
+            self.battery["next"] = 0.0
+            self._battery_step(0.0)
         mujoco.mj_forward(self.model, self.data)
 
     @property
@@ -217,10 +324,15 @@ class World:
         while d.time + dt <= t + 1e-9:
             for bus in self.buses:
                 bus.wire.process(d.time)
-                q, qd = d.qpos[bus.qadr], d.qvel[bus.dof]
+                if bus.radio and bus.wheels and d.time - bus.last_word > BOARD_WATCHDOG_S:
+                    self._board_stops_wheels(bus)
+                q, qd = d.qpos[bus.qadr] / bus.ratio, d.qvel[bus.dof] / bus.ratio       # at each servo's shaft
                 for k, s in enumerate(bus.servos):
                     d.ctrl[bus.act[k]] = s.control(float(q[k]), float(qd[k]), dt)
-                    m.actuator_forcerange[bus.act[k]] = (-s.torque_limit_nm, s.torque_limit_nm)
+                    lim = s.torque_limit_nm / bus.ratio[k]
+                    m.actuator_forcerange[bus.act[k]] = (-lim, lim)
+            if self.battery is not None:
+                self._battery_step(dt)
             mujoco.mj_step(m, d)
         for bus in self.buses:
             bus.wire.process(t)
@@ -229,11 +341,42 @@ class World:
     def step(self, seconds: float):
         self.advance_to(self.t + max(0.0, float(seconds)))
 
+    def _board_stops_wheels(self, bus: Bus):
+        """The rover's own board has heard nothing from the hub for a while: it stops the wheels itself."""
+        speed = R.BY_NAME["motion_speed"]
+        moving = [k for k in bus.wheels if bus.servos[k].get("motion_speed") & 0x7FFF]
+        for k in moving:
+            bus.servos[k]._write(speed.addr, speed.encode(0))
+        if moving:
+            bus.board_stops += 1
+
+    def _battery_step(self, dt: float):
+        """The battery drains by what the rover draws, and its servos see the voltage that leaves."""
+        b = self.battery
+        bus = self.buses[b["bus"]]
+        amps = BATTERY["idle_a"] + sum(float(s.bank.last_current[0]) for s in bus.servos)
+        b["charge"] = max(0.0, b["charge"] - amps * dt / 3600.0 / BATTERY["capacity_ah"])
+        b["volts"] = BATTERY["cells"] * cell_voltage(b["charge"]) - BATTERY["resistance_ohm"] * amps
+        if self.data.time >= b["next"]:                          # the servos' supply follows, ten times a second
+            b["next"] = self.data.time + 0.1
+            for s in bus.servos:
+                s.base = replace(s.base, supply_v=b["volts"])
+                s._apply_registers()
+
     # ---- ports: all the hub ever gets --------------------------------------
     def ports(self) -> Ports:
         """What is plugged in right now: a serial port per servo bus, a camera port per camera, the clock."""
-        cams = sorted((WorldCamera(self, name) for name in self.built.cameras), key=lambda c: c.identity["serial"])
-        return Ports(clock=WorldClock(self), serial=[WirePort(self, i) for i in range(len(self.buses))], cameras=cams)
+        radio = next((i for i, b in enumerate(self.buses) if b.radio), None)
+        cams = []
+        for name, info in self.built.cameras.items():
+            dev = next(d for d in self.built.devices if d["name"] == info["device"])
+            if dev["kind"] == "rover":                           # a rover's cameras are its own parts, reached over its radio link
+                cams.append(WorldCamera(self, name, part_of="rover", role=name.rsplit("_", 1)[1], bus=radio))
+            else:
+                cams.append(WorldCamera(self, name))
+        cams.sort(key=lambda c: c.identity["serial"])
+        serial = [RadioPort(self, i) if b.radio else WirePort(self, i) for i, b in enumerate(self.buses)]
+        return Ports(clock=WorldClock(self), serial=serial, cameras=cams)
 
     # ---- pictures ------------------------------------------------------------
     def _pinhole(self, camera: str, width: int, height: int, fovy_deg: float | None = None) -> np.ndarray:

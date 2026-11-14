@@ -117,14 +117,14 @@ Plan: [5.6 The rover](MULTI_DEVICE_PLAN.md#56-the-rover)
 
 Plan: [5.6](MULTI_DEVICE_PLAN.md#56-the-rover), [5.9 Safety when nothing is known](MULTI_DEVICE_PLAN.md#59-safety-when-nothing-is-known)
 
-- [ ] Wheel mode (operating mode 1) in the servo emulator
-- [ ] Radio-link port: delay, jitter, losses
-- [ ] Battery model: voltage falling with charge, read from the servos
-- [ ] Wheel driver: drive, turn, odometry
-- [ ] Head driver: pan, tilt, lift, spacing
-- [ ] Command filters for wheels and head
-- [ ] Stop path for the rover: on `stop`, on a lost link, on low battery
-- [ ] Tests written
+- [x] Wheel mode (operating mode 1) in the servo emulator
+- [x] Radio-link port: delay, jitter, losses
+- [x] Battery model: voltage falling with charge, read from the servos
+- [x] Wheel driver: drive, turn, odometry
+- [x] Head driver: pan, tilt, lift, spacing
+- [x] Command filters for wheels and head
+- [x] Stop path for the rover: on `stop`, on a lost link, on low battery
+- [x] Tests written (`sim/tests/test_rover.py`, not run as a suite)
 
 ## Step 9. Start-up survey
 

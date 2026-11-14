@@ -178,9 +178,5 @@
   },
   "note": "needs = 25 % slack plus 30 mm for the plugs. The lead across pan must also take a turn of +/-170 deg: leave a loop. Routing is not designed."
  },
- "interference_mm3": {
-  "poses_checked": 93,
-  "pairs_that_overlap": {}
- },
  "all_parts_one_solid": true
 }

@@ -87,6 +87,38 @@ Reading a node gives the state of everything under it; `stop` at a node freezes 
   says so and points at `/discover`. Never a stale answer.
 - Time moves only inside an action, and a little for each picture (a frame period plus the transfer).
 
+## The rover (`rover/`)
+
+| Module | What |
+|---|---|
+| `rover/description.py` | The rover's own shape from `hardware/rover/rover.json`: where its cameras, tags and lowest point are at any head pose; wheel radius and track |
+| `rover/device.py` | Wheels with odometry, the head, power; their commands, protections and place in the tree |
+| `bus/group.py` | Any set of servos on a bus by id: position servos and motor-mode servos side by side |
+
+```
+/devices/rover/drive     forward {distance_m}, turn {angle_deg}        state: where its wheels say it has gone
+/devices/rover/head      point {pan_deg, tilt_deg}, raise {lens_height_m}, spread {lens_spacing_m}, stow
+/devices/rover/head/left, /right                                       picture
+/devices/rover/power                                                   state: volts, volts per cell, low
+```
+
+- **Found** by its six servo ids (11, 12, 21 to 24) on a port; that port is a radio link, so replies are
+  allowed 50 ms longer. Its two cameras say they are the rover's and which side (its own boards carry its
+  name: built in); they are not put through the wrist-camera test.
+- **Wheels** run in the servo's motor mode. Distance and heading are counted from the wheel positions,
+  which read within one turn, so the hub counts the turns. Speed 0.08 m/s, acceleration 0.25 m/s².
+- **Protections:** it drives only with the head stowed; the head is never sent to where its own shape puts
+  it within 6 mm of the surface; a head joint 12° behind for 0.5 s is held where it is; a wheel servo at
+  its limit for 0.4 s stops the wheels; nothing moves below 3.3 V per cell; six reads lost in a row is
+  "the rover has not answered". The rover's own board stops the wheels after 0.4 s without a word.
+- **Not solved here:** the rover is light. A head that meets something turns the whole rover instead of
+  stopping, and wheels that spin against something are counted as distance. Only looking tells. The head's
+  servos are held to 35 % of their torque so such a push is at least gentle.
+
+Smoke-checked: 0.05 to 0.40 m drives within 2 % and counted within 1 %; turns within 4° and counted within
+2.5 %; a 0.12 m square ends within 30 mm and 8° of where it began; every head command against the true
+joint; the link cut mid-drive.
+
 ## The locator (`locator.py`)
 
 Where devices are relative to each other, from what has been seen, each answer with an uncertainty,

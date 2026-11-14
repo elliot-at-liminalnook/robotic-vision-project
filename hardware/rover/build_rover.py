@@ -213,7 +213,7 @@ def build() -> dict[str, Body]:
         yc = sy * c0
         cr = B[f"carriage_{side}"] = Body(f"carriage_{side}", "head", T + [0, yc, 0],
                                           dict(name="spacing" if side == "left" else "spacing_right", type="slide", axis=[0, sy, 0],
-                                               **(dict(servo=24, direction=1, ratio=PITCH_R / 1000.0,
+                                               **(dict(servo=24, direction=1, ratio=PITCH_R / 1000.0, zero_ticks=148,   # its 334 deg of travel inside one turn
                                                        range_m=[0.0, (LIMITS["spacing"][1] - c0) / 1000.0]) if side == "left"
                                                   else dict(coupled_to="spacing", ratio=1.0))))
         y0, y1 = yc - 15, yc + 15
