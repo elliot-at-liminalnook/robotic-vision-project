@@ -27,28 +27,10 @@ from so101sim.config import load_servos  # noqa: E402
 from so101sim.servo import ProfileLimiter  # noqa: E402
 from so101sim.command import CommandFeedforward, GripOffset  # noqa: E402
 from so101sim.ik import ArmIK  # noqa: E402
+from hub.arm.grasp import fixed_pad_face, gripper_open_angle, square_roll  # noqa: E402,F401  (the gripper's geometry lives with the arm's driver)
 
 CUBE_SIZE = 0.030
 GRIPPER_CLOSED_CMD = -0.17   # command past contact; the torque limit sets grip force
-
-
-def gripper_open_angle(ik: ArmIK, width: float) -> float:
-    for q in np.linspace(0.0, 1.7, 171):
-        if ik.jaw_gap(q) >= width:
-            return float(q)
-    raise RuntimeError(f"gripper can't open to {width * 1000:.0f} mm")
-
-
-def fixed_pad_face(ik: ArmIK) -> np.ndarray:
-    """Centre of the fixed jaw's tip pad face, in the gripper body frame."""
-    import mujoco
-    ik.d.qpos[:] = 0
-    mujoco.mj_forward(ik.m, ik.d)
-    g, pad = ik.gripper, ik.m.geom("pad_fixed_0").id
-    R, p = ik.d.xmat[g].reshape(3, 3), ik.d.xpos[g]
-    c = R.T @ (ik.d.geom_xpos[pad] - p)
-    n = R.T @ ik.d.geom_xmat[pad].reshape(3, 3)[:, 0]   # pad local x = into the gap
-    return c + n * ik.m.geom_size[pad][0]
 
 
 GRASP_CLEARANCE = 0.004   # descend with the fixed jaw this far off the object's face
@@ -83,29 +65,6 @@ def solve_grasp(ik: ArmIK, object_center, width: float, q_seed, dz: float = 0.0,
         R = ik.d.xmat[g].reshape(3, 3)
         q, err = ik.solve(target - R @ offset, q)
     return q, err
-
-
-def square_roll(ik: ArmIK, q: np.ndarray) -> np.ndarray:
-    """Pick wrist_roll so the jaws close along a world axis (cube faces).
-
-    Searches only the camera-safe roll range (it spans pi, so every jaw
-    orientation is available; see hardware/wrist_mount/place_camera.py).
-    """
-    import mujoco
-    from so101sim.config import wrist_roll_range
-    lo, hi = wrist_roll_range()
-    best, best_cost = q[4], np.inf
-    for roll in np.linspace(max(lo, hi - np.pi), hi, 181):
-        ik.d.qpos[:6] = q
-        ik.d.qpos[4] = roll
-        mujoco.mj_forward(ik.m, ik.d)
-        xg = ik.d.xmat[ik.gripper].reshape(3, 3)[:, 0]   # jaw closing axis
-        cost = abs(np.sin(2 * np.arctan2(xg[1], xg[0])))
-        if cost < best_cost - 1e-9:
-            best, best_cost = roll, cost
-    out = q.copy()
-    out[4] = best
-    return out
 
 
 def main() -> int:
