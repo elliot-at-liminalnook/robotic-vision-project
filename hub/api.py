@@ -88,7 +88,10 @@ def guide(hub: Hub) -> str:
              "  Time moves only inside an action (and a little for each picture). Reading state is free.",
              "  Each device has its own frame; there is no shared one. A position you get or give is always in some device's frame.",
              "  Devices carry printed tags so that cameras can find them: a picture's ?tags=true lists the ones in view and what kind of",
-             "  device carries each. /where uses them.", "",
+             "  device carries each. /where uses them: it answers from what the cameras have seen so far, with an uncertainty, how",
+             "  old the newest sighting is and what supports it; or known = false and why. POST /locate looks afresh; with",
+             "  show_wrist_tag the arm shows a tag at several poses, which locates cameras that cannot see its base.",
+             "  Names for /where: a device's name, and arm/wrist_camera and arm/gripper for those parts of the arm.", "",
              "What was found"]
     devices = hub.root.children["devices"].children
     if not devices:

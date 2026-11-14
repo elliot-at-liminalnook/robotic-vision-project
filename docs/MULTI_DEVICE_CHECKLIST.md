@@ -95,11 +95,11 @@ Plan: [5.1](MULTI_DEVICE_PLAN.md#51-four-parts-two-apis-and-one-rule-about-what-
 
 Plan: [5.4](MULTI_DEVICE_PLAN.md#54-finding-where-the-devices-are)
 
-- [ ] Pose estimate between devices from all links, with uncertainty, age and support
-- [ ] "Not known" when no chain of links connects two devices
-- [ ] The arm contributing: wrist camera, wrist tag shown to cameras
-- [ ] `GET /where`
-- [ ] Tests written (error within stated bounds, honest uncertainty)
+- [x] Pose estimate between devices from all links, with uncertainty, age and support
+- [x] "Not known" when no chain of links connects two devices
+- [x] The arm contributing: wrist camera, wrist tag shown to cameras
+- [x] `GET /where`, and `POST /locate` (fresh pictures; `show_wrist_tag` has the arm show its wrist tag at six poses)
+- [x] Tests written (error within stated bounds, honest uncertainty): `sim/tests/test_locator.py`, not run as a suite
 
 ## Step 7. Rover designed
 

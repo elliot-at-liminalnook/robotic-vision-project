@@ -25,7 +25,8 @@ hub/
   camera.py       a camera: pictures through its port, the nominal lens of its kind
   builtin.py      what each kind of device is: where its tags are, a camera kind's nominal lens
   geometry.py     poses as 4x4 matrices
-  locate.py       a camera's pose relative to the arm, from the arm's tags
+  locate.py       a camera's pose relative to the arm from one picture (the first, single-picture version)
+  locator.py      where devices are relative to each other: links, chains, uncertainty, age, support
   vision/tags.py  tags in a picture; the pose of the rigid body that carries them
   errors.py       Refused: a request that will not be carried out, with the reason
   arm/            the arm's driver: its controller and everything the controller needs
@@ -33,6 +34,7 @@ hub/
     actions.py      move_tip, move_joints, gripper, wait: run until done, then say what happened and why
     device.py       the arm's nodes and commands in the tree
     link.py         the arm on its servo bus, through the command filter, one control tick at a time
+    kinematics.py   where the arm's tags, wrist camera and gripper are, from its joint angles
     ik.py dynamics.py governor.py command.py motion.py servo.py servo_model.py safety.py grasp.py config.py
   bus/            the servo bus: packets, the register table, the checked driver, BusArm
 ```
@@ -74,7 +76,8 @@ Reading a node gives the state of everything under it; `stop` at a node freezes 
 | `GET /{camera}/picture` | JPEG. `?width=640` smaller; `?tags=true` JSON with the tags in view; `?base64=true` |
 | `POST /{node}/{command}` | An action. Checked against the command's parameters first |
 | `POST /{node}/stop`, `POST /stop` | Freeze everything under the node; everything |
-| `GET /where?of=A&relative_to=B` | Where A is in B's frame, with uncertainty, or `known: false` and why. So far a fixed camera and the arm |
+| `GET /where?of=A&relative_to=B` | Where A is in B's frame, with uncertainty, age and support, or `known: false` and why |
+| `POST /locate` | Look afresh; `show_wrist_tag` has the arm show its wrist tag at several poses |
 | `POST /wait`, `POST /discover` | Let time pass; look again for what is plugged in |
 
 - No ground truth and no scene description: tests check that no name from the scene file appears in any answer,
@@ -83,6 +86,33 @@ Reading a node gives the state of everything under it; `stop` at a node freezes 
 - A device that stops answering (eight position reads in a row fail, or a camera is gone) gives a 503 that
   says so and points at `/discover`. Never a stale answer.
 - Time moves only inside an action, and a little for each picture (a frame period plus the transfer).
+
+## The locator (`locator.py`)
+
+Where devices are relative to each other, from what has been seen, each answer with an uncertainty,
+an age and what supports it; or `known: false` and why.
+
+| Link | From |
+|---|---|
+| fixed camera → arm | Every sighting by that camera of the arm's tags: the blocks beside its base, and the tag behind its wrist camera at each pose the arm showed it in. All of one camera's sightings are solved together, as points known in the arm's frame against where they fell in the pictures |
+| arm → its wrist camera, its gripper | The joint angles and the arm's own shape (`arm/kinematics.py`), now |
+| anything → anything | Chained through the arm: a camera to another camera, a camera to the wrist camera |
+
+- `POST /locate` takes a fresh full-size picture on every fixed camera. With `{"show_wrist_tag": true}` the
+  arm goes to its home and turns its wrist tag through six poses, with a picture at each: a camera that
+  cannot see the arm's base is located that way.
+- `GET /where?of=A&relative_to=B`: names are a device's name, `arm/wrist_camera`, `arm/gripper`. It answers
+  from what has been seen so far; if nothing links the two it takes one fresh look first.
+- **Not known** when: there is no arm; a camera has seen none of the arm's tags; all it saw lies in one
+  plane (the reading could be tilted either way); or the sightings do not agree.
+- **Moved:** if new sightings fall more than 12 px from where the old pose puts them, what was seen before
+  is dropped and a note says so.
+- **Uncertainty** is the fit's own, plus a floor many sightings cannot average away: each lens differs from
+  its datasheet, so every distance through an uncalibrated camera is off by about 1.5 % of itself
+  (`builtin.LENS_FOCAL_TOLERANCE`). Without that floor it stated 1 to 3 mm where the error was 6 to 17 mm.
+
+Smoke-checked in the seven scenes with an arm and a camera and at eight seeded camera places with their
+own lenses: errors 6 to 17 mm at 0.5 to 0.85 m, every one inside 3.5 times what was stated.
 
 ## How well locating does
 

@@ -88,4 +88,6 @@ class Lens:
 #   this focal length gives 99 deg -> k1 = -0.033 (one term).
 # One unit differs from the next, so these are a starting point the hub corrects from what it sees.
 LENSES = {"cm3_wide": Lens(1920, 1080, 982.1, 982.1, 959.5, 539.5, (-0.033, 0.0, 0.0, 0.0, 0.0))}
+LENS_FOCAL_TOLERANCE = 0.015         # how far one unit's focal length may be from the datasheet's, as a fraction (one sigma).
+#                                      A distance measured through an uncalibrated lens is off by this much of itself.
 LENSES["pinhole"] = Lens(1920, 1080, 982.1, 982.1, 959.5, 539.5)      # no distortion at all: for comparison only

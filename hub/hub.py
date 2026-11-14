@@ -15,12 +15,12 @@ import math
 import cv2
 import numpy as np
 
-from . import discovery, locate
-from . import geometry as G
+from . import discovery
 from .arm.device import ArmDevice
 from .bus import BusError
 from .camera import Camera
 from .errors import Refused
+from .locator import Locator
 from .ports import PortError, PortProvider
 from .tree import Command, Node, Param
 
@@ -33,6 +33,7 @@ class Hub:
         self.arm: ArmDevice | None = None
         self.cameras: dict[str, Camera] = {}            # by the name the hub gave each
         self.notes: list[str] = []                      # what discovery found worth saying
+        self.locator: Locator | None = None
         self.discover()
 
     # ---- discovery -----------------------------------------------------------
@@ -64,6 +65,10 @@ class Hub:
         for c in cams:
             if c is not wrist:
                 self.cameras[f"camera_{len(self.cameras) + 1}"] = c
+        if self.locator is None:
+            self.locator = Locator(self.clock)
+        self.locator.clock = self.clock
+        self.locator.reset(self.arm is not None, {name: c.lens(1920, 1080) for name, c in self.cameras.items()})   # nothing seen yet
         self._build_tree()
         return self.found()
 
@@ -120,6 +125,13 @@ class Hub:
             cams.links[name] = node
         self.root.commands["wait"] = Command("Let time pass with every device holding still.", self.wait,
                                              {"seconds": Param("number", "how long", True, 0.0, 30.0)})
+        self.root.commands["locate"] = Command(
+            "Take a fresh full-size picture on every fixed camera and work out again where the devices are relative to each "
+            "other, from the printed tags in view. With show_wrist_tag the arm also turns the tag behind its wrist camera "
+            "toward several directions and a picture is taken at each: a camera that cannot see the arm's base can be "
+            "located that way, and every camera is located better.", self.locate, {
+                "show_wrist_tag": Param("boolean", "true: the arm moves through a few poses near its home to show its wrist tag"),
+            })
         self.root.commands["discover"] = Command(
             "Look again for what is plugged in, and take it over afresh. Use it when devices stop answering, or after being moved.",
             self.discover)
@@ -151,37 +163,59 @@ class Hub:
         return self.arm.shutdown() if self.arm is not None else "no servos to switch off"
 
     # ---- where things are ------------------------------------------------------
+    SHOW_POSES = ((-0.7, -1.5708), (0.0, -1.5708), (0.7, -1.5708), (-0.35, -0.6), (0.35, -2.2), (0.0, 0.3))   # (pan, wrist roll) [rad]
+
+    def _look(self) -> dict:
+        """One fresh full-size picture from every fixed camera, taken in by the locator."""
+        q = self.arm.link.q() if self.arm is not None else None
+        out = {}
+        for name, cam in self.cameras.items():
+            frame = cam.grab()
+            out[name] = self.locator.see(name, frame.image, frame.t, q)
+        return out
+
+    def locate(self, show_wrist_tag: bool = False) -> dict:
+        """Look, and work out again where the devices are (hub/locator.py)."""
+        if not self.cameras:
+            return {"ok": True, "cameras": {}, "note": "there is no fixed camera to look with", "time_s": round(float(self.clock.now()), 3)}
+        seen = [self._look()]
+        shown = 0
+        if show_wrist_tag:
+            if self.arm is None:
+                raise Refused("there is no arm to show a tag with")
+            self.arm.actions._need_torque()
+            x, y, z = (0.20, 0.0, 0.16)                             # the arm's home, where it is known to have room
+            self.arm.actions.move_tip(x, y, z, roll=self.arm.ctrl._roll_default(), timeout_s=6.0, tolerance_m=0.02)
+            home = self.arm.ctrl.goal.copy()
+            for pan, roll in self.SHOW_POSES:
+                r = self.arm.actions.move_joints(shoulder_pan=float(np.clip(home[0] + pan, self.arm.ctrl.lo[0], self.arm.ctrl.hi[0])),
+                                                 wrist_roll=float(np.clip(roll, self.arm.ctrl.lo[4], self.arm.ctrl.hi[4])), timeout_s=4.0)
+                if self.arm.ctrl.last_block is not None:           # it met something: go no further that way
+                    break
+                self.arm.actions.wait(0.4)                         # at rest when the picture is taken
+                seen.append(self._look())
+                shown += 1 if r.get("ok") else 0
+            self.arm.actions.move_joints(shoulder_pan=float(home[0]), wrist_roll=float(home[4]), timeout_s=4.0)
+        return {"ok": True, "cameras": self.locator.summary(), "pictures_per_camera": len(seen), "wrist_tag_poses": shown,
+                "tags_seen": {name: sorted({t for look in seen for t in look[name]["tags_seen"]}) for name in self.cameras},
+                "time_s": round(float(self.clock.now()), 3)}
+
     def where(self, of: str, relative_to: str = "arm") -> dict:
-        """Where one device is in another's frame, from what cameras see of the devices' tags right now.
-        So far: a fixed camera and the arm, either way round (the locator comes with step 6 of the plan)."""
-        names = set(self.cameras) | ({"arm"} if self.arm is not None else set())
+        """Where one device is in another's frame, from what has been seen of the devices' tags.
+        If nothing links them yet, one fresh look is taken first."""
+        alias = {"wrist_camera": "arm/wrist_camera", "gripper": "arm/gripper"}
+        of, relative_to = alias.get(of, of), alias.get(relative_to, relative_to)
+        names = self.locator.names()
         for n in (of, relative_to):
             if n not in names:
-                raise Refused(f"there is no device '{n}'; there are {sorted(names)}", 404)
+                raise Refused(f"there is no device '{n}'; there are {names}", 404)
         if of == relative_to:
             raise Refused("of and relative_to are the same device")
-        cam_name = of if of in self.cameras else relative_to if relative_to in self.cameras else None
-        other = relative_to if cam_name == of else of
-        if cam_name is None or other != "arm":
-            return {"ok": True, "known": False, "of": of, "relative_to": relative_to,
-                    "why": "the hub can so far only relate a fixed camera and the arm"}
-        cam = self.cameras[cam_name]
-        frame = cam.grab()
-        fix = locate.camera_from_arm(frame.image, cam.lens(frame.image.shape[1], frame.image.shape[0]))
-        if fix is None:
-            return {"ok": True, "known": False, "of": of, "relative_to": relative_to,
-                    "why": f"{cam_name} sees none of the tags on the arm's base"}
-        if not fix.trusted:
-            return {"ok": True, "known": False, "of": of, "relative_to": relative_to, "tags_seen": fix.tags,
-                    "why": f"{cam_name} sees too little of the arm's tags to tell (tags {fix.tags}"
-                           + (", all in one plane: the reading could be tilted either way)" if fix.ambiguous else ")")}
-        T = fix.T_base_cam if of == cam_name else G.inv(fix.T_base_cam)
-        out = {"ok": True, "known": True, "of": of, "relative_to": relative_to,
-               "position_m": [round(float(v), 4) for v in T[:3, 3]],
-               "uncertainty_m": round(fix.sigma_m, 4), "uncertainty_deg": round(math.degrees(fix.sigma_rad), 2),
-               "from": {"camera": cam_name, "tags": fix.tags, "picture_s": round(frame.t, 3)},
-               "frame": "the arm's own frame" if relative_to == "arm" else
-                        f"{relative_to}'s own frame: x to the picture's right, y down the picture, z the way it looks"}
-        if of == cam_name:
-            out["looking_along"] = [round(float(v), 4) for v in T[:3, 2]]
+        q = self.arm.link.q() if self.arm is not None else None
+        out = self.locator.where(of, relative_to, q)
+        if not out["known"] and self.arm is not None and self.cameras:
+            self._look()
+            out = self.locator.where(of, relative_to, q)
+        if not out["known"] and self.arm is not None:
+            out["try"] = "POST /locate {\"show_wrist_tag\": true}: the arm shows the tag behind its wrist camera at several poses"
         return out
