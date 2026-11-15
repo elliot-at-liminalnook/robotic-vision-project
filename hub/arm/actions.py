@@ -285,10 +285,18 @@ class ArmActions:
         turn = ((lambda q: self._roll_for_axis(q, jaws_along_deg)) if jaws_along_deg is not None
                 else (lambda q: G.square_roll(app.ik, q)) if square_jaws else None)
         q, err = self._solve_tip(point, q0, roll_fn=turn)
+        if not (err <= C.IK_TOL and np.isfinite(q).all()) and np.isfinite(q).all():
+            # From far off the solver can stop short of a point that is within reach: it goes downhill from where the arm
+            # is. Once more, from where it got to. (Without this a point was refused as out of reach by an answer that
+            # went on to say the arm reaches further than that in the same direction at the same height.)
+            again, err_again = self._solve_tip(point, q, roll_fn=turn)
+            if err_again <= C.IK_TOL and np.isfinite(again).all():
+                q, err = again, err_again
         # Refuse before anything moves, with the reason: the end point, or a point on the straight line to it.
         if not (err <= C.IK_TOL and np.isfinite(q).all()):
             raise Refused("that point cannot be reached with the fingers pointing down, so nothing was moved. "
-                           + self._why_unreachable(point) + f" The tip is now at {np.round(self.tip(), 3).tolist()}.")
+                           + self._why_unreachable(point, q if np.isfinite(q).all() else None)
+                           + f" The tip is now at {np.round(self.tip(), 3).tolist()}.")
         end = point - self._mid(q, gap)
         bad = self._line_blocked(np.array(app.target, float), end, app.goal)
         if bad is not None:

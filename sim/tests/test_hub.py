@@ -64,7 +64,8 @@ def started():
 def test_the_hub_imports_nothing_from_the_simulation():
     allowed = {"hub", "numpy", "cv2", "scipy", "mujoco", "tomllib", "math", "dataclasses", "functools", "pathlib", "typing",
                "__future__", "collections", "json", "time", "itertools", "http", "urllib", "argparse", "sys", "threading",
-               "io", "base64", "copy", "enum", "abc", "socket", "struct", "queue", "logging", "os", "signal", "re", "zlib"}
+               "io", "base64", "copy", "enum", "abc", "socket", "struct", "queue", "logging", "os", "signal", "re", "zlib",
+               "select", "serial"}                                # (hub/real.py: the real machine's sockets, and pyserial)
     for path in (ROOT / "hub").rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
             names = []

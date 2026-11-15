@@ -89,7 +89,7 @@ Plan: [5.1](MULTI_DEVICE_PLAN.md#51-four-parts-two-apis-and-one-rule-about-what-
 - [x] The model's REST API, with no ground truth and no description of the place
 - [x] A pick through the hub's API in several scenes (workcell, open_small, moved_arm, bench, cluttered: smoke-checked)
 - [x] Tests written (import rule, new places, blindfold, a moved camera is followed): `sim/tests/test_hub.py`, not run as a suite
-- [ ] Old `sim_api.py` retired. **Kept, for one reason now:** its window, in which a person can watch and drive the arm by hand between a model's requests (`--window`, `--hands-on`); the hub's system has no window. The bench's eight-step tidy, the other reason it was kept, now runs through the hub's API (`sim/solutions/bench.py`). Retiring it means giving that window up or building one on the hub: a choice, not a chore (DECISIONS MD93, MD113)
+- [x] Old `sim_api.py` retired (2026-11-15), with its bench solution, its task table and its tests. What it had that the hub's system did not, a window to watch and take a turn in, is now `run_system.py --window` / `--hands-on`; the tests that held the arm's actions to account through it are kept, through the hub (`test_arm_through_hub.py`) (DECISIONS MD118)
 
 ## Step 6. Locator
 

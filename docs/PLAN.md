@@ -126,7 +126,7 @@ Options:
 - [ ] Stop path follow-ups: `torque_off()` / `torque_on()` on the Newton backend; torque off at the end of `pick_demo.py`; a watchdog that freezes or switches torque off on servo feedback (temperature, voltage, status bits, replies lost in a row).
 - [ ] On a real HX-30HM: does a goal write switch torque on, and does a servo with torque off coast or brake (DECISIONS E5, E9)?
 - [x] Bench scene and task with a reference solution through the API (2026-11-11): DECISIONS T5–T11.
-- [x] REST API for a language model (2026-11-11): `sim/scripts/sim_api.py`; DECISIONS R1–R8.
+- [x] REST API for a language model (2026-11-11): `sim/scripts/sim_api.py`; DECISIONS R1–R8. Retired 2026-11-15 in favour of the hub's API (`hub/`, `sim/scripts/run_system.py`; DECISIONS MD118).
 - [ ] Try the API with a model end to end (nothing has driven it yet except tests and curl), with and without object positions; add what it turns out to need (likely: a way to point at a pixel in a camera picture).
 - [x] Camera firmware in the loop (2026-11-11): `p4-uvc-camera` built for the PC with stand-in sensor, encoder, FreeRTOS and USB; `teleop.py --camera-fw` (DECISIONS X13–X22, `firmware/p4-uvc-camera/host/README.md`).
 - [ ] Rebuild the firmware with ESP-IDF after the `s_last_fb_get` change (X20).

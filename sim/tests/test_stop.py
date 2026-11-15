@@ -272,21 +272,3 @@ sys.exit(teleop.main())
     assert "stop path: torque off on every servo" in r.stdout, r.stdout[-800:] + r.stderr[-800:]
     assert "with torque on: none" in r.stdout, r.stdout[-800:]
     assert (r.returncode == 0) == (how == "esc"), (r.returncode, r.stderr[-400:])
-
-
-def test_the_api_refuses_to_move_a_limp_arm_and_says_why():
-    """A remote caller must not switch on what the person at the arm switched off."""
-    import json
-    import sim_api as A
-    api = A.SimApi()
-    api.app.set_torque(False)
-    before = api.app.goal.copy()
-    for path, body in (("/move_tip", {"x": 0.22, "y": 0.0, "z": 0.12}), ("/move_joints", {"shoulder_pan": 0.3}),
-                       ("/gripper", {"opening": 0.5})):
-        status, _, out = A.dispatch(api, "POST", path, json.dumps(body).encode())
-        r = json.loads(out)
-        assert status == 409 and not r["ok"] and "torque" in r["error"], (path, r)
-    assert api.app.limp and not api.app.sim.torque_enabled and np.array_equal(api.app.goal, before)
-    assert A.dispatch(api, "POST", "/wait", json.dumps({"seconds": 0.2}).encode())[0] == 200
-    assert A.dispatch(api, "POST", "/reset", b"")[0] == 200 and not api.app.limp
-    assert json.loads(A.dispatch(api, "POST", "/move_joints", json.dumps({"shoulder_pan": 0.3}).encode())[2])["reached"]

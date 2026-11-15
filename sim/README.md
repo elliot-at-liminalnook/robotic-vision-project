@@ -27,8 +27,8 @@ sim/
 ├── tests/                  # pytest: invariants, fuzzing, config/model/docs consistency (see "Tests")
 └── scripts/
     ├── teleop.py           # drive the arm with keyboard + mouse, all three cameras live
-    ├── sim_api.py          # REST API: the same controller, driven by a language model or any program
-    ├── bench_solution.py   # the bench task done through that API: the proof that it can be done
+    ├── run_system.py       # a world, the hub on its ports, the hub's REST API and the operator's; --window to watch
+    ├── system_window.py    # that window: every camera's view, a status line, keys for a person to take a turn
     ├── pick_demo.py        # scripted pick: end-to-end physics check
     ├── vision_check.py     # every camera sees what it should, per backend
     ├── servo_load_study.py # can the servos carry the wrist camera?
@@ -242,65 +242,19 @@ Limits: the pictures are the simulation's, so this says nothing about real image
 frames compress much better than real ones (74 kB at 1080p here), so **USB frame rates for large sizes
 are optimistic**. The timings of the stand-ins are placeholders. MuJoCo backend only.
 
-## REST API for a language model (`sim_api.py`)
-
-```bash
-python sim/scripts/sim_api.py                       # http://127.0.0.1:8765   (--bus, --camera-fw, --cables as in teleop)
-python sim/scripts/sim_api.py --window              # also show the camera views and status panel, actions at real speed
-python sim/scripts/sim_api.py --hands-on            # the window also takes teleop's keys and mouse: you and the model share the arm
-curl http://127.0.0.1:8765/                         # a guide written for the model: give it this first
-curl http://127.0.0.1:8765/state
-curl -X POST http://127.0.0.1:8765/move_tip -d '{"x": 0.24, "y": 0.06, "z": 0.09, "square_jaws": true}'
-curl http://127.0.0.1:8765/camera/wrist -o wrist.jpg
-```
-
-| Endpoint | What it does |
-|---|---|
-| `GET /` | A plain-text guide for the model, worded for how this server was started: units, frame, what "tip" means, how time works, this scene's objects and their sizes, where the cameras stand, what each message means, a pick step by step, every endpoint and parameter with its range |
-| `GET /openapi.json` | The same endpoints as OpenAPI 3, for tools that build function definitions from it |
-| `GET /state` | Time, joint angles and limits, tip, wrist roll, gripper (opening, gap, holding), servo loads, the controller's last message, physics and filter checks, and the objects' positions |
-| `GET /cameras`, `GET /camera/{name}` | The cameras; a camera's picture as a JPEG (`?base64=true` for JSON) |
-| `POST /randomize` | Reset, then put every loose object somewhere new: upright, turned at random, within reach, clear of everything else (`seed` to repeat a layout) |
-| `POST /move_tip` | Straight-line move of the tip to x, y, z (optional `roll`, `square_jaws`, `jaws_along_deg`) |
-| `POST /move_joints` | Joint angles in radians |
-| `POST /gripper` | `opening` 0 to 1, or `gap_m` between the pads; closing on something holds it gently |
-| `GET /task` | What is to be done in this scene (`--scene bench`), and which of its goals hold now |
-| `POST /wait`, `POST /reset`, `GET /report` | Let time pass; start again; the monitor's, filter's and optional layers' reports |
-
-How it is meant to be used:
-
-- **Turn-based.** Simulated time moves only inside an action, which runs until it is finished or its
-  timeout passes and then answers with `reached`, `elapsed_s`, `tip_error_m`, the controller's message
-  and the state afterwards. Reading is free. So the model can take as long as it likes to think, and
-  the same requests always give the same run.
-- **The same controller as teleop**, behind the same command filter and physics monitor. The model can do
-  what a person at the keyboard can, and no more.
-- **Errors are sentences.** A request that cannot be done answers `ok: false` with the reason and the
-  allowed range, and changes nothing. Unknown fields are refused by name (a misspelt parameter is not
-  silently ignored).
-- **"Tip" means the point midway between the jaw pads**, not the controller's own tip (which sits on the
-  fixed jaw's pad): put the tip on an object's centre and the object is between the jaws.
-- `/state` includes the objects' true positions, which a real robot would not have.
-  `--no-object-positions` leaves them out, and the model has to use the cameras.
-- `--hands-on` makes the window teleop between requests (same keys, mouse and controller), with the
-  simulation running at real speed. While a request's action runs the keys are ignored; the action starts
-  from wherever you left the arm. Time then also passes between requests, so a run is no longer repeatable.
-- **Working from pictures only:** start with `--no-object-positions`, `POST /randomize`, then use `/camera`.
-  The API gives no camera calibration (a `/pixel` endpoint that turned a pixel into a line of sight was tried on
-  2026-11-12 and removed the same day, DECISIONS R11): the caller has to work out where things are itself.
-- It listens on this machine only (`--host` changes that), has no authentication, and serves one request
-  at a time.
-
-## The bench scene and task (`--scene bench`)
+## The bench scene (`teleop.py --scene bench`, `run_system.py --scene bench`)
 
 A harder scene for the same arm, with a task whose goals the simulation checks.
 
 ```bash
-python sim/scripts/sim_api.py --scene bench --window     # one terminal: the scene, the API, a window to watch
-python sim/scripts/bench_solution.py                     # another: tidies the bench through the API (about a minute)
-curl http://127.0.0.1:8765/task                          # the task in words, and which goals hold now
-python sim/scripts/teleop.py --scene bench               # or try it by hand
+python sim/scripts/teleop.py --scene bench                 # try it by hand
+python sim/scripts/run_system.py --scene bench --window    # the hub on it, its API, a window to watch
+python sim/scripts/solve.py bench tidy                     # the tidy done through the hub's API alone, scored by the referee
 ```
+
+(The REST API for a language model is the hub's: [hub/README.md](../hub/README.md) and the next section. The older
+single-arm API, `sim_api.py`, which was given where things were, was retired once the hub could do all it did:
+DECISIONS MD118. It is in the git history up to commit `1faa731`.)
 
 | In the scene | |
 |---|---|
@@ -315,22 +269,22 @@ the socket; green block flat on the platform with the purple cube on it; drawer 
 moving. The red cube cannot be reached until the drawer is opened, and the purple cube cannot be placed
 until the block is.
 
-**It can be done:** `bench_solution.py` does it through the REST API alone in 62 s of simulated time, with
-the physics monitor clean, and a test runs it. It is a closed loop: before each step it reads where the
-part is, which way the jaws ended up and how high the arm reaches there.
+**It can be done**, and without being told where anything is: `solutions/bench.py` does it through the hub's
+API with the arm and the camera on its wrist alone (see the tasks section below), and a test runs it.
 
-What building it taught, all now in the scene's layout or the API:
+What building it first taught (through the older API, which was given where things were), all now in the scene's
+layout or the hub's API:
 
 - **Reach.** With the fingers straight down the arm reaches 12 cm or higher only between 0.20 and 0.32 m
   from its base (closer in, the limit falls to 10 cm at 0.18 m and 5 cm at 0.12 m). Everything that has to
   be approached from above is inside that band.
 - **Which way the jaws close matters.** Pinched across its 25 mm width, the 20 mm-high block rolled onto
   its side; across its 40 mm length it does not. Closing along x at the drawer handle, one jaw came down on
-  the cabinet's roof. `/move_tip` takes `jaws_along_deg` for this, and `/state` reports the direction.
+  the cabinet's roof. `move_tip` takes `jaws_along_deg` for this, and the arm's state reports the direction.
 - **A tip at the table cannot close.** The moving jaw swings a little lower as it closes, and the command
   filter will not send any part of the arm below the table top, so low parts are held from 10 mm up.
 
-A scene is a file in `sim/scene/`; a task is a class in `so101sim/tasks.py` with a description and goals.
+Teleop's scenes are the files in `sim/scene/`; the hub's are the files in `sim/scenes/`, each with its devices and tasks.
 
 ## The whole system: a world, the hub on its ports, two APIs (`scripts/run_system.py`)
 
@@ -338,7 +292,16 @@ A scene is a file in `sim/scene/`; a task is a class in `so101sim/tasks.py` with
 python sim/scripts/run_system.py --scene open_small
 curl http://127.0.0.1:8765/      # the hub's API, for the model (hub/README.md)
 curl http://127.0.0.1:8766/      # the operator's API: scenes, ground truth, scoring. Never for the model
+python sim/scripts/run_system.py --window      # also show it: every camera's view and a status line, at real speed
+python sim/scripts/run_system.py --hands-on    # the window also takes keys: you and the model take turns
 ```
+
+- **The window** (`scripts/system_window.py`) is drawn every 1/30 s of the world's time, so what happens can be watched
+  as it happens. Its views are the simulation's own plain pictures: watching changes nothing the hub is given. With
+  `--hands-on`, between requests each key is one command to the hub through its own API, with its protections (W S A
+  D R F move the arm's tip a centimetre, Space the jaws, H home; the arrows drive the rover, U J raise and stow its
+  head, comma and full stop turn it). A key pressed while a command runs is left alone. It is step by step, not
+  teleop's continuous keys and mouse: `teleop.py` still has those, for the arm alone.
 
 - **The world** (`so101sim/world.py`) runs the loaded scene and offers ports: a serial port per servo bus
   (emulated HX-30HMs on a simulated wire), a camera port per camera (a full-size picture through that
@@ -356,8 +319,6 @@ curl http://127.0.0.1:8766/      # the operator's API: scenes, ground truth, sco
   the position then reads within one turn. The loop's gains are a guess at the firmware's.
 - Loading another scene over the operator API is, to the hub, everything going quiet (its requests answer
   503 "did not answer"); `POST /discover` on the hub finds what is there now.
-- `scripts/sim_api.py` is the older single-arm API. Its arm actions are now the hub's (it inherits them), and
-  it will go once the bench task's solution runs through the hub.
 
 ## Tasks done through the hub's API (`scripts/solve.py`, `scripts/model_run.py`, `solutions/`)
 
@@ -654,8 +615,9 @@ The tests go after classes of bugs, not single cases:
 | `test_consistency.py` | Numbers that live in two places: config vs the generated model (and the model is what the generator writes now), runtime vs config, the wrist-roll range vs what the collision study sampled, contact pairs for the wrist mount, docs vs data, imports vs `requirements.txt` |
 | `test_cli.py` | Every script answers `--help` and rejects bad arguments without a traceback or starting work; `pick_demo` (watched for gripper overload), `vision_check` and the teleop self-test |
 | `test_backend_contract.py` | The same API behaviour on MuJoCo and Newton: timestep, reset, targets, objects on the table |
-| `test_tasks.py` | Scenes and tasks: every scene has its generated models and sits still from the start; the bench task starts undone and is done by the reference solution through the API with the monitor clean; undoing any one goal makes it false again; every place the task's description names is where the model has it |
-| `test_api.py` | The REST API: a whole pick through requests alone; reading costs no simulated time and actions do; the same requests give the same run; every request that cannot be done says why and changes nothing; fuzzed methods, paths and bodies never crash the server or disturb the simulation; the guide and OpenAPI document cover every endpoint and parameter; a round trip over a real socket |
+| `test_teleop_scenes.py` | Teleop's scenes (`sim/scene/`): each has its generated models and sits still from the start; an unknown scene is refused by name |
+| `test_arm_through_hub.py` | The arm's own actions, through the hub's API (what the retired single-arm API's tests held them to). Reading costs no simulated time and actions do; the same requests give the same run; an arm request that cannot be done says why and changes nothing; the gripper moves only the jaws; a `move_tip` is refused whole, with distances that are true and an answer that does not contradict itself, or never stops for want of a pose; an action held back by the surface says which part and how far |
+| `test_window.py` | The window on the hub's system, on a dummy display. It is drawn while a command runs, one frame every 1/30 s of the world's time, with every camera in it; watching changes nothing the hub is given; each key moves the tip a centimetre the way it says, and the other keys drive the jaws and the rover, all through the hub's API (a refusal is the hub's own, shown, and nothing moved); a key is left alone while a command runs and when only watching; the window follows a change of scene |
 | `test_invariants.py` | Collision shapes are where the parts are: wrist roll is free and costs the same torque over its whole range; contacts are reported only where the real meshes are within 3 mm; the base is solid and stands on the table. Nothing sinks into or passes through the table (arm at full torque, a pressed cube, a cube thrown at 2 to 40 m/s). The command filter: no fuzzed request stream (jumps, NaN, out of range) gets an unsendable command through or a pose into a keep-out; a smooth stream passes unchanged; every backend sends its commands through it; ordinary teleop leaves it idle. The monitor catches each kind of violation when one is provoked |
 | `test_cables.py` | Every wire is long enough over the whole joint range. The slack layout meets both ends for fuzzed inputs. At a reset, for any arm pose, the wires reach their sockets, come to rest, stay above the table and leave the arm and the clock alone. Moving through random poses with wires: monitor clean, no wire pulled hard, the arm ends where it does without wires. The cabled model is the plain robot plus wires |
 | `test_camera_fw.py` | The camera firmware in the loop (skipped without a C compiler). Every frame that reaches the PC is the frame the sensor took, at every size. Frame rate and delay are what the sensor, encoder and link allow; a slow link lowers the rate and corrupts nothing. Close, reopen, resume, suspend and size changes shut down and restart cleanly with nothing leaked. No camera, stalled sensor, failed encodes, encoder queue errors, misaligned buffers. Seeded fuzzing of PC actions and faults: never stuck, never leaking, never misusing a device. Each build option does what it says (flips keep colours, fixed exposure holds, JPEG quality). The stand-in hardware really reports misuse. The same run gives the same result. A smaller size is the centre of the larger picture. Teleop shows the firmware's frames |

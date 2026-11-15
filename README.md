@@ -76,8 +76,8 @@ python sim/scripts/teleop.py --backend newton   # Linux: Newton / MuJoCo Warp
 python sim/scripts/teleop.py --bus              # commands go through a simulated servo bus to emulated servos
 python sim/scripts/teleop.py --camera-fw        # the wrist view comes through the camera firmware, built for this PC
 python sim/scripts/teleop.py --cables           # with the arm's wires in the model (servo leads, camera USB cable)
-python sim/scripts/sim_api.py                   # REST API so a language model (or any program) can drive the arm
-python sim/scripts/sim_api.py --scene bench --window   # the harder scene and its task; bench_solution.py solves it
+python sim/scripts/teleop.py --scene bench      # the harder scene, by hand
+python sim/scripts/run_system.py --scene bench --window   # the hub on that scene: a REST API for a language model, and a window to watch
 ```
 
 Details, verified results and backend notes: `sim/README.md`. Decisions so far: `docs/DECISIONS.md`.
@@ -92,6 +92,7 @@ that would hit what it has mapped, and can measure its own lenses, camera pair a
 
 ```bash
 python sim/scripts/run_system.py --scene shelf --survey   # a simulated world, the hub on its ports, both REST APIs
+python sim/scripts/run_system.py --hands-on               # with a window whose keys let a person take turns with the model
 curl http://127.0.0.1:8765/                               # the hub's guide: what a model is given
 python sim/scripts/solve.py --list                        # the tasks (8 scenes, 18 tasks) and which have a reference solution
 python sim/scripts/solve.py shelf on_the_shelf            # solve one through the hub's API alone; a referee with the truth scores it
