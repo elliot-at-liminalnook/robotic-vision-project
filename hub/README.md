@@ -345,6 +345,18 @@ is a fixed camera, `arm/wrist_camera`, `rover/head/left` or `rover/head/right`.
   thing is higher or lower than `height_m`. A touch (`probe`) gives the height.
 - `known: false` and why, when nothing relates that camera to the arm, or the line does not come down.
 
+`GET /where/point?camera=C&x=X&y=Y&height_m=H&relative_to=arm` is the same the other way round: where a
+place is in camera C's full-size picture, or that it is outside it (`in_picture`, `pixel`, how far inside
+the nearest edge, and why not if not). It answers "can that camera see there?" and finds in one camera
+what another has found.
+
+- A place behind the camera is outside its picture (projected naively it mirrors into the picture's
+  middle), and so is one far off to the side: the pixel is taken back to a direction and must come back
+  the same, because a lens model carried past the edge of its picture can fold a place back in.
+- `in_picture` means the picture covers the place, not that nothing stands between.
+- Taken to a place and back, a point of the picture comes back within a pixel or two; a thing's place
+  lands within 40 px of where the referee's projection has it.
+
 ## Self-calibration (`calibrate.py`)
 
 The devices are not quite what their drivers believe: each lens differs from its datasheet, a printed

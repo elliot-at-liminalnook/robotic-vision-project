@@ -118,6 +118,90 @@ def test_a_camera_nothing_relates_to_the_arm_places_nothing():
     assert r["known"] is False and "nothing relates camera_1 to arm" in r["why"]
 
 
+# ---------------------------------------------------------------- a place, as a point in a picture
+def test_a_place_is_put_in_the_picture_where_the_referee_sees_it(workcell):
+    """The class: the reverse answered in the wrong frame, or through the wrong lens. Every loose thing, in every fixed
+    camera, against the referee's own projection."""
+    world, hub = workcell
+    base = frame_of(world, "base")
+    serial = {c.identity["serial"]: c.camera for c in world.ports().cameras}
+    checked = 0
+    for o in world.scene["objects"]:
+        centre = world.data.xpos[world.model.body(o["name"]).id]
+        at = (G.inv(base) @ np.append(centre, 1.0))
+        for name, cam in hub.cameras.items():
+            u, v = true_pixel(world, serial[cam.serial], centre)
+            r = call(hub, "GET", f"/where/point?camera={name}&x={at[0]:.4f}&y={at[1]:.4f}&height_m={at[2]:.4f}&relative_to=arm")[1]
+            assert r["known"] and r["in_picture"] == (0 <= u < 1920 and 0 <= v < 1080), (o["name"], name, r, (u, v))
+            if r["in_picture"]:
+                err = float(np.linalg.norm(np.array(r["pixel"]) - [u, v]))
+                assert err < 40 and err < 2.5 * r["uncertainty_px"], (o["name"], name, err, r)
+                checked += 1
+    assert checked >= 4
+
+
+def test_a_point_taken_to_a_place_and_back_is_the_same_point(workcell):
+    """The class: /where/pixel and /where/point not each other's inverse (a frame the wrong way round in one of them).
+    Points all over the picture, at two heights, for a fixed camera and for the camera on the wrist."""
+    _, hub = workcell
+    tried = 0
+    for camera in ("camera_1", "arm/wrist_camera"):
+        for u in (100, 500, 960, 1400, 1820):
+            for v in (300, 540, 800, 1040):
+                for h in (0.0, 0.05):
+                    there = call(hub, "GET", f"/where/pixel?camera={camera}&u={u}&v={v}&height_m={h}")[1]
+                    if not there["known"]:
+                        continue
+                    x, y = there["at_m"]
+                    back = call(hub, "GET", f"/where/point?camera={camera}&x={x}&y={y}&height_m={h}")[1]
+                    # (places are answered to a tenth of a millimetre: far along a shallow line that is a few pixels)
+                    slack = 1.0 + 0.0002 / max(there["line_of_sight_m"], 0.05) * 1500 / max(math.sin(math.radians(there["slope_deg"])), 0.05)
+                    assert back["in_picture"] and np.linalg.norm(np.array(back["pixel"]) - [u, v]) < slack, (camera, u, v, h, there, back)
+                    tried += 1
+    assert tried >= 40
+
+
+def test_what_is_outside_a_cameras_picture_is_said_to_be_wherever_it_is(workcell):
+    """The class: a lens model carried past the edge of its picture folds a far-off place back into it; a place behind
+    the camera projects into the picture as if it were in front. Places all round the arm, near and far: in the picture
+    exactly when the referee's projection (with what is behind the camera left out) says so, but for a band at the edge."""
+    world, hub = workcell
+    base = frame_of(world, "base")
+    serial = {c.identity["serial"]: c.camera for c in world.ports().cameras}
+    inside = outside = 0
+    for name, cam in hub.cameras.items():
+        pose = world.camera_pose(serial[cam.serial])
+        # (above the surface too: behind a camera that looks down, a place higher than it mirrors into the middle of its picture)
+        for bearing, reach, h in ((b, r, h) for b in range(0, 360, 15) for r in (0.15, 0.4, 1.0, 3.0) for h in (0.0, 0.4, 1.0)):
+            x, y = reach * math.cos(math.radians(bearing)), reach * math.sin(math.radians(bearing))
+            r = call(hub, "GET", f"/where/point?camera={name}&x={x:.4f}&y={y:.4f}&height_m={h}&relative_to=arm")[1]
+            p_world = (base @ [x, y, h, 1.0])[:3]
+            in_front = (G.inv(pose) @ np.append(p_world, 1.0))[2] > 0.05
+            lens = world.lens(serial[cam.serial]).truth
+            n = (G.inv(pose) @ np.append(p_world, 1.0))[:2] / max((G.inv(pose) @ np.append(p_world, 1.0))[2], 1e-9)
+            wide = in_front and abs(n[0]) < 0.9 * lens.cx / lens.fx and abs(n[1]) < 0.9 * lens.cy / lens.fy       # well inside, by angle
+            far_out = (not in_front) or abs(n[0]) > 1.3 * lens.cx / lens.fx or abs(n[1]) > 1.3 * lens.cy / lens.fy  # well outside
+            assert r["known"]
+            if wide:
+                assert r["in_picture"], (name, bearing, reach, r)
+                inside += 1
+            if far_out:
+                assert not r["in_picture"] and r["why"], (name, bearing, reach, r)
+                outside += 1
+    assert inside >= 20 and outside >= 100
+
+
+@pytest.mark.parametrize("query,status,words", [
+    ("camera=camera_1&x=0.2", 400, "which place"), ("camera=camera_9&x=0.2&y=0", 404, "camera_9"), ("x=0.2&y=0", 400, "required"),
+    ("camera=camera_1&x=0.2&y=0&relative_to=camera_2", 404, "stands on the surface"), ("camera=camera_1&x=0.2&y=0&height_m=7", 400, "height_m"),
+    ("camera=camera_1&x=nan&y=0", 400, "required"), ("camera=camera_1&x=99&y=0", 400, "within 5 m")])
+def test_a_place_that_cannot_be_looked_up_is_refused_with_the_reason(workcell, query, status, words):
+    _, hub = workcell
+    got, r = call(hub, "GET", f"/where/point?{query}")
+    assert got == status and words in r["error"], r
+    assert "/where/point" in bytes(call(hub, "GET", "/")[1]).decode()
+
+
 # ---------------------------------------------------------------- the solutions' eyes
 def test_the_eyes_find_each_colour_where_it_is_and_tell_a_frame_from_a_block():
     from solutions import eyes
@@ -264,7 +348,7 @@ def test_every_task_has_a_solution_or_a_reason_why_not():
                                         ("l_shaped", "where_is_everyone"), ("no_arm", "how_big"), ("shelf", "on_the_shelf"),
                                         ("shelf", "under_the_ledge"), ("moved_arm", "carried"), ("workcell", "stack"),
                                         ("moved_arm", "fetch"), ("shelf", "fetch_from_shelf"), ("cluttered", "tidy_by_colour"),
-                                        ("cluttered", "fetch_hidden")])
+                                        ("cluttered", "fetch_hidden"), ("l_shaped", "far_leg")])
 def test_a_solution_does_its_task_as_the_referee_sees_it(scene, task):
     import solve
     r = solve.run(scene, task)
@@ -272,7 +356,7 @@ def test_a_solution_does_its_task_as_the_referee_sees_it(scene, task):
     assert r["api_calls"] >= 2 and "gave_up" not in r
 
 
-@pytest.mark.parametrize("scene,task,words", [("open_small", "how_big", "far edge")])
+@pytest.mark.parametrize("scene,task,words", [("open_small", "how_big", "far edge"), ("l_shaped", "how_big", "not a plain rectangle")])
 def test_a_solution_that_cannot_finish_says_so_and_hands_in_no_guess(scene, task, words):
     """This one does not pass yet. What must hold meanwhile: no wrong answer handed in, and the reason given."""
     import solve
@@ -280,6 +364,79 @@ def test_a_solution_that_cannot_finish_says_so_and_hands_in_no_guess(scene, task
     if r["done"]:
         return                                                      # (it has been made to work: this test has had its day)
     assert "gave_up" in r and words in r["gave_up"] and not r.get("answers"), r
+
+
+class _Rover:
+    """An Api with a rover whose head turns and whose picture shows `things` (colour, x, y in the rover's frame) as patches:
+    a degree is 12 px across the picture, and a thing r metres off has its foot 500 r px above row 1000. The fixed camera
+    covers the places `covered` says it does."""
+    PAINT = {"red": (200, 30, 30), "blue": (40, 60, 200), "green": (30, 160, 50), "yellow": (220, 190, 30), "purple": (150, 75, 200)}
+
+    def __init__(self, things, covered, arm=(0.5, 0.0), blocked=(), related=True):
+        self.things, self.covered, self.arm, self.blocked, self.related = things, covered, arm, blocked, related
+        self.pan, self.calls, self.stowed = 0.0, 0, False
+
+    def devices(self):
+        return {"rover": {}, "camera_1": {}, **({"arm": {}} if self.arm else {})}
+
+    def post(self, path, body=None):
+        if path.endswith("/head/point"):
+            if body["pan_deg"] in self.blocked:
+                return 409, {"error": "the arm is in the way"}
+            self.pan = body["pan_deg"]
+        self.stowed = path.endswith("/head/stow")
+        return 200, {"reached": True}
+
+    def picture(self, node):
+        img = np.full((1080, 1920, 3), (150, 120, 80), np.uint8)
+        for colour, x, y in self.things:
+            u = 960 - ((math.degrees(math.atan2(y, x)) - self.pan + 180) % 360 - 180) * 12
+            foot = 1000 - 500 * math.hypot(x, y)
+            cv2.rectangle(img, (int(u) - 15, int(foot) - 24), (int(u) + 15, int(foot)), self.PAINT[colour], -1)
+        return img
+
+    def ok(self, method, path, body=None):
+        if path.startswith("/where?of=arm"):
+            return {"known": True, "position_m": [*self.arm, 0.0]}
+        if path.startswith("/where/pixel"):
+            q = dict(kv.split("=") for kv in path.split("?")[1].split("&"))
+            bearing, reach = math.radians(self.pan - (float(q["u"]) - 960) / 12), (1000 - float(q["v"])) / 500
+            return {"known": True, "at_m": [reach * math.cos(bearing), reach * math.sin(bearing)]}
+        if path.startswith("/where/point"):
+            q = dict(kv.split("=") for kv in path.split("?")[1].split("&"))
+            if not self.related:
+                return {"known": False, "why": "nothing relates camera_1 to rover"}
+            return {"known": True, "in_picture": bool(self.covered(float(q["x"]), float(q["y"])))}
+        return {}
+
+
+FAR_LEG = [("red", 0.3, -0.05), ("yellow", 0.6, -0.5), ("green", 0.45, -0.6), ("purple", 0.55, -0.4), ("blue", -0.4, 0.3),
+           ("yellow", 0.5, 0.0), ("yellow", 1.4, -0.04)]            # (the last two: the arm, and the arm's top, which lands beyond it)
+
+
+@pytest.mark.parametrize("blocked", [(), (40.0,), (-40.0, 160.0), (0.0, 80.0, -160.0)])
+def test_what_no_fixed_camera_covers_is_counted_once_and_the_arm_is_not_a_thing(monkeypatch, blocked):
+    """The classes: a thing seen in two overlapping views counted twice; the arm's own colour counted as a loose thing;
+    a thing the camera covers counted as out of its sight; a way the head cannot turn ending the task."""
+    from solutions import moves, tasks
+    monkeypatch.setattr(moves, "locate_cameras", lambda api: None)
+    api = _Rover(FAR_LEG, covered=lambda x, y: 0 < x < 1.0 and y > -0.2, blocked=blocked)        # (not what lies beyond the arm)
+    assert tasks.out_of_sight(api) == {"count": 4, "colours": ["blue", "green", "purple", "yellow"]}
+    assert api.stowed, "the head is left as it must be to drive"
+
+
+def test_out_of_sight_gives_up_when_it_cannot_tell(monkeypatch):
+    from solutions import moves, tasks
+    from solutions.api import GaveUp
+    monkeypatch.setattr(moves, "locate_cameras", lambda api: None)
+    with pytest.raises(GaveUp, match="cannot be told"):             # nothing relates the camera to the rover: no guess
+        tasks.out_of_sight(_Rover(FAR_LEG, covered=lambda x, y: True, related=False))
+    every = tuple(tasks.LOOK_PANS)
+    stuck = _Rover(FAR_LEG, covered=lambda x, y: True, blocked=every)
+    with pytest.raises(GaveUp, match="could not be turned"):
+        tasks.out_of_sight(stuck)
+    assert stuck.stowed
+    assert tasks.out_of_sight(_Rover(FAR_LEG, covered=lambda x, y: True)) == {"count": 0, "colours": []}
 
 
 def test_how_big_does_not_take_an_l_for_a_rectangle():

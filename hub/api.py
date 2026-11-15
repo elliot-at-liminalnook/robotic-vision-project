@@ -87,6 +87,10 @@ def guide(hub: Hub) -> str:
              "                                    the level plane H metres above the surface, in the arm's (or the rover's) own frame:",
              "                                    for turning something seen in a picture into a place. C is a fixed camera's name,",
              "                                    arm/wrist_camera, rover/head/left or rover/head/right",
+             "    GET  /where/point?camera=C&x=X&y=Y&height_m=H&relative_to=arm",
+             "                                    the other way round: where the place (X, Y) at height H, in the arm's (or the rover's)",
+             "                                    own frame, is in camera C's full-size picture, or that it is outside it: for 'can",
+             "                                    that camera see there?' and for finding in one camera what another has found",
              "    GET  /place                     what has been found of the surroundings, from every device: the surface and its edges,",
              "                                    things (where, how big, how high, what colour, where in each fixed camera's picture),",
              "                                    what the arm has touched, and what is still unseen",
@@ -190,6 +194,15 @@ def dispatch(hub: Hub, method: str, url: str, body_bytes: bytes = b"") -> tuple[
                 if "camera" not in query or not (math.isfinite(u) and math.isfinite(v) and -0.05 <= h <= 1.0):
                     raise Refused("camera, u and v are required; height_m is from -0.05 to 1")
                 result = hub.where_pixel(query["camera"], u, v, h, query.get("relative_to", "arm"))
+            elif path == "where/point":
+                try:
+                    x, y, h = float(query["x"]), float(query["y"]), float(query.get("height_m", 0.0))
+                except (KeyError, ValueError):
+                    raise Refused("say which camera and which place: "
+                                  "/where/point?camera=camera_1&x=0.25&y=0.05&height_m=0.03&relative_to=arm") from None
+                if "camera" not in query or not (math.isfinite(x) and math.isfinite(y) and abs(x) <= 5.0 and abs(y) <= 5.0 and -0.05 <= h <= 1.0):
+                    raise Refused("camera, x and y are required (within 5 m); height_m is from -0.05 to 1")
+                result = hub.where_point(query["camera"], x, y, h, query.get("relative_to", "arm"))
             elif path == "where":
                 if "of" not in query:
                     raise Refused("say which device: /where?of=camera_1&relative_to=arm")

@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 
-from . import moves
+from . import eyes, moves
 from .api import Api, GaveUp, NotThere, OutOfReach
 
 
@@ -189,12 +189,80 @@ def under_the_ledge(api: Api, **_) -> dict:
     return {"colours": sorted(set(colours))}
 
 
+# ---------------------------------------------------------------- what the fixed cameras cannot see
+LOOSE = ("red", "green", "blue", "yellow", "purple")           # the colours a loose thing may be
+LOOK_PANS = (0.0, -40.0, 40.0, -80.0, 80.0, -120.0, 120.0, -160.0, 160.0)
+SAME_THING_M = 0.12            # two patches of one colour placed this near each other are one thing seen twice
+ARM_HALF_WIDTH_M = 0.15        # what is in line with the arm, this far either side of its base, may be the arm itself
+
+
+def out_of_sight(api: Api, **_) -> dict:
+    """The loose things no fixed camera can see: how many, and their colours. The rover need not drive: it turns its head
+    each way, and each patch of colour in its picture is put on the surface where its foot is (GET /where/pixel). A place
+    that is outside every fixed camera's picture (GET /where/point) is out of their sight."""
+    devices = api.devices()
+    cameras = moves.fixed_cameras(api)
+    if "rover" not in devices or not cameras:
+        raise GaveUp("this takes a rover to look and a fixed camera whose sight is in question")
+    if "arm" in devices:
+        moves.locate_cameras(api)                                # (the cameras are related to the rover through the arm's tags)
+    arm = api.ok("GET", "/where?of=arm&relative_to=rover") if "arm" in devices else {"known": False}
+    api.ok("POST", "/devices/rover/head/raise", {"lens_height_m": 0.16})
+    seen, looked = [], 0                                         # (colour, place in the rover's frame, the patch's area)
+    try:
+        for pan in LOOK_PANS:
+            status, r = api.post("/devices/rover/head/point", {"pan_deg": pan, "tilt_deg": -12.0})
+            if status != 200 or not r.get("reached"):
+                continue                                         # the arm or something else is in the head's way: not that way
+            looked += 1
+            picture = api.picture("/devices/rover/head/left")
+            for colour in LOOSE:
+                for b in eyes.find(picture, colour, min_area=60.0)[:6]:
+                    if b.cut_off:
+                        continue                                 # (its foot is not in the picture; the next view has it whole)
+                    foot = min(float(b.corners[:, 1].max()), picture.shape[0] - 1.0)
+                    w = api.ok("GET", f"/where/pixel?camera=rover/head/left&u={b.u:.1f}&v={foot:.1f}&height_m=0&relative_to=rover")
+                    if not w["known"]:
+                        continue                                 # (its line of sight does not come down: something high, not on the surface)
+                    at = np.array(w["at_m"])
+                    if arm["known"]:
+                        # The arm is printed in one of these colours. Its parts stand above the surface, so their lines of
+                        # sight meet the surface beyond it: whatever is in line with the arm, at it or past it, is left out.
+                        base = np.array(arm["position_m"][:2])
+                        along = float(at @ base) / max(float(np.linalg.norm(base)), 1e-6)
+                        across = float(np.linalg.norm(at - along * base / max(float(np.linalg.norm(base)), 1e-6)))
+                        if along > np.linalg.norm(base) - ARM_HALF_WIDTH_M and across < ARM_HALF_WIDTH_M * max(1.0, along / np.linalg.norm(base)):
+                            continue
+                    seen.append((colour, at, b.area))
+    finally:
+        api.post("/devices/rover/head/stow")
+    if not looked:
+        raise GaveUp("the rover's head could not be turned any way to look")
+    things = []                                                  # one entry per thing: the largest patch of it
+    for colour, at, area in sorted(seen, key=lambda s: -s[2]):
+        if not any(c == colour and np.linalg.norm(at - p) < SAME_THING_M for c, p in things):
+            things.append((colour, at))
+    hidden = []
+    for colour, at in things:
+        covered = False
+        for cam in cameras:
+            r = api.ok("GET", f"/where/point?camera={cam}&x={at[0]:.4f}&y={at[1]:.4f}&height_m=0.015&relative_to=rover")
+            if not r["known"]:
+                raise GaveUp(f"whether {cam} can see a place cannot be told: {r['why']}")
+            covered |= bool(r["in_picture"])
+        if not covered:
+            hidden.append(colour)
+    return {"count": len(hidden), "colours": sorted(set(hidden))}
+
+
 SOLVERS = {
     ("open_small", "where_is_everyone"): where_is("rover", "arm"),
     ("moved_arm", "where_is_everyone"): where_is("rover", "arm"),
     ("l_shaped", "where_is_everyone"): where_is("rover", "arm"),
     ("no_arm", "where_is_everyone"): where_is("camera_1", "rover"),
     ("open_small", "how_big"): how_big,
+    ("l_shaped", "far_leg"): out_of_sight,
+    ("l_shaped", "how_big"): how_big,
     ("no_arm", "how_big"): how_big,
     ("shelf", "on_the_shelf"): on_the_shelf,
     ("moved_arm", "carried"): carried("rover", "arm"),
@@ -210,6 +278,4 @@ NO_SOLUTION = {
     ("bench", "tidy"): "eight steps with a drawer, a socket and two bins; its solution still runs on the old API (sim/scripts/sim_api.py), "
                        "which is given where things are. Through the hub it needs each thing found by sight first",
     ("bench", "drawer_open"): "nothing in the hub says whether a drawer is out: it takes looking at a picture",
-    ("l_shaped", "far_leg"): "the rover has to be driven round the corner to look, and nothing here plans a path",
-    ("l_shaped", "how_big"): "the same: from where the rover stands it sees one leg of the L",
 }

@@ -48,7 +48,8 @@ TOOLS = [
      "description": "GET a path of the hub's API. Returns the JSON it answers with. A path ending in /picture returns the camera's "
                     "picture as an image (add ?width=960 or smaller unless you need full detail: the full picture is 1920 x 1080). "
                     "Examples: /tree, /devices/arm/state, /devices/camera_1/picture?width=960, /place, "
-                    "/where?of=rover&relative_to=arm, /where/pixel?camera=camera_1&u=960&v=540&height_m=0.03&relative_to=arm.",
+                    "/where?of=rover&relative_to=arm, /where/pixel?camera=camera_1&u=960&v=540&height_m=0.03&relative_to=arm, "
+                    "/where/point?camera=camera_1&x=0.25&y=0.05&height_m=0.03&relative_to=arm.",
      "input_schema": {"type": "object", "properties": {"path": {"type": "string", "description": "the path and query, starting with /"}},
                       "required": ["path"], "additionalProperties": False}},
     {"name": "hub_post",

@@ -101,7 +101,7 @@ Where it stands (`docs/MULTI_DEVICE_CHECKLIST.md` has every box):
 
 - **Done in simulation:** discovery, locating every device, the survey and map, safety, self-calibration,
   the rover board's firmware (its portable core, run against emulated servos), and reference solutions
-  for 14 of the 18 tasks.
+  for 16 of the 18 tasks (14 done as the referee sees it; 2 say why they cannot be).
 - **Written, not run:** `sim/scripts/model_run.py` gives a task to a Claude model through the same API
   and has the referee score it. It needs `pip install anthropic` and credentials, and is billed per run.
 - **Not yet on hardware:** `scripts/run_hub.py` and `hub/real.py` (USB serial, the rover's network

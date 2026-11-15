@@ -174,9 +174,9 @@ Plan: [5.10](MULTI_DEVICE_PLAN.md#510-keeping-the-gap-small)
 
 Plan: [5.7](MULTI_DEVICE_PLAN.md#57-scenes-and-tasks-are-config-files)
 
-- [ ] A reference solution for each task, through the hub's API. **Partly:** 14 of 18 tasks have one (`sim/solutions/`, `python sim/scripts/solve.py`); 13 pass the referee, 1 gives up and says why. The other 4 have none, each with its reason (`solve.py --list`): the L-shaped surface's far leg (2), a judgement from a picture (1), the bench's eight-step tidy (1)
+- [ ] A reference solution for each task, through the hub's API. **Partly:** 16 of 18 tasks have one (`sim/solutions/`, `python sim/scripts/solve.py`); 14 pass the referee, 2 give up and say why (the area of a surface whose far edges the rover cannot see). The other 2 have none, each with its reason (`solve.py --list`): a judgement from a picture (1), the bench's eight-step tidy (1)
 - [ ] Model runs, scored by the referee. **Not run:** the harness is written (`sim/scripts/model_run.py`: the task, the hub's guide and three tools to a model; the referee scores). It needs `pip install anthropic`, credentials, and is billed per run
-- [x] A point in a picture as a place (`GET /where/pixel`), which the solutions and a model both need
+- [x] A point in a picture as a place (`GET /where/pixel`), which the solutions and a model both need, and a place as a point in a picture (`GET /where/point`: can that camera see there?)
 - [x] Tests written (`sim/tests/test_solutions.py`, not run as a suite; each test called directly)
 
 Found on the way: the survey swung the rover's head into the arm and into a shelf it had mapped (the head is now checked against both); `open_small` was too small for the rover to survey from anywhere.

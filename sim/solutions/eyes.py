@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 PALE = ("white", "cream")
-HUES = {"red": [(0, 9), (171, 180)], "green": [(40, 88)], "blue": [(98, 132)], "yellow": [(20, 36)]}      # OpenCV hue, 0 to 180
+HUES = {"red": [(0, 9), (171, 180)], "green": [(40, 88)], "blue": [(98, 132)], "yellow": [(20, 36)], "purple": [(133, 160)]}      # OpenCV hue, 0 to 180
 
 
 @dataclass

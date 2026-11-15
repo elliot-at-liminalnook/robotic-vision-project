@@ -208,9 +208,9 @@ class Hub:
             out["landmarks"] = self.landmark_note
         return out
 
-    def where_pixel(self, camera: str, u: float, v: float, height_m: float = 0.0, relative_to: str = "arm") -> dict:
-        """Where the line of sight through one point of a camera's full-size picture meets a level plane, in the frame of a
-        device that stands on the surface. For turning 'that thing, there in the picture' into a place to send a hand to."""
+    def _camera_in(self, camera: str, relative_to: str):
+        """A camera by any of its names, and how it sits in the frame of a device that stands on the surface:
+        (its full name, its full-size lens, the link or None, why not)."""
         alias = {"wrist_camera": "arm/wrist_camera", "rover/left": "rover/head/left", "rover/right": "rover/head/right"}
         camera = alias.get(camera, camera)
         cams = {**self.cameras, **({"arm/wrist_camera": self.wrist} if self.wrist is not None else {}),
@@ -220,14 +220,46 @@ class Hub:
         if relative_to not in ("arm", "rover") or relative_to not in self.locator.names():
             raise Refused("relative_to must be a device that stands on the surface and is here: "
                           f"{[n for n in ('arm', 'rover') if n in self.locator.names()]}", 404)
-        lens = cams[camera].lens(1920, 1080)
-        if not (0 <= u < lens.width and 0 <= v < lens.height):
-            raise Refused(f"the point is outside the picture ({lens.width} x {lens.height}, full size)")
         q = self.arm.link.q() if self.arm is not None else None
         link, why = self.locator.chain(camera, relative_to, q)
         if link is None and (self.cameras or self.rover is not None):
             self._look()
             link, why = self.locator.chain(camera, relative_to, q)
+        return camera, cams[camera].lens(1920, 1080), link, why
+
+    def where_point(self, camera: str, x: float, y: float, height_m: float = 0.0, relative_to: str = "arm") -> dict:
+        """Where a place is in a camera's full-size picture, or that it is outside it: where_pixel the other way round.
+        The place is given in the frame of a device that stands on the surface. For 'can that camera see there?'."""
+        camera, lens, link, why = self._camera_in(camera, relative_to)
+        if link is None:
+            return {"ok": True, "known": False, "why": f"nothing relates {camera} to {relative_to}: {why}"}
+        p = G.inv(link.T) @ [float(x), float(y), float(height_m), 1.0]         # the place in the camera's frame (z along its view)
+        out = {"ok": True, "known": True, "camera": camera, "relative_to": relative_to,
+               "note": "in_picture says the place is within what the camera's picture covers, not that nothing stands between"}
+        if p[2] < 0.02:
+            return {**out, "in_picture": False, "why": "the place is behind the camera, or level with its lens"}
+        n = p[:2] / p[2]
+        px = cv2.projectPoints(p[:3].reshape(1, 3), np.zeros(3), np.zeros(3), lens.K(), np.asarray(lens.dist, float))[0].reshape(2)
+        # A lens model is good only as far out as its picture goes: far off to the side it can fold a point back into the
+        # picture. So the pixel is taken back to a direction, and must come back the same.
+        back = cv2.undistortPoints(px.reshape(1, 1, 2), lens.K(), np.asarray(lens.dist, float)).reshape(2)
+        folded = float(np.linalg.norm(back - n)) > 0.02 * max(1.0, float(np.linalg.norm(n)))
+        inside = float(min(px[0], lens.width - 1 - px[0], px[1], lens.height - 1 - px[1]))      # how far inside the nearest edge [px]
+        reach = float(np.linalg.norm(p[:3]))
+        sure = lens.fx * math.hypot(link.sigma_m / reach, link.sigma_rad)
+        if folded or not np.isfinite(px).all():
+            return {**out, "in_picture": False, "why": f"the place is {math.degrees(math.atan(float(np.linalg.norm(n)))):.0f} deg off the "
+                                                        "middle of the camera's view: far outside its picture"}
+        return {**out, "in_picture": bool(inside >= 0.0), "pixel": [round(float(px[0]), 1), round(float(px[1]), 1)],
+                "inside_the_edge_px": round(inside, 1), "uncertainty_px": round(float(sure), 1), "distance_m": round(reach, 3),
+                **({} if inside >= 0.0 else {"why": f"the place is {-inside:.0f} px outside the picture ({lens.width} x {lens.height})"})}
+
+    def where_pixel(self, camera: str, u: float, v: float, height_m: float = 0.0, relative_to: str = "arm") -> dict:
+        """Where the line of sight through one point of a camera's full-size picture meets a level plane, in the frame of a
+        device that stands on the surface. For turning 'that thing, there in the picture' into a place to send a hand to."""
+        camera, lens, link, why = self._camera_in(camera, relative_to)
+        if not (0 <= u < lens.width and 0 <= v < lens.height):
+            raise Refused(f"the point is outside the picture ({lens.width} x {lens.height}, full size)")
         if link is None:
             return {"ok": True, "known": False, "why": f"nothing relates {camera} to {relative_to}: {why}"}
         n = cv2.undistortPoints(np.array([[[float(u), float(v)]]]), lens.K(), np.asarray(lens.dist, float)).reshape(2)
