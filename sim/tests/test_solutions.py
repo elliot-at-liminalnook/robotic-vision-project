@@ -634,10 +634,29 @@ def test_an_edge_the_rover_cannot_see_is_taken_from_a_fixed_cameras_picture(monk
     in_map = [grow(e) for name, e in RECT.items() if name != hidden]
     seen_edge = {"kind": "edge of the surface", "from_m": list(RECT[hidden][0]), "to_m": list(RECT[hidden][1]), "length_m": 0.3,
                  "direction_deg": 0.0 if hidden in ("near", "far") else 90.0, "inner": True}
-    monkeypatch.setattr(tasks, "edges_in_pictures", lambda api: ([seen_edge, {**seen_edge, "from_m": [0.2, 0.2], "to_m": [0.3, 0.2 + (0.0 if hidden in ("near", "far") else 0.1)]}], 0.36))
+    monkeypatch.setattr(tasks, "edges_in_pictures", lambda api, place: ([seen_edge, {**seen_edge, "from_m": [0.2, 0.2], "to_m": [0.3, 0.2 + (0.0 if hidden in ("near", "far") else 0.1)]}], 0.36))
     assert tasks.how_big(_Edges(in_map, seen=0.3)) == {"area_m2": pytest.approx(0.48, abs=0.004)}
     with pytest.raises(GaveUp, match="only one side"):
         tasks.how_big(_Edges(in_map, seen=0.3, camera=False))
+
+
+@pytest.mark.parametrize("outline", [
+    [(-0.2, -0.2), (0.8, -0.2), (0.8, 0.2), (-0.2, 0.2)],                                       # a strip 0.4 m wide: narrower than any ring round the rover
+    [(-0.2, -0.2), (0.8, -0.2), (0.8, 0.2), (0.35, 0.2), (0.35, 0.7), (-0.2, 0.7)],               # an L
+    [(-0.5, -0.4), (0.5, -0.4), (0.5, 0.4), (-0.5, 0.4)]])
+def test_the_surfaces_colour_is_sampled_where_the_map_says_the_surface_is(outline):
+    """The class: samples taken where the surface was assumed to be (a ring round the rover), most of them off a narrow
+    surface: the 'surface' found in the picture was then the floor beyond it. Every sample is inside what the map has
+    seen, well clear of its edge and of the things on it, and there are enough of them."""
+    from solutions import tasks
+    things = [{"at_m": [0.2, 0.0]}, {"at_m": [0.6, -0.1]}]
+    places = tasks.surface_places({"surface": {"outline_m": outline}, "things": things})
+    poly = np.array(outline, np.float32).reshape(-1, 1, 2)
+    assert len(places) >= 8
+    for x, y in places:
+        assert cv2.pointPolygonTest(poly, (x, y), True) >= 0.039, "a sample at or beyond the surface's edge"
+        assert all(np.linalg.norm(np.array(t["at_m"]) - [x, y]) > 0.06 for t in things), "a sample on a thing"
+    assert tasks.surface_places({}) == [] and tasks.surface_places({"surface": {"seen": False}}) == []
 
 
 def test_edges_that_enclose_much_more_than_has_been_seen_are_not_answered(monkeypatch):

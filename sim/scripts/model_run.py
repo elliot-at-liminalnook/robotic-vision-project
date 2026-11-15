@@ -77,18 +77,35 @@ def answer_keys(task: dict) -> str:
     return "Hand in your answers under these keys: " + ", ".join(f"`{k}` ({how[kind]})" for k, kind in keys) + "."
 
 
-def run(scene: str, task: str, model: str, max_calls: int, effort: str, log_path: Path | None, swap_after: int) -> dict:
-    try:
-        import anthropic
-    except ImportError:
-        raise SystemExit("this needs the anthropic package: pip install anthropic") from None
+class _NoErrors:
+    """What stands in for the anthropic package's errors when the client is a stand-in: errors that are never raised."""
+    class RateLimitError(Exception):
+        pass
+
+    class APIStatusError(Exception):
+        pass
+
+    class APIConnectionError(Exception):
+        pass
+
+
+def run(scene: str, task: str, model: str, max_calls: int, effort: str, log_path: Path | None, swap_after: int, client=None) -> dict:
+    """client: something with the Anthropic client's `beta.messages.create` (a test's stand-in model: nothing is sent
+    anywhere and nothing is billed). Default: the real one."""
+    if client is None:
+        try:
+            import anthropic
+        except ImportError:
+            raise SystemExit("this needs the anthropic package: pip install anthropic") from None
+        client = anthropic.Anthropic()
+    else:
+        anthropic = _NoErrors
 
     data = scenes.read(scene)
     spec = next(t for t in data["tasks"] if t["name"] == task)
     world = World(data)
     hub = Hub(world.ports)
     op = operator_api.Operator(world)
-    client = anthropic.Anthropic()
     log = log_path.open("w") if log_path else None
 
     def note(kind: str, **what):

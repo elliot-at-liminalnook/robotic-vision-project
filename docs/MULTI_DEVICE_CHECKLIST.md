@@ -174,8 +174,8 @@ Plan: [5.10](MULTI_DEVICE_PLAN.md#510-keeping-the-gap-small)
 
 Plan: [5.7](MULTI_DEVICE_PLAN.md#57-scenes-and-tasks-are-config-files)
 
-- [ ] A reference solution for each task, through the hub's API. **All 18 have one** (`sim/solutions/`, `python sim/scripts/solve.py`); 17 pass the referee. The other is the area of the L-shaped surface (`l_shaped` / `how_big`): neither leg's far end can be seen from the one place the rover can stand, nor by the fixed camera, and the solution says so and hands in nothing rather than a guess. Left unticked for that one
-- [ ] Model runs, scored by the referee. **Not run:** the harness is written (`sim/scripts/model_run.py`: the task, the hub's guide and three tools to a model; the referee scores). It needs `pip install anthropic`, credentials, and is billed per run
+- [ ] A reference solution for each task, through the hub's API. **All 18 have one** (`sim/solutions/`, `python sim/scripts/solve.py`); 17 pass the referee. The other is the area of the L-shaped surface (`l_shaped` / `how_big`): one whole side of it is seen by nothing as an edge, and the solution says so and hands in nothing. What was tried and why each was not sound is in DECISIONS MD122. Left unticked for that one
+- [ ] Model runs, scored by the referee. **Not run with a real model:** the harness (`sim/scripts/model_run.py`: the task, the hub's guide and three tools to a model; the referee scores) has been run end to end against stand-in models (`test_model_run.py`: a question, a stack from pictures, a carried-elsewhere task; nothing sent, nothing billed). A real run needs `pip install anthropic`, credentials, and is billed per run: that is the user's to start
 - [x] A point in a picture as a place (`GET /where/pixel`), which the solutions and a model both need, and a place as a point in a picture (`GET /where/point`: can that camera see there?)
 - [x] Tests written (`sim/tests/test_solutions.py`, not run as a suite; each test called directly)
 

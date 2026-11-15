@@ -32,7 +32,6 @@ EDGE_WIDTH_M = 0.01            # a raised edge's width, as it shows in the map: 
 
 # ---------------------------------------------------------------- how big is this place
 SEEN_SHARE = 0.65              # a rectangle is answered only if this much of it has been seen as surface
-SAMPLE_RING_M = 0.38           # the surface's colour is taken from places this far from the rover, all round it
 
 
 def _spans(edges: list):
@@ -59,21 +58,46 @@ def _spans(edges: list):
     return spans, None
 
 
-def edges_in_pictures(api: Api) -> tuple[list, float]:
+def surface_places(place: dict, step: float = 0.08, inside: float = 0.04, clear: float = 0.06) -> list:
+    """Places the map says are bare surface: a grid of points well inside what it has seen, clear of the things in it.
+    (Not places round the rover: on a narrow surface most of those are off it, and the 'surface' found in a picture was
+    the floor beyond.)"""
+    surface = place.get("surface") or {}
+    outline = np.array(surface.get("outline_m", []), np.float32)
+    if len(outline) < 3:
+        return []
+    things = [np.array(t["at_m"]) for t in place.get("things", [])]
+    lo, hi = outline.min(axis=0), outline.max(axis=0)
+    out = []
+    for x in np.arange(lo[0], hi[0], step):
+        for y in np.arange(lo[1], hi[1], step):
+            if (cv2.pointPolygonTest(outline.reshape(-1, 1, 2), (float(x), float(y)), True) >= inside
+                    and all(np.linalg.norm(t - [x, y]) > clear + 0.0 for t in things)):
+                out.append((float(x), float(y)))
+    return out
+
+
+def in_picture(api: Api, cam: str, places: list) -> list:
+    """Where each of some places on the surface (rover's frame) is in a camera's picture: the pixels of those it covers."""
+    out = []
+    for x, y in places:
+        r = api.ok("GET", f"/where/point?camera={cam}&x={x:.3f}&y={y:.3f}&height_m=0&relative_to=rover")
+        if not r["known"]:
+            return []                                            # (nothing relates this camera to the rover)
+        if r["in_picture"] and r["inside_the_edge_px"] > 30:
+            out.append(r["pixel"])
+    return out
+
+
+def edges_in_pictures(api: Api, place: dict) -> tuple[list, float]:
     """The surface's edges as the fixed cameras see them, in the rover's frame, and the largest area of lit surface any one
     of them sees [m2]. A fixed camera looks down on the surface from above and sees edges the rover, low down, cannot
     (behind the arm, or further off than its two cameras range). What the surface looks like is taken from the
-    picture itself, at places round the rover: it stands on the surface."""
+    picture itself, at places the map says are bare surface."""
     edges, lit = [], 0.0
+    places = surface_places(place)
     for cam in moves.fixed_cameras(api):
-        samples = []
-        for bearing in range(0, 360, 30):
-            x, y = SAMPLE_RING_M * math.cos(math.radians(bearing)), SAMPLE_RING_M * math.sin(math.radians(bearing))
-            r = api.ok("GET", f"/where/point?camera={cam}&x={x:.3f}&y={y:.3f}&height_m=0&relative_to=rover")
-            if not r["known"]:
-                break                                            # (nothing relates this camera to the rover)
-            if r["in_picture"] and r["inside_the_edge_px"] > 30:
-                samples.append(r["pixel"])
+        samples = in_picture(api, cam, places)
         mask = eyes.lit_surface(api.picture(f"/devices/{cam}"), samples) if len(samples) >= 2 else None
         if mask is None:
             continue
@@ -104,7 +128,8 @@ def how_big(api: Api, **_) -> dict:
     why = "the survey kept no map"
     for standpoint in range(3):
         survey = api.ok("POST", "/survey")
-        surface = api.ok("GET", "/place?relative_to=rover").get("surface")          # (in the rover's own frame, as it stands now)
+        place = api.ok("GET", "/place?relative_to=rover")       # (in the rover's own frame, as it stands now)
+        surface = place.get("surface")
         if surface is None:
             raise GaveUp("the survey kept no map: " + str(survey.get("stood_still", {}).get("warning", "it saw too little")))
         edges, seen = list(surface.get("edges_found", [])), surface["area_seen_m2"]
@@ -112,7 +137,7 @@ def how_big(api: Api, **_) -> dict:
         if spans is None and moves.fixed_cameras(api):
             if "arm" in api.devices() and not getattr(api, "rest", None):
                 moves.locate_cameras(api)                        # (the cameras are related to the rover through the arm's tags)
-            more, lit = edges_in_pictures(api)
+            more, lit = edges_in_pictures(api, place)
             spans, still = _spans(edges + more)
             seen = max(seen, lit)
             missing = missing if spans is None and not more else still
