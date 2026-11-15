@@ -44,6 +44,39 @@ The arm's description files are still read from where they are generated: `sim/m
 `sim/config/servos.toml`, `sim/config/safety.toml`. Reading the arm's own description is allowed; nothing
 about a scene is read.
 
+## On the real machine (`real.py`, `scripts/run_hub.py`)
+
+```
+python scripts/run_hub.py                          # every USB serial adapter and camera the system shows
+python scripts/run_hub.py --config machine.toml    # and what cannot be found by looking
+```
+
+The same hub, on real ports instead of the simulation's: `UsbSerial` (a servo bus on a USB adapter; needs
+`pip install pyserial`), `TcpSerial` (a servo bus behind a rover's board on the network: `firmware/rover-bridge`),
+`UvcCamera` (a video device, or a stream at a URL) and the wall clock. What is plugged in is found, not
+listed. A file is needed only for what cannot be found by looking: where a rover's board is on the network,
+and which cameras are a rover's own.
+
+```toml
+[[serial]]
+tcp = "192.168.4.20:3333"            # a rover's board
+
+[[camera]]
+url = "http://192.168.4.21/stream"   # one of the rover's own cameras
+part_of = "rover"
+role = "left"
+```
+
+A port that is not there today is noted and the hub starts with the rest. A link that has gone raises
+`PortError` (a 503 from the API, pointing at `/discover`), never an endless empty read.
+
+**Not yet tried on hardware.** Tried without it: the hub's own discovery and bus driver over a real socket on
+this machine, through the rover board's firmware logic, to emulated servos, in real time; the whole hub
+started on such a port, took the rover over, and switched its torque off on the way out. The USB serial and
+camera ports are written from their libraries' documentation. Open: how a rover's two cameras reach the hub
+(they are their own boards; a URL stream is assumed), and a camera's serial number, which the video library
+does not give (the device's name stands in).
+
 ## What it does at start-up
 
 1. **Asks what is plugged in** (`provider()`), and scans each serial port for servo ids 1 to 30.

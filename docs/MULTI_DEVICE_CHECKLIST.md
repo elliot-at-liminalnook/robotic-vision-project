@@ -185,6 +185,10 @@ Found on the way: the survey swung the rover's head into the arm and into a shel
 
 Plan: [5.6](MULTI_DEVICE_PLAN.md#56-the-rover), [8. Risks and unknowns](MULTI_DEVICE_PLAN.md#8-risks-and-unknowns)
 
+None of these can be ticked without the hardware. What they need from the software is in the repo, untried on it:
+real ports and a launcher (`hub/real.py`, `python scripts/run_hub.py`), the rover board's firmware
+(`firmware/rover-bridge`), printable tags (`hardware/tags/print/`), the rover's parts (`hardware/rover/parts/`, `docs/BOM.md`).
+
 - [ ] Arm on its real port
 - [ ] Fixed cameras on their real ports
 - [ ] One real camera calibrated, and its numbers in the lens model
