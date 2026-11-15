@@ -28,6 +28,7 @@ from .errors import Refused
 from .vision import tags as V
 
 SPACINGS = (0.06, 0.09, 0.12, 0.15, 0.18)        # camera spacings the pair is measured at [m]
+END_M = 0.004                                    # how well a camera places the rover at one end of a drive
 WHEEL_TOLERANCE = 0.03                           # how far a wheel's true size may be from its description (printed tyre, one sigma)
 MIN_TAG_PX = 45                                  # a tag smaller than this in either picture is not used
 
@@ -216,12 +217,12 @@ def wheels(hub, distance_m: float = 0.25) -> dict:
         raise Refused("no fixed camera can see the rover's tags where it stands", 409)
     ratios, legs, lengths = [], [], []
     go = None
-    for sign in (1.0, -1.0):                                         # which way is there room that has been seen?
+    for sign in (1.0, -1.0):                                         # which way is there more room that has been seen?
         try:
             d, _, slow, _ = hub.guard.drive(sign * distance_m, 0.0)
         except Refused:
             continue
-        if not slow and abs(d) >= 0.10 and (go is None or abs(d) > abs(go)):
+        if not slow and abs(d) >= 0.10 and (go is None or abs(d) > abs(go) + 0.03):     # (forward, unless back is clearly longer)
             go = d
     if go is None:
         return {"ok": True, "applied": False,
@@ -246,11 +247,13 @@ def wheels(hub, distance_m: float = 0.25) -> dict:
         return {"ok": True, "applied": False, "legs": legs,
                 "why": "the rover could not be driven far enough in the cameras' sight to compare (the map may have something in the way)"}
     ratio = float(np.average(ratios, weights=lengths))
-    # How well a camera can tell: each end of a leg to about 2.5 mm, and every distance through it to its focal length's
-    # uncertainty. Several legs average the first, not the second.
-    seeing = 0.0025 * math.sqrt(2) / float(np.mean(lengths)) / math.sqrt(len(ratios))
+    # How well a camera can tell: each end of a leg to about 4 mm, and every distance through it to its focal length's
+    # uncertainty. Driving there and back again visits the same two places, so repeating it does not average either away:
+    # a camera that puts the rover 4 mm out at one end does so every time. (Found: four 0.12 m legs agreed with each other
+    # to 0.1 % and were all 4 % short.)
+    seeing = END_M * math.sqrt(2) / float(np.mean(lengths))
     through = max(hub.cameras[leg_["by"]].focal_sigma for leg_ in legs if "by" in leg_)
-    sure = math.hypot(max(seeing, float(np.std(ratios)) / math.sqrt(len(ratios)) if len(ratios) > 1 else 0.0), through)
+    sure = math.hypot(max(seeing, float(np.std(ratios)) if len(ratios) > 1 else 0.0), through)
     best, now = _weigh(1.0, WHEEL_TOLERANCE, ratio, sure)                # the description, and what was seen, weighed together
     rover.wheel_scale *= best
     return {"ok": True, "went_over_counted": round(ratio, 4), "uncertainty": round(sure, 4), "legs": legs, "applied": True,

@@ -82,6 +82,11 @@ def guide(hub: Hub) -> str:
              "    POST /{node}/{command}          an action; the body is JSON with its parameters",
              "    POST /{node}/stop               freeze everything under the node; POST /stop freezes everything",
              "    GET  /where?of=A&relative_to=B  where device A is in B's own frame: an estimate with its uncertainty, or known = false",
+             "    GET  /where/pixel?camera=C&u=U&v=V&height_m=H&relative_to=arm",
+             "                                    where the line of sight through point (U, V) of camera C's full-size picture meets",
+             "                                    the level plane H metres above the surface, in the arm's (or the rover's) own frame:",
+             "                                    for turning something seen in a picture into a place. C is a fixed camera's name,",
+             "                                    arm/wrist_camera, rover/head/left or rover/head/right",
              "    GET  /place                     what has been found of the surroundings, from every device: the surface and its edges,",
              "                                    things (where, how big, how high, what colour, where in each fixed camera's picture),",
              "                                    what the arm has touched, and what is still unseen",
@@ -176,6 +181,15 @@ def dispatch(hub: Hub, method: str, url: str, body_bytes: bytes = b"") -> tuple[
                 result = {"ok": True, **hub.node(path).describe(), **hub.place_state(query.get("relative_to"))}
             elif path == "place/state":
                 result = {"ok": True, "path": "/place", **hub.place_state(query.get("relative_to"))}
+            elif path == "where/pixel":
+                try:
+                    u, v, h = float(query["u"]), float(query["v"]), float(query.get("height_m", 0.0))
+                except (KeyError, ValueError):
+                    raise Refused("say which camera and which point of its full-size picture: "
+                                  "/where/pixel?camera=camera_1&u=960&v=540&height_m=0.03&relative_to=arm") from None
+                if "camera" not in query or not (math.isfinite(u) and math.isfinite(v) and -0.05 <= h <= 1.0):
+                    raise Refused("camera, u and v are required; height_m is from -0.05 to 1")
+                result = hub.where_pixel(query["camera"], u, v, h, query.get("relative_to", "arm"))
             elif path == "where":
                 if "of" not in query:
                     raise Refused("say which device: /where?of=camera_1&relative_to=arm")

@@ -49,6 +49,7 @@ USE_FIELD = 0.6                     # only this far off the middle of the pictur
 REACH_PER_SPACING = 7.0             # a pair is used out to this many times its spacing (0.42 m at 60 mm, 0.7 m at 100 mm): its error
                                     # in distance grows as distance squared over spacing, and an uncalibrated pair at 0.5 m with the
                                     # cameras 60 mm apart is 5 to 8 % out, which smears a far edge across several cells
+OVER_BLOCK_M = 0.04                 # a pass this much higher than where the head met something may try that way again: it goes over
 HEAD_MOVE_S = 15.0                  # time allowed for each move of the head
 MIN_TAG_PX = 60                     # a tag smaller than this in either picture is not measured: its corners are a pixel or so
                                     # uncertain, and across two cameras that is several per cent of its side
@@ -151,14 +152,14 @@ def look(hub) -> dict:
             "place": hub.place_state()}
 
 
-def _sweep(side_first: int, pans, limit: dict[int, float]):
+def _sweep(side_first: int, pans, limit: dict[int, tuple[float, float]], height: float):
     """The pan angles of one pass, in order: outward on one side, then outward on the other, no further on either side
-    than where the head met something earlier in this survey."""
+    than where the head met something earlier in this survey, unless the head is now well above where it was then."""
     for side in (side_first, -side_first):
         for pan in pans:
             if pan == 0.0 and side != side_first:
                 continue
-            if pan <= limit[side]:
+            if pan <= limit[side][0] or height > limit[side][1] + OVER_BLOCK_M:
                 yield side, side * pan
 
 
@@ -177,27 +178,37 @@ def survey(hub, passes=PASSES, pans=PANS) -> dict:
     heights: list[float] = []
     views, skipped, met, stopped = [], [], [], None
     arm_q = hub.arm.link.q() if hub.arm is not None else None
-    limit = {1: 360.0, -1: 360.0}                            # how far each way the head has been able to turn
+    if hub.cameras:
+        hub._look()                                          # where the arm is, if a camera can say: the head keeps out of it
+    limit = {1: (360.0, 0.0), -1: (360.0, 0.0)}              # how far each way the head has been able to turn, and at what height
     reference = None                                         # the first view that had enough in it: looked at again at the end
     try:
         for n, (height, tilt, spacing) in enumerate(passes):
             for step in (lambda: rover.point(pan_deg=0.0, timeout_s=HEAD_MOVE_S), lambda: rover.raise_head(height, timeout_s=HEAD_MOVE_S),
                          lambda: rover.spread(spacing, timeout_s=HEAD_MOVE_S), lambda: rover.point(tilt_deg=tilt, timeout_s=HEAD_MOVE_S)):
-                r = step()                                   # (raised and spread while facing forward, where it began)
+                try:
+                    r = step()                               # (raised and spread while facing forward, where it began)
+                except Refused as e:                         # the arm, or something the map has, is in the way
+                    r = {"reached": False, "why_not_reached": str(e)}
                 if not r["reached"]:
                     stopped = r.get("why_not_reached", "the head did not get there")
                     break
             if stopped:
                 break
             blocked_side = None
-            for side, pan in _sweep(1 if n % 2 == 0 else -1, pans, limit):
+            for side, pan in _sweep(1 if n % 2 == 0 else -1, pans, limit, height):
                 if side == blocked_side:
                     continue
-                r = rover.point(pan_deg=pan, timeout_s=HEAD_MOVE_S)
+                try:
+                    r = rover.point(pan_deg=pan, timeout_s=HEAD_MOVE_S)
+                except Refused as e:                         # known to be in the way: not tried, and no further that way in this pass
+                    skipped.append({"lens_height_m": height, "pan_deg": pan, "why": str(e)})
+                    blocked_side = side
+                    continue
                 if not r["reached"]:
                     skipped.append({"lens_height_m": height, "pan_deg": pan, "why": r.get("why_not_reached", "the head did not get there")})
                     if rover.last_block:                     # it met something: no further that way, in this pass or a later one
-                        blocked_side, limit[side] = side, abs(pan) - (pans[1] - pans[0])
+                        blocked_side, limit[side] = side, (abs(pan) - (pans[1] - pans[0]), height)
                         met.append({"lens_height_m": height, "pan_deg": round(math.degrees(rover.head_now()["pan"]), 1)})
                     continue
                 view, picture, lens_l = take_view(hub, ratios, heights, arm_q)

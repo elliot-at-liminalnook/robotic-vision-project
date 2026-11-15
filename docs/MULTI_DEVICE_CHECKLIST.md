@@ -89,7 +89,7 @@ Plan: [5.1](MULTI_DEVICE_PLAN.md#51-four-parts-two-apis-and-one-rule-about-what-
 - [x] The model's REST API, with no ground truth and no description of the place
 - [x] A pick through the hub's API in several scenes (workcell, open_small, moved_arm, bench, cluttered: smoke-checked)
 - [x] Tests written (import rule, new places, blindfold, a moved camera is followed): `sim/tests/test_hub.py`, not run as a suite
-- [ ] Old `sim_api.py` retired (deferred to step 13: it still carries the bench task's reference solution and the hands-on window; its arm actions already live in the hub and it inherits them)
+- [ ] Old `sim_api.py` retired. **Kept:** the bench's eight-step tidy and the hands-on window still run on it; porting the tidy to the hub's API needs every thing found by sight first (DECISIONS MD93)
 
 ## Step 6. Locator
 
@@ -174,8 +174,12 @@ Plan: [5.10](MULTI_DEVICE_PLAN.md#510-keeping-the-gap-small)
 
 Plan: [5.7](MULTI_DEVICE_PLAN.md#57-scenes-and-tasks-are-config-files)
 
-- [ ] A reference solution for each task, through the hub's API
-- [ ] Model runs, scored by the referee
+- [ ] A reference solution for each task, through the hub's API. **Partly:** 10 of 18 tasks have one (`sim/solutions/`, `python sim/scripts/solve.py`); 8 pass the referee, 2 give up or fall short and say why. The other 8 have none, each with its reason (`solve.py --list`): most need the rover driven round something to look
+- [ ] Model runs, scored by the referee. **Not run:** the harness is written (`sim/scripts/model_run.py`: the task, the hub's guide and three tools to a model; the referee scores). It needs `pip install anthropic`, credentials, and is billed per run
+- [x] A point in a picture as a place (`GET /where/pixel`), which the solutions and a model both need
+- [x] Tests written (`sim/tests/test_solutions.py`, not run as a suite; each test called directly)
+
+Found on the way: the survey swung the rover's head into the arm and into a shelf it had mapped (the head is now checked against both); `open_small` was too small for the rover to survey from anywhere.
 
 ## Step 14. Hardware
 

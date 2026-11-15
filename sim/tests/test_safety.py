@@ -208,6 +208,8 @@ def small():
     """The small open surface: room in the arm's reach with nothing standing in it."""
     world = World("open_small")
     hub = Hub(world.ports)
+    assert call(hub, "POST", "/locate", {"show_wrist_tag": True})[0] == 200          # the camera places the arm ...
+    call(hub, "POST", "/devices/arm/home")
     assert call(hub, "POST", "/devices/rover/head/raise", {"lens_height_m": 0.16})[1]["reached"]
     assert call(hub, "POST", "/devices/rover/head/point", {"tilt_deg": -38.0})[1]["reached"]
     assert call(hub, "POST", "/devices/rover/head/look")[1]["view"]["used"]          # one view is a map; the camera relates the rest

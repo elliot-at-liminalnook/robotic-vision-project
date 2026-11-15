@@ -285,6 +285,11 @@ before it is made.
   since the load rose is taken back, and what stopped it goes into the map just past the end of the
   rover that led. (Found when backing 0.30 m into the surface's edge counted 0.30 m and moved 0.10.)
   The numbers are from the simulation and must be set again on the real rover.
+- **The rover's head** is put to the map and to the arm's place as well: it is not moved to where it would be within
+  30 mm (plus how unsure the arm's place is) of the parts of the arm that are at its height, nor into something the map
+  has that stands as high as it does. It may always go back through where it has been since the rover last drove. The
+  survey skips such a turn instead of making it, and a pass 40 mm higher than where the head met something may try that
+  way again. (Found when the survey swung the head into the arm's hand, and into a shelf it had just mapped.)
 - **Where the rover stands is free**: its outline is marked so at every view and after every drive.
 - **Stop** at the root freezes every device; under a device, only that one. Every way out of the
   program switches every servo's torque off.
@@ -292,6 +297,20 @@ before it is made.
 Fuzzed, against the referee: thirty random drives and turns after a survey move no loose thing, never
 leave the surface, and leave the wheels' count within 50 mm and 12° of where the rover is; forty random
 tip targets never touch the rover and shove nothing.
+
+## A point in a picture, as a place
+
+`GET /where/pixel?camera=C&u=U&v=V&height_m=H&relative_to=arm` answers where the line of sight through
+point (U, V) of camera C's full-size picture meets the level plane H metres above the surface, in the
+arm's frame (or the rover's). It is how something seen in a picture becomes a place to send a hand to. C
+is a fixed camera, `arm/wrist_camera`, `rover/head/left` or `rover/head/right`.
+
+- From a fixed camera related to the arm by tags: 2 to 9 mm from the truth for things 0.5 m away, stated
+  as about 25 mm. From the wrist camera hovering over a thing: under 2 mm, because the arm knows where
+  its own camera is from its joints.
+- It says how steeply the line meets the plane, and so how far the place moves for each millimetre the
+  thing is higher or lower than `height_m`. A touch (`probe`) gives the height.
+- `known: false` and why, when nothing relates that camera to the arm, or the line does not come down.
 
 ## Self-calibration (`calibrate.py`)
 
@@ -303,8 +322,8 @@ what it found, how sure it is, and what it changed; each can also be asked for a
 | What | How | Command | In the simulation |
 |---|---|---|---|
 | A fixed camera's focal length | The arm shows the tag behind its wrist at several poses. The tags' places are known from the arm's joints; the focal length is the one that makes them all land where they were seen. Weighed against the datasheet by how sure each is | `POST /devices/camera_N/calibrate` (after `/locate` with `show_wrist_tag`) | Found to 0.1 to 0.5 % of itself from 7 or 8 sightings; stated as good to 0.5 to 0.9 % where the datasheet is good to 1.5 % |
-| The rover's pair of cameras | The head looks at a tag while the spacing drive moves the cameras apart in five steps. The tag's disparity is a straight line in the spacing; what is left at no spacing is the pair's sideways shift. The ratio of the two focal lengths comes from how the rows of one picture run against the other's | `POST /devices/rover/head/calibrate` (head raised, pointed at a tag) | Shift found to 0.5 px (it was 3 to 10 px: 2 to 7 % of a distance at 0.4 m); focal ratio to 0.2 % |
-| The rover's wheels | A fixed camera watches the rover drive up to 0.25 m and back, twice, over ground the map shows free. Weighed against the description (good to 3 %) | `POST /devices/rover/drive/calibrate` (after a survey) | Wheels 5 % large: taken as 4.6 to 4.7 % large afterwards. Wheels right: taken as 0.5 % large |
+| The rover's pair of cameras | The head looks at a tag while the spacing drive moves the cameras apart in five steps. The tag's disparity is a straight line in the spacing; what is left at no spacing is the pair's sideways shift. The ratio of the two focal lengths comes from how the rows of one picture run against the other's | `POST /devices/rover/head/calibrate` (head raised, pointed at a tag) | Shift found to 0.5 px (it was 3 to 10 px: 2 to 7 % of a distance at 0.4 m); focal ratio to about 0.5 % |
+| The rover's wheels | A fixed camera watches the rover drive up to 0.25 m and back, twice, over ground the map shows free. Weighed against the description (good to 3 %) | `POST /devices/rover/drive/calibrate` (after a survey) | With 0.21 to 0.25 m of free ground: wheels 5 % large are taken as 3 to 4.5 % large, stated good to 2 %. With only 0.12 m it can tell little, says so (good to 2.6 %), and leaves the description nearly as it was |
 
 - After the pair is calibrated the survey and `look` use its shift and focal ratio, and the tags are
   measured again by the spacing drive: tags printed 4 % large measure 1.035 to 1.04 of their printed

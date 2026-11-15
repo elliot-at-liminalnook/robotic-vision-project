@@ -101,7 +101,9 @@ class RoverDevice:
         self.travel = {"left": 0.0, "right": 0.0}             # metres each wheel has rolled
         self.volts = float(np.mean([f["volts"] for f in fb.values()]))
         self._lag_t = 0.0
-        self.guard = self.after_drive = None                 # set by the hub: what the map says of a drive (hub/guard.py)
+        self.guard = self.after_drive = self.head_guard = None       # set by the hub: what the map says of a motion (hub/guard.py)
+        self.swept = [0.0, 0.0, math.inf]                    # where the head has been since the rover last drove: least and greatest
+        #                                                      pan, and the lowest lift it was at: it may always go back that way
         self.wheel_scale = 1.0                               # its wheels' size over what its description says, once found
         self.pair = {"offset_px": 0.0, "stretch": None}      # its two cameras against each other, once found (hub/calibrate.py)
         self.last_block = None
@@ -199,6 +201,8 @@ class RoverDevice:
         self._may_move()
         lim = self.rover.limits
         target = {j: float(np.clip(target.get(j, self.head_goal[j]), lim[j][0], lim[j][1])) for j in HEAD_JOINTS}
+        if self.head_guard is not None:
+            self.head_guard(dict(self.head_goal), target, self.swept)   # (raises Refused: the arm, or something in the map, is there)
         t0, self.last_block, held_back = self.clock.now(), None, None
         self._lag_t = 0.0
         reached = False
@@ -223,6 +227,7 @@ class RoverDevice:
                 self.head_goal = dict(now)
                 self.group.write_angles({self.head_servo[j]["id"]: now[j] / self.head_servo[j]["ratio"] for j in HEAD_JOINTS})
                 break
+            self.swept = [min(self.swept[0], now["pan"]), max(self.swept[1], now["pan"]), min(self.swept[2], now["lift"])]
             if all(abs(target[j] - now[j]) <= STOW_TOL[j] / 2 for j in HEAD_JOINTS) and self.head_goal == target:
                 reached = True
                 break
@@ -380,6 +385,7 @@ class RoverDevice:
             if (distance, angle) != asked:                         # it went as far as the map allows, which is not where it was sent
                 out["reached"] = False
                 out["why_not_reached"] = note
+        self.swept = [self.head_goal["pan"], self.head_goal["pan"], math.inf]      # somewhere else now: nothing is known to be clear
         if self.after_drive is not None:
             self.after_drive(0 if turning else int(math.copysign(1, distance)), self.last_block in ("wheels", "pushing"))
         return out

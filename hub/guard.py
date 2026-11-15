@@ -29,6 +29,8 @@ SLOW_CELLS = 12                   # a drive that takes the rover over this many 
 HAND_RADIUS_M = 0.03              # the hand is taken to be this wide around its tip
 OVER_M = 0.015                    # the hand passes over a thing if it is this far above the thing's top
 END_RADIUS_M = 0.05               # within this of where a move ends, a thing is being approached, not passed through
+HEAD_CLEAR_M = 0.03               # the rover's head keeps this far, and how unsure the arm's place is, from the arm (the pan's
+#                                   light push is behind it: the hand's margin is wider because the arm pushes hard)
 ROVER_GROW_M = 0.03               # the rover's outline is grown by this, and by twice how unsure its place is, for the arm
 
 
@@ -119,6 +121,51 @@ class Guard:
         slow = len(unseen) >= SLOW_CELLS
         return distance, angle, slow, ("slow: part of where this goes has never been seen (GET /place: unseen), so whatever is "
                                        "there is met at a crawl" if slow else None)
+
+    def head(self, now: dict, target: dict, swept=None):
+        """A move of the rover's head, before it is made. Raises Refused if it would take the head into the arm, where the
+        locator puts it, or into something the map has that stands as high as the head. (What neither knows of is left to
+        the pan's light push: rover/device.py.) swept: the least and greatest pan the head has been at since the rover last
+        drove, and the lowest it was: back through there it may always go."""
+        hub = self.hub
+        rover = hub.rover.rover
+        arm, margin = None, 0.0
+        start = rover.shape(now, rover.HEAD_PARTS)
+        end = rover.shape(target, rover.HEAD_PARTS)
+        low, high = min(start[:, 2].min(), end[:, 2].min()) - HEAD_CLEAR_M, max(start[:, 2].max(), end[:, 2].max()) + HEAD_CLEAR_M
+        if hub.arm is not None:
+            link, _ = hub.locator.chain("arm", "rover", hub.arm.link.q())
+            safety = getattr(hub.arm.link, "safety", None)
+            if link is not None and safety is not None:
+                pts = safety.corners(hub.arm.link.q())
+                pts = (np.c_[pts, np.ones(len(pts))] @ link.T.T)[:, :3]
+                level = pts[(pts[:, 2] > low) & (pts[:, 2] < high)]      # the parts of the arm at the head's height: a hand held
+                if len(level) >= 3:                                      # high above the head is not in its way
+                    arm = cv2.convexHull(level[:, :2].astype(np.float32)).reshape(-1, 1, 2)
+                    margin = HEAD_CLEAR_M + link.sigma_m
+        here = hub.map_from_rover() if not hub.place.empty else None
+        if arm is None and here is None:
+            return
+        away = lambda pts: min(-cv2.pointPolygonTest(arm, (float(p[0]), float(p[1])), True) for p in pts)      # noqa: E731
+        at_start = away(start) if arm is not None else np.inf
+        for k in range(1, 9):
+            pose = {j: now[j] + (target[j] - now[j]) * k / 8 for j in now}
+            if swept is not None and swept[0] - 0.02 <= pose["pan"] <= swept[1] + 0.02 and pose["lift"] >= swept[2] - 0.02 \
+                    and abs(pose["spacing"] - now["spacing"]) < 1e-4 and pose["tilt"] >= min(now["tilt"], target["tilt"]) - 1e-6:
+                continue                                            # it has been here, as it is, and came to no harm
+            pts = rover.shape(pose, rover.HEAD_PARTS)
+            if arm is not None and away(pts) < margin and away(pts) < at_start - 0.005:
+                raise Refused(f"the head was not moved: at pan {math.degrees(pose['pan']):.0f} deg it would be within "
+                              f"{margin * 1000:.0f} mm of where the arm is. Turn it the other way, or move the arm or the rover.", 409)
+            if here is not None:
+                state, height = self._cells((np.c_[pts[:, :2], np.zeros(len(pts)), np.ones(len(pts))] @ here.T)[:, :2])
+                hit = (state == OCCUPIED) & (height > pts[:, 2] - 0.01)
+                was = self._cells((np.c_[start[:, :2], np.zeros(len(start)), np.ones(len(start))] @ here.T)[:, :2])
+                if hit.sum() >= 2 and not ((was[0] == OCCUPIED) & (was[1] > start[:, 2] - 0.01)).sum() >= 2:
+                    n = int(np.argmax(hit))
+                    raise Refused(f"the head was not moved: at pan {math.degrees(pose['pan']):.0f} deg it would meet something the map "
+                                  f"has, {height[n]:.2f} m high, at ({pts[n][0]:.2f}, {pts[n][1]:.2f}) in the rover's frame. Raise the head "
+                                  "above it, or turn it the other way.", 409)
 
     # ---- the arm -------------------------------------------------------------------------------
     def saw_arm(self, q):

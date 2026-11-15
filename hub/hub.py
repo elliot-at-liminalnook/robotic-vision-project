@@ -98,7 +98,7 @@ class Hub:
         self._touches_tried, self.landmark_note = 0, None
         self.guard = Guard(self)                            # what the map says of a motion before it is made
         if self.rover is not None:
-            self.rover.guard, self.rover.after_drive = self.guard.drive, self.guard.stood_here
+            self.rover.guard, self.rover.after_drive, self.rover.head_guard = self.guard.drive, self.guard.stood_here, self.guard.head
         if self.arm is not None:
             self.arm.actions.guard = self.guard.hand
         self._build_tree()
@@ -207,6 +207,48 @@ class Hub:
         if getattr(self, "landmark_note", None):
             out["landmarks"] = self.landmark_note
         return out
+
+    def where_pixel(self, camera: str, u: float, v: float, height_m: float = 0.0, relative_to: str = "arm") -> dict:
+        """Where the line of sight through one point of a camera's full-size picture meets a level plane, in the frame of a
+        device that stands on the surface. For turning 'that thing, there in the picture' into a place to send a hand to."""
+        alias = {"wrist_camera": "arm/wrist_camera", "rover/left": "rover/head/left", "rover/right": "rover/head/right"}
+        camera = alias.get(camera, camera)
+        cams = {**self.cameras, **({"arm/wrist_camera": self.wrist} if self.wrist is not None else {}),
+                **({f"rover/head/{side}": c for side, c in self.rover.cameras.items()} if self.rover is not None else {})}
+        if camera not in cams:
+            raise Refused(f"there is no camera '{camera}'; there are {sorted(cams)}", 404)
+        if relative_to not in ("arm", "rover") or relative_to not in self.locator.names():
+            raise Refused("relative_to must be a device that stands on the surface and is here: "
+                          f"{[n for n in ('arm', 'rover') if n in self.locator.names()]}", 404)
+        lens = cams[camera].lens(1920, 1080)
+        if not (0 <= u < lens.width and 0 <= v < lens.height):
+            raise Refused(f"the point is outside the picture ({lens.width} x {lens.height}, full size)")
+        q = self.arm.link.q() if self.arm is not None else None
+        link, why = self.locator.chain(camera, relative_to, q)
+        if link is None and (self.cameras or self.rover is not None):
+            self._look()
+            link, why = self.locator.chain(camera, relative_to, q)
+        if link is None:
+            return {"ok": True, "known": False, "why": f"nothing relates {camera} to {relative_to}: {why}"}
+        n = cv2.undistortPoints(np.array([[[float(u), float(v)]]]), lens.K(), np.asarray(lens.dist, float)).reshape(2)
+        way = link.T[:3, :3] @ np.array([n[0], n[1], 1.0])
+        way /= np.linalg.norm(way)
+        eye = link.T[:3, 3]
+        if way[2] > -0.02 or eye[2] <= height_m:
+            return {"ok": True, "known": False, "why": "that line of sight does not come down to that height: it looks level or upward there, "
+                                                       "or the camera is below it"}
+        reach = (height_m - eye[2]) / way[2]
+        at = eye + reach * way
+        # How far out the point may be: the camera's place, and its direction carried along the line and stretched by how
+        # shallowly the line meets the plane.
+        sure = math.hypot(link.sigma_m, link.sigma_rad * reach / abs(way[2]))
+        return {"ok": True, "known": True, "camera": camera, "relative_to": relative_to,
+                "at_m": [round(float(at[0]), 4), round(float(at[1]), 4)], "height_m": round(float(height_m), 4),
+                "uncertainty_m": round(float(sure), 4), "line_of_sight_m": round(float(reach), 3),
+                "slope_deg": round(math.degrees(math.asin(-way[2])), 1),
+                "note": "this is where the line through that point of the picture meets the plane at height_m. If what is seen there is "
+                        "higher or lower than height_m, the true place is nearer to or further from the camera along the line: "
+                        f"{abs(1 / math.tan(math.asin(-way[2]))):.1f} mm for every millimetre of height"}
 
     def map_from_rover(self) -> np.ndarray:
         """The rover's frame now, in the map's frame (the rover's frame as it stood when the map was begun)."""

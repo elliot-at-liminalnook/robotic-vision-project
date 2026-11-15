@@ -21,7 +21,8 @@ import numpy as np
 
 HEIGHT_TOL_M = 0.012           # a touch and a thing in the map are the same thing only if their heights agree this well
 PLACE_TOL_M = 0.035            # ... and, once laid over each other, their places (a thing in the map is the part of it that was seen)
-CLEARLY_WORSE_M = 0.008        # another way of laying the map on the touches is set aside only if it misses by more than this
+CLEARLY_WORSE_M = 0.003        # another way of laying the map on the touches is set aside if it misses by more than this, and
+#                                by more than two and a half times what the best way misses by
 MIN_APART_M = 0.06             # two landmarks nearer each other than this say nothing about direction
 
 

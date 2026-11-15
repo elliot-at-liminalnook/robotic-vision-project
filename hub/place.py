@@ -89,6 +89,7 @@ class Place:
         self.ground = np.zeros((n, n), np.int32)        # views that saw the surface in each cell
         self.high = np.zeros((n, n), np.int32)          # views that saw something standing in it
         self.height = np.zeros((n, n), np.float32)      # how high the highest thing seen there is
+        self.low = np.zeros((n, n), np.float32)         # how high the lowest part seen of what stands there is (0: not known)
         self.rgb = np.zeros((n, n, 3), np.float64)      # the colours of what stands in each cell, summed ...
         self.rgb_n = np.zeros((n, n), np.int64)         # ... over this many points
         self.views, self.used, self.levels = 0, 0, []
@@ -130,6 +131,8 @@ class Place:
             if np.percentile(zs, 70) > HIGH_M:
                 self.high[i, j] += 1
                 self.height[i, j] = max(self.height[i, j], float(np.percentile(zs, 90)))
+                foot = float(np.percentile(zs[zs > HIGH_M], 10))
+                self.low[i, j] = foot if self.low[i, j] == 0 else min(self.low[i, j], foot)
                 added["occupied"] += 1
                 if rgb is not None:
                     up = zs > HIGH_M                         # the thing's own surface, not the ground beside it
@@ -150,6 +153,7 @@ class Place:
         self.ground[ij[:, 0], ij[:, 1]] = np.maximum(self.ground[ij[:, 0], ij[:, 1]], 1)
         self.high[ij[:, 0], ij[:, 1]] = 0
         self.height[ij[:, 0], ij[:, 1]] = 0.0
+        self.low[ij[:, 0], ij[:, 1]] = 0.0
 
     def mark_met(self, xy: np.ndarray, at_least_m: float = MET_M):
         """Something stopped the rover at these points (N x 2, map frame): occupied, and at least high enough to stop it."""
@@ -281,6 +285,8 @@ class Place:
                         "length_m": round(float(np.ptp(along) + CELL_M), 3), "width_m": round(float(np.ptp(across) + CELL_M), 3),
                         "height_m": round(float(np.percentile(h[h > 0], 80)) if (h > 0).any() else 0.0, 3),
                         "long_axis_deg": round(math.degrees(math.atan2(axes[0][1], axes[0][0])) % 180.0, 1), "cells": int(len(i)),
+                        **({"lowest_seen_m": round(float(np.percentile(self.low[i, j][self.low[i, j] > 0], 25)), 3)}
+                           if (self.low[i, j] > 0).any() else {}),
                         **(colour_of(self.rgb[i, j].sum(axis=0) / seen) if seen >= 30 else {})})
         return sorted(out, key=lambda t: -t["cells"])
 
@@ -340,6 +346,8 @@ class Place:
                 "things": things,
                 "unseen": self.unseen(),
                 "rulers": self.rulers,
+                "about_things": "height_m is a thing's top; lowest_seen_m is the lowest part of it the cameras saw: near the surface for a "
+                                "thing standing on it, and the height of whatever it stands on for a thing that stands on something raised",
                 "note": "from the rover's two cameras, out to about 0.7 m from where it stood: distances from there are good to "
                         "about 5 % (the pair is not yet calibrated), heights to about 5 mm; a thing's far side and what stands "
                         "behind it are not seen"}

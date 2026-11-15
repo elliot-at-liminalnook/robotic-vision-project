@@ -3,7 +3,7 @@ name = "open_small"
 description = "A small bare surface with one arm, one fixed camera, the rover and two objects."
 
 [surface]
-outline_m = [[0.0, 0.0], [0.7, 0.0], [0.7, 0.55], [0.0, 0.55]]
+outline_m = [[0.0, 0.0], [0.8, 0.0], [0.8, 0.6], [0.0, 0.6]]
 lip_height_m = 0.02
 friction = 0.5
 colour = "wood"
@@ -33,14 +33,14 @@ facing_deg = 0
 [[devices]]
 kind = "camera"
 name = "camera_1"
-at_m = [0.66, 0.50, 0.36]
+at_m = [0.76, 0.55, 0.36]
 looking_at_m = [0.30, 0.27, 0.0]
 
 [[devices]]
 kind = "rover"
 name = "rover"
-at_m = [0.54, 0.30]              # parked clear of both objects: its stowed head reaches 0.25 m ahead and 0.12 m to each side
-facing_deg = 270
+at_m = [0.66, 0.10]              # parked clear of both objects and of the arm's reach, with the surface ahead of it to look
+facing_deg = 90                  # at: its stowed head reaches 0.25 m ahead and 0.12 m to each side
 
 [[tasks]]
 name = "where_is_everyone"
