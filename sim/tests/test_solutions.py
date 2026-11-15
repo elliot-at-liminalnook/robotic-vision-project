@@ -5,6 +5,8 @@ Aimed at classes of bugs:
     projection, for fixed cameras and for the camera on the wrist);
   * a solution that reaches past the hub's API for what it should have had to find (the import rule below);
   * a solution that answers when it should have said it cannot tell;
+  * a part of a thing taken for the whole of it (a bin's frame that runs off the picture), and one patch of colour that is
+    not a thing ending a task that had other patches to try;
   * the head or the hand going where the hub already knows something stands.
 """
 import ast
@@ -137,6 +139,104 @@ def test_the_eyes_find_each_colour_where_it_is_and_tell_a_frame_from_a_block():
     assert any(abs(b.u - 255) < 4 and abs(b.v - 75) < 4 and not b.ring for b in pale), "the tag is seen, and is not taken for a frame"
 
 
+@pytest.mark.parametrize("corner,cut", [((300, 200), False), ((-40, 200), True), ((300, -30), True), ((520, 200), True), ((300, 330), True),
+                                        ((8, 200), False), ((300, 8), False)])      # (the line is 8 px wide: 4 px clear of the edge)
+def test_a_frame_that_runs_off_the_picture_is_said_to(corner, cut):
+    """The class: the middle of the part of a thing that is in the picture, taken for the thing's middle."""
+    from solutions import eyes
+    img = np.full((400, 600, 3), (150, 120, 80), np.uint8)
+    x, y = corner
+    cv2.rectangle(img, (x, y), (x + 120, y + 100), (40, 60, 200), 8)
+    blue = eyes.find(img, "blue")
+    assert len(blue) == 1 and blue[0].cut_off == cut
+    if not cut:
+        assert blue[0].ring and abs(blue[0].u - (x + 60)) < 4 and abs(blue[0].v - (y + 50)) < 4
+
+
+class _Looking:
+    """An Api whose wrist camera shows a given picture and whose pictures are 1 mm to the pixel, the arm's origin at (960, 540)."""
+    def __init__(self, image):
+        self.image, self.calls = image, 0
+
+    def post(self, path, body=None):
+        return 200, {"reached": True}
+
+    def picture(self, node):
+        return self.image
+
+    def ok(self, method, path, body=None):
+        q = dict(kv.split("=") for kv in path.split("?")[1].split("&"))
+        return {"known": True, "at_m": [(float(q["u"]) - 960) / 1000, (float(q["v"]) - 540) / 1000], "uncertainty_m": 0.002}
+
+
+@pytest.mark.parametrize("left,whole", [(1000, True), (1790, True), (1830, False), (1900, False)])
+def test_a_bin_is_placed_from_close_up_only_when_its_whole_frame_is_in_the_picture(left, whole):
+    """A bin seen whole is placed where its frame's middle is. One that runs off the picture is left where the first look
+    put it: its visible part's middle is not its middle (found as a cylinder set down on a bin's wall, 27 mm off)."""
+    from solutions import moves
+    img = np.full((1080, 1920, 3), (150, 120, 80), np.uint8)
+    cv2.rectangle(img, (left, 500), (left + 110, 610), (40, 60, 200), 9)
+    true = np.array([(left + 55 - 960) / 1000, (555 - 540) / 1000])
+    near = true + [-0.02, 0.015]                                    # where the fixed camera put it
+    at, side = moves.closely(_Looking(img), "blue", near, 0.012, ring=True)
+    assert side is None
+    assert np.linalg.norm(at - (true if whole else near)) < 0.004, (at, true, near)
+
+
+def _carrying(monkeypatch, patches, real):
+    """into_bins with the looking and the carrying stood in for: `patches` are where the fixed camera sees the colour (in
+    order), `real` says which of them is a thing (the others raise). Returns (the places carried from, the solver)."""
+    from solutions import moves, tasks
+    from solutions.api import GaveUp, NotThere, OutOfReach
+    carried, there = [], [np.array(p, float) for p in patches]
+
+    def roughly(api, colour, ring=False, height=0.015, pick=0):
+        if ring:
+            return np.array([0.0, 0.3])
+        if pick >= len(there):
+            raise GaveUp("no fixed camera sees one")
+        return there[pick]
+
+    def find_thing(api, colour, pick=0, height_guess=0.03, near=None):
+        k = next(i for i, p in enumerate(there) if np.allclose(p, near))
+        if real[k] is not True:
+            raise real[k]("not a thing" if real[k] is NotThere else "cannot hover")
+        return {"at": near, "top": 0.03, "side_deg": 0.0}
+
+    def pick(api, thing):
+        k = next(i for i, p in enumerate(there) if np.allclose(p, thing["at"]))
+        carried.append(tuple(thing["at"]))
+        there.pop(k), real.pop(k)                                   # (it is in the bin now, and is no longer seen out there)
+        return 0.011
+
+    for name, f in (("roughly", roughly), ("find_thing", find_thing), ("pick", pick), ("closely", lambda api, c, near, h, ring=False: (near, None)),
+                    ("put", lambda *a, **k: None), ("locate_cameras", lambda api: None), ("park", lambda api: None)):
+        monkeypatch.setattr(moves, name, f)
+    return carried, tasks.into_bins((("yellow", "blue"),))
+
+
+def test_a_patch_that_is_not_a_thing_is_passed_over_and_the_next_one_tried(monkeypatch):
+    """The class: the first patch of the colour is the arm itself (it is printed yellow), and the task ends there. Every
+    order of 'not a thing', 'out of reach' and 'a thing' must end with exactly the things carried, each once."""
+    import itertools
+    from solutions.api import NotThere, OutOfReach
+    places = [(0.2, 0.0), (0.25, -0.1), (0.3, 0.1), (0.15, -0.15)]
+    for kinds in itertools.product((True, NotThere, OutOfReach), repeat=3):
+        carried, solve = _carrying(monkeypatch, places[:3], list(kinds))
+        if True not in kinds:
+            continue
+        solve(None)
+        assert sorted(carried) == sorted(p for p, k in zip(places, kinds) if k is True), kinds
+
+
+def test_patches_that_are_none_of_them_things_end_in_giving_up_with_what_was_looked_at(monkeypatch):
+    from solutions.api import GaveUp, NotThere, OutOfReach
+    carried, solve = _carrying(monkeypatch, [(0.2, 0.0), (0.25, -0.1)], [NotThere, OutOfReach])
+    with pytest.raises(GaveUp, match="2 patches of that colour were looked at: not a thing"):
+        solve(None)
+    assert carried == []
+
+
 # ---------------------------------------------------------------- the solutions
 def test_a_solution_touches_nothing_but_the_hubs_api():
     """The class: a solution that 'finds' a thing by asking the simulation. Solutions may import only themselves, numpy,
@@ -163,7 +263,8 @@ def test_every_task_has_a_solution_or_a_reason_why_not():
 @pytest.mark.parametrize("scene,task", [("open_small", "where_is_everyone"), ("no_arm", "where_is_everyone"), ("moved_arm", "where_is_everyone"),
                                         ("l_shaped", "where_is_everyone"), ("no_arm", "how_big"), ("shelf", "on_the_shelf"),
                                         ("shelf", "under_the_ledge"), ("moved_arm", "carried"), ("workcell", "stack"),
-                                        ("moved_arm", "fetch"), ("shelf", "fetch_from_shelf"), ("cluttered", "tidy_by_colour")])
+                                        ("moved_arm", "fetch"), ("shelf", "fetch_from_shelf"), ("cluttered", "tidy_by_colour"),
+                                        ("cluttered", "fetch_hidden")])
 def test_a_solution_does_its_task_as_the_referee_sees_it(scene, task):
     import solve
     r = solve.run(scene, task)

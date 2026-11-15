@@ -48,7 +48,10 @@ The keyboard/mouse teleop window (`sim/scripts/teleop.py`):
 | `hardware/camera_mount/` | Single Camera Module 3 holder (from the stereo V9 beam, reinforced): STEP/STL + CadQuery build | Yes |
 | `hardware/wrist_mount/` | Wrist bracket + camera placement study (gripper +y side, lens between the jaw tips) | Yes |
 | `sim/` | Simulation (Newton/MuJoCo Warp + MuJoCo): follower with the mounted wrist camera, workcell, 3 cameras, keyboard/mouse **teleop** (fast: torque governor; optional load-aware IK), pick demo, vision check, servo load + fast-teleop studies, the **servo bus in the loop** (emulated HX-30HM servos behind a byte-level bus) and the **camera firmware in the loop** (the real firmware source built for the PC), both for debugging before the hardware exists. See `sim/README.md` | Yes (not `sim/model/`, which is generated) |
-| `scripts/` | `sync_so_arm100.sh`: re-sync the upstream mirror | |
+| `hub/` | The program that would run on the real machine: finds what is plugged in (arm, fixed cameras, a rover that only looks), works out where each is from what it sees, maps the place, and gives a language model one REST API to all of it. It is told nothing about the place. `hub/README.md` | Yes |
+| `firmware/rover-bridge/` | The rover board's firmware: its servo bus over Wi-Fi, and wheels that stop by themselves when the link goes quiet. The core also builds for a PC, for the simulation | Yes |
+| `docs/MULTI_DEVICE_PLAN.md`, `docs/MULTI_DEVICE_CHECKLIST.md` | The plan for several devices under one model, and what of it is done | Yes |
+| `scripts/` | `sync_so_arm100.sh`: re-sync the upstream mirror. `run_hub.py`: the hub on real ports (not yet tried on hardware) | |
 
 Keep `third_party/` and `docs/datasheets/` pristine so we can always diff our
 changes against the originals. Copy a file into `hardware/` or `sim/` before changing it.
@@ -78,6 +81,32 @@ python sim/scripts/sim_api.py --scene bench --window   # the harder scene and it
 ```
 
 Details, verified results and backend notes: `sim/README.md`. Decisions so far: `docs/DECISIONS.md`.
+
+## Several devices, one model
+
+The arm, fixed cameras and a small tabletop rover (two cameras on a head that turns and tilts; it only
+looks) can be run together by one language model through the hub (`hub/`). The hub is given serial
+ports, cameras and a clock, and nothing about the place: it finds what is plugged in, works out where
+each device is from what the cameras see, builds a map from the rover's two cameras, refuses moves
+that would hit what it has mapped, and can measure its own lenses, camera pair and wheels.
+
+```bash
+python sim/scripts/run_system.py --scene shelf --survey   # a simulated world, the hub on its ports, both REST APIs
+curl http://127.0.0.1:8765/                               # the hub's guide: what a model is given
+python sim/scripts/solve.py --list                        # the tasks (8 scenes, 18 tasks) and which have a reference solution
+python sim/scripts/solve.py shelf on_the_shelf            # solve one through the hub's API alone; a referee with the truth scores it
+```
+
+Where it stands (`docs/MULTI_DEVICE_CHECKLIST.md` has every box):
+
+- **Done in simulation:** discovery, locating every device, the survey and map, safety, self-calibration,
+  the rover board's firmware (its portable core, run against emulated servos), and reference solutions
+  for 14 of the 18 tasks.
+- **Written, not run:** `sim/scripts/model_run.py` gives a task to a Claude model through the same API
+  and has the referee score it. It needs `pip install anthropic` and credentials, and is billed per run.
+- **Not yet on hardware:** `scripts/run_hub.py` and `hub/real.py` (USB serial, the rover's network
+  link, UVC cameras) have only been tried against a stand-in board on this machine; the rover board's
+  ESP-IDF build has not been built or flashed.
 
 Run the tests with `pytest sim/tests` (about 3 minutes).
 

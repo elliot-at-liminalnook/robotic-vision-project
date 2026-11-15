@@ -11,6 +11,14 @@ class GaveUp(Exception):
     """The solution could not do the task, and says why."""
 
 
+class OutOfReach(GaveUp):
+    """The hand cannot be held over that place to look: whatever is there cannot be picked up either."""
+
+
+class NotThere(GaveUp):
+    """A closer look did not find what a first look took for a thing: not a failure of the arm, but news about that patch."""
+
+
 class Api:
     def __init__(self, request):
         """request(method, url, body_bytes) -> (status, content type, body bytes): the hub's API, over a socket or in-process."""

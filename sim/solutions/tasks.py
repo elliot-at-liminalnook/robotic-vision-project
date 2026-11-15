@@ -7,7 +7,7 @@ import math
 import numpy as np
 
 from . import moves
-from .api import Api, GaveUp
+from .api import Api, GaveUp, NotThere, OutOfReach
 
 
 # ---------------------------------------------------------------- where is everyone
@@ -136,18 +136,34 @@ def into_bins(pairs=(("red", "red"), ("blue", "blue")), high: float = 0.03):
         for colour, bin_colour in pairs:
             bin_near = moves.roughly(api, bin_colour, ring=True, height=0.012)
             bin_at, _ = moves.closely(api, bin_colour, bin_near, 0.012, ring=True)
-            carried = 0
-            for _ in range(4):                                  # until no loose thing of that colour is left outside the bin
-                try:
-                    k = next(k for k in range(3) if np.linalg.norm(moves.roughly(api, colour, pick=k, height=max(high - 0.015, 0.0)) - bin_at) > 0.06)
-                except (StopIteration, GaveUp):
+            carried, passed, why_not = 0, [], []                # passed: patches of that colour that were not a thing
+            for _ in range(8):                                  # until no loose thing of that colour is left outside the bin
+                near = None
+                for k in range(4):
+                    try:
+                        at = moves.roughly(api, colour, pick=k, height=max(high - 0.015, 0.0))
+                    except GaveUp:
+                        break
+                    if np.linalg.norm(at - bin_at) > 0.06 and all(np.linalg.norm(at - p) > 0.04 for p in passed):
+                        near = at
+                        break
+                if near is None:
                     break
-                thing = moves.find_thing(api, colour, pick=k, height_guess=high)
+                try:
+                    thing = moves.find_thing(api, colour, height_guess=high, near=near)
+                except (NotThere, OutOfReach) as e:
+                    # What a fixed camera took for such a thing is not one from close above, or is where the hand cannot be
+                    # held to look: part of the arm itself (it is printed in one of these colours), or a thing too far off
+                    # its guessed height. Pass over it.
+                    passed.append(near)
+                    why_not.append(str(e))
+                    continue
                 grasp = moves.pick(api, thing)
                 moves.put(api, bin_at + BIN_SPOTS[carried % len(BIN_SPOTS)], 0.0, grasp, let_go_above=0.02)     # (not onto the last one)
                 carried += 1
             if not carried:
-                raise GaveUp(f"no {colour} thing was found within the arm's reach to carry to the {bin_colour} bin")
+                raise GaveUp(f"no {colour} thing was found within the arm's reach to carry to the {bin_colour} bin"
+                             + (f" ({len(why_not)} patches of that colour were looked at: {why_not[0]})" if why_not else ""))
         moves.park(api)
     return solve
 
@@ -184,6 +200,7 @@ SOLVERS = {
     ("moved_arm", "carried"): carried("rover", "arm"),
     ("workcell", "stack"): stack("red", "green"),
     ("cluttered", "tidy_by_colour"): into_bins(),
+    ("cluttered", "fetch_hidden"): into_bins((("yellow", "blue"),), high=0.06),
     ("moved_arm", "fetch"): into_bins((("red", "cream"),)),
     ("shelf", "fetch_from_shelf"): into_bins((("red", "cream"),), high=0.11),
     ("shelf", "under_the_ledge"): under_the_ledge,
@@ -193,8 +210,6 @@ NO_SOLUTION = {
     ("bench", "tidy"): "eight steps with a drawer, a socket and two bins; its solution still runs on the old API (sim/scripts/sim_api.py), "
                        "which is given where things are. Through the hub it needs each thing found by sight first",
     ("bench", "drawer_open"): "nothing in the hub says whether a drawer is out: it takes looking at a picture",
-    ("cluttered", "fetch_hidden"): "the peg stands behind a wall, out of every camera's sight from where they are; the rover has to be "
-                                   "driven round to look, and nothing here plans a path",
     ("l_shaped", "far_leg"): "the rover has to be driven round the corner to look, and nothing here plans a path",
     ("l_shaped", "how_big"): "the same: from where the rover stands it sees one leg of the L",
 }

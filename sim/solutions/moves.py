@@ -12,7 +12,7 @@ import math
 import numpy as np
 
 from . import eyes
-from .api import Api, GaveUp
+from .api import Api, GaveUp, NotThere, OutOfReach
 
 HOVER_M = 0.14                 # how high the tip hovers to look down with the wrist camera
 WRIST = "/devices/arm/wrist_camera"
@@ -116,17 +116,21 @@ def closely(api: Api, colour: str, near: np.ndarray, height: float, ring: bool =
         if status == 200:
             break
     else:
-        raise GaveUp(f"the hand cannot hover over ({near[0]:.3f}, {near[1]:.3f}): {r.get('error', r)}")
+        raise OutOfReach(f"the hand cannot hover over ({near[0]:.3f}, {near[1]:.3f}): {r.get('error', r)}")
     seen = eyes.find(api.picture(WRIST), colour, min_area=400)
     # the one nearest where it was expected, among those of a fair size
     placed = [(b, _place(api, "arm/wrist_camera", b.u, b.v, height)[0]) for b in _kind(seen, ring)[:4]]
     placed = [(b, p) for b, p in placed if p is not None and np.linalg.norm(p - near) < NEAR_M]
+    if ring:
+        # From this close a bin's frame may not fit in the picture: the part of it that does has its middle somewhere else
+        # (27 mm off, once, and the thing carried there was set down on the bin's wall). Only a whole frame is believed.
+        placed = [(b, p) for b, p in placed if b.ring and not b.cut_off]
     if not placed and ring:
-        # From this close a bin's frame may not fit in the picture as a whole frame, and what does look like a frame is
-        # something else (the arm's own tag block). The fixed camera saw the whole of it: keep its place.
+        # ... and what does look like a frame may be something else (the arm's own tag block). The fixed camera saw the
+        # whole of it: keep its place.
         return np.asarray(near, float), None
     if not placed:
-        raise GaveUp(f"hovering over ({near[0]:.3f}, {near[1]:.3f}) the wrist camera sees no {colour} thing within {NEAR_M * 1000:.0f} mm of there"
+        raise NotThere(f"hovering over ({near[0]:.3f}, {near[1]:.3f}) the wrist camera sees no {colour} thing within {NEAR_M * 1000:.0f} mm of there"
                      + ("" if r["reached"] else f" (the hand did not get there: {r.get('why_not_reached')})"))
     b, at = min(placed, key=lambda bp: np.linalg.norm(bp[1] - near))
     side = None
@@ -147,11 +151,13 @@ def touch(api: Api, at: np.ndarray, guess: float, start: float = 0.10) -> float:
     return guess
 
 
-def find_thing(api: Api, colour: str, pick=0, height_guess: float = 0.03) -> dict:
+def find_thing(api: Api, colour: str, pick=0, height_guess: float = 0.03, near=None) -> dict:
     """A loose thing of that colour: where it is in the arm's frame, how high, and which way its sides run.
-    height_guess: about how high its top is; it need not be right, a touch finds out."""
+    height_guess: about how high its top is; it need not be right, a touch finds out. near: where a fixed camera put it,
+    if that has been asked already. NotThere if the wrist camera, hovering over that place, sees no such thing."""
     hover = max(HOVER_M, height_guess + 0.11)
-    near = roughly(api, colour, height=max(height_guess - 0.015, 0.0), pick=pick)
+    if near is None:
+        near = roughly(api, colour, height=max(height_guess - 0.015, 0.0), pick=pick)
     at, _ = closely(api, colour, near, height_guess, hover=hover)
     at, _ = closely(api, colour, at, height_guess, hover=hover)     # from more nearly above it, the guess matters less
     top = touch(api, at, height_guess, start=height_guess + 0.07)

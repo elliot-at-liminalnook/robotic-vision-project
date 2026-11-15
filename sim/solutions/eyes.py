@@ -17,6 +17,7 @@ class Blob:
     area: float                # [px^2]
     corners: np.ndarray        # the four corners of the tightest rectangle round it (4 x 2 px)
     ring: bool                 # it is a frame with the surface showing through it (a bin seen from above), not a block or a printed tag
+    cut_off: bool = False      # it runs off the picture's edge: its middle here is not the thing's middle
 
 
 def find(image: np.ndarray, colour: str, min_area: float = 120.0) -> list[Blob]:
@@ -47,6 +48,8 @@ def find(image: np.ndarray, colour: str, min_area: float = 120.0) -> list[Blob]:
             inside = np.zeros(mask.shape, np.uint8)
             cv2.drawContours(inside, [hole], -1, 255, -1)
             dark = float(hsv[..., 2][inside > 0].mean()) < 90
+        x, y, w, h = cv2.boundingRect(c)
+        cut = x <= 1 or y <= 1 or x + w >= mask.shape[1] - 1 or y + h >= mask.shape[0] - 1
         out.append(Blob(m["m10"] / m["m00"], m["m01"] / m["m00"], float(cv2.contourArea(c)), cv2.boxPoints(cv2.minAreaRect(c)),
-                        bool(ring and not dark)))
+                        bool(ring and not dark), bool(cut)))
     return sorted(out, key=lambda b: -b.area)
