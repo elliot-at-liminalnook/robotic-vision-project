@@ -174,7 +174,7 @@ Plan: [5.10](MULTI_DEVICE_PLAN.md#510-keeping-the-gap-small)
 
 Plan: [5.7](MULTI_DEVICE_PLAN.md#57-scenes-and-tasks-are-config-files)
 
-- [ ] A reference solution for each task, through the hub's API. **Partly:** 10 of 18 tasks have one (`sim/solutions/`, `python sim/scripts/solve.py`); 8 pass the referee, 2 give up or fall short and say why. The other 8 have none, each with its reason (`solve.py --list`): most need the rover driven round something to look
+- [ ] A reference solution for each task, through the hub's API. **Partly:** 13 of 18 tasks have one (`sim/solutions/`, `python sim/scripts/solve.py`); 12 pass the referee, 1 gives up and says why. The other 5 have none, each with its reason (`solve.py --list`): the rover driven round something to look (3), a judgement from a picture (1), the bench's eight-step tidy (1)
 - [ ] Model runs, scored by the referee. **Not run:** the harness is written (`sim/scripts/model_run.py`: the task, the hub's guide and three tools to a model; the referee scores). It needs `pip install anthropic`, credentials, and is billed per run
 - [x] A point in a picture as a place (`GET /where/pixel`), which the solutions and a model both need
 - [x] Tests written (`sim/tests/test_solutions.py`, not run as a suite; each test called directly)

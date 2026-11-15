@@ -128,6 +128,13 @@ def test_the_eyes_find_each_colour_where_it_is_and_tell_a_frame_from_a_block():
     assert len(blue) == 1 and blue[0].ring and abs(blue[0].u - 360) < 4 and abs(blue[0].v - 250) < 4
     assert len(green) == 1 and not green[0].ring and eyes.find(img, "yellow") == []
     assert red[0].corners.shape == (4, 2)
+    cv2.rectangle(img, (40, 250), (160, 350), (235, 232, 225), 3)                    # a thin cream frame, the surface showing through
+    cv2.rectangle(img, (220, 40), (290, 110), (245, 245, 245), -1)                   # a printed tag: white, with black inside
+    cv2.rectangle(img, (235, 55), (275, 95), (15, 15, 15), -1)
+    pale = eyes.find(img, "cream")
+    frames = [b for b in pale if b.ring]
+    assert len(frames) == 1 and abs(frames[0].u - 100) < 4 and abs(frames[0].v - 300) < 4, "the frame is a bin; the tag is not"
+    assert any(abs(b.u - 255) < 4 and abs(b.v - 75) < 4 and not b.ring for b in pale), "the tag is seen, and is not taken for a frame"
 
 
 # ---------------------------------------------------------------- the solutions
@@ -155,7 +162,8 @@ def test_every_task_has_a_solution_or_a_reason_why_not():
 
 @pytest.mark.parametrize("scene,task", [("open_small", "where_is_everyone"), ("no_arm", "where_is_everyone"), ("moved_arm", "where_is_everyone"),
                                         ("l_shaped", "where_is_everyone"), ("no_arm", "how_big"), ("shelf", "on_the_shelf"),
-                                        ("moved_arm", "carried"), ("workcell", "stack")])
+                                        ("shelf", "under_the_ledge"), ("moved_arm", "carried"), ("workcell", "stack"),
+                                        ("moved_arm", "fetch"), ("shelf", "fetch_from_shelf"), ("cluttered", "tidy_by_colour")])
 def test_a_solution_does_its_task_as_the_referee_sees_it(scene, task):
     import solve
     r = solve.run(scene, task)
@@ -163,9 +171,9 @@ def test_a_solution_does_its_task_as_the_referee_sees_it(scene, task):
     assert r["api_calls"] >= 2 and "gave_up" not in r
 
 
-@pytest.mark.parametrize("scene,task,words", [("open_small", "how_big", "far edge"), ("cluttered", "tidy_by_colour", "")])
+@pytest.mark.parametrize("scene,task,words", [("open_small", "how_big", "far edge")])
 def test_a_solution_that_cannot_finish_says_so_and_hands_in_no_guess(scene, task, words):
-    """These two do not pass yet. What must hold meanwhile: no wrong answer handed in, and the reason given."""
+    """This one does not pass yet. What must hold meanwhile: no wrong answer handed in, and the reason given."""
     import solve
     r = solve.run(scene, task)
     if r["done"]:
@@ -184,6 +192,8 @@ def test_how_big_does_not_take_an_l_for_a_rectangle():
         def ok(self, method, path, body=None):
             if path == "/survey":
                 return {"map_kept": True}
+            if path == "/devices/rover/drive/state":
+                return {"since_taken_over": {"heading_deg": 0.0}}
             edge = lambda a, b: {"kind": "edge of the surface", "from_m": a, "to_m": b, "length_m": float(np.linalg.norm(np.subtract(b, a))),       # noqa: E731
                                  "direction_deg": math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) % 180}
             return {"surface": {"area_seen_m2": 0.5, "edges_found": [edge([0, 0], [0.5, 0]), edge([0, 0.4], [0.5, 0.4]),

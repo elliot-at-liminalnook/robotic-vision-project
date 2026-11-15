@@ -379,11 +379,18 @@ solution's answers and asks the referee whether the task's goals hold.
 | `no_arm` / `where_is_everyone` | done, 4 mm off | The camera sees the rover's tags |
 | `no_arm` / `how_big` | done, 7 % over | Survey; the surface's raised edges in the map are two pairs of parallel lines |
 | `shelf` / `on_the_shelf` | done: red, 0.080 m | Survey; the coloured thing whose lowest seen part is well above the surface stands on the shelf, and that lowest part is the shelf's top |
+| `shelf` / `under_the_ledge` | done: green | Survey; a coloured thing lower than a raised flat thing's underside and within its outline lies under it (the rover's low pass looked under) |
 | `moved_arm` / `carried` | done, 1 mm off | Asks every device for something fresh after the swap; a 503 says they were moved; discover, locate again |
 | `workcell` / `stack` | done | A fixed camera finds each colour roughly (`GET /where/pixel`); the hand hovers and the wrist camera looks down; a touch gives the height; a second look gives the place to a few millimetres; pick, carry, set down |
-| `open_small` / `how_big` | gives up | The far edge is behind the arm, beyond what the rover sees from where it stands. It says so and hands in nothing |
-| `cluttered` / `tidy_by_colour` | three of four | Both red cubes and the blue block reach their bins. The tall cylinder stands where the arm cannot hold its hand high enough to come down on it cleanly, and is knocked over |
-| the other eight | none | `solve.py --list` gives the reason for each: most need the rover driven round something to look, which nothing here plans |
+| `moved_arm` / `fetch` | done | The same, into the tray: a pale frame with the surface showing through it (a printed tag is pale too, with black inside) |
+| `shelf` / `fetch_from_shelf` | done | The same, with the cube 80 mm up on the shelf: the touch starts higher and finds its top |
+| `cluttered` / `tidy_by_colour` | done, all four | Each colour's bin is the frame of that colour; each thing of that colour is carried to it and set down beside the last, not on it |
+| `open_small` / `how_big` | gives up | The far edge is behind the arm. The rover turns to face where an edge is missing, drives as far as the map lets it and looks again, twice; it still cannot see all four. It says so and hands in nothing |
+| the other five | none | `solve.py --list` gives the reason for each: `l_shaped` needs the rover driven round the corner to look, `fetch_hidden` round a wall; `drawer_open` takes judging a picture; the bench's `tidy` still runs on the old API |
+
+Before each look from a fixed camera the arm goes back to how it stood at the start: a hand hovering over the
+surface hides what is under it (found when the cube on the shelf vanished behind the hand that had just looked
+at the tray).
 
 **Model runs** (`model_run.py`). The same arrangement with a language model in place of the solution: it gets
 the task's request, the hub's guide and three tools (read from the API, send a command, say it has finished),
