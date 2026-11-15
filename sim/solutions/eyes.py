@@ -61,3 +61,44 @@ def find(image: np.ndarray, colour: str, min_area: float = 120.0) -> list[Blob]:
         out.append(Blob(m["m10"] / m["m00"], m["m01"] / m["m00"], float(cv2.contourArea(c)), cv2.boxPoints(cv2.minAreaRect(c)),
                         bool(ring and not dark), bool(cut), bool(ring and dark), c.reshape(-1, 2)))
     return sorted(out, key=lambda b: -b.area)
+
+
+def lit_surface(image: np.ndarray, samples, hue: int = 6, sat: int = 40, value: float = 0.7) -> np.ndarray | None:
+    """The patch of an RGB picture that is the surface where the light falls on it: coloured like the picture is at
+    `samples` (pixels (u, v) taken to be on the surface), and all in one piece. A mask, or None if the samples do not
+    agree on a colour. Shadowed surface is left out, and so is a raised edge of the same stuff: both are darker."""
+    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV).astype(np.int32)
+    h, w = hsv.shape[:2]
+    seen = [np.median(hsv[max(v - 15, 0):v + 16, max(u - 15, 0):u + 16].reshape(-1, 3), axis=0)
+            for u, v in ((int(round(u)), int(round(v))) for u, v in samples) if 0 <= u < w and 0 <= v < h]
+    # the samples that agree with each other (one may have landed on a thing, or off the surface)
+    like = lambda a, b: abs((a[0] - b[0] + 90) % 180 - 90) <= hue and abs(a[1] - b[1]) <= sat           # noqa: E731
+    groups = [[b for b in seen if like(a, b)] for a in seen]
+    if not groups or len(max(groups, key=len)) < 2:
+        return None
+    agreed = np.array(max(groups, key=len))
+    h0, s0 = np.median(agreed[:, :2], axis=0)
+    v0 = agreed[:, 2].max()                                         # (the brightest of them: a sample may lie in shadow)
+    mask = ((np.abs((hsv[..., 0] - h0 + 90) % 180 - 90) <= hue) & (np.abs(hsv[..., 1] - s0) <= sat) & (hsv[..., 2] >= value * v0)).astype(np.uint8) * 255
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))          # (its grain)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
+    if n < 2:
+        return None
+    return (labels == 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))).astype(np.uint8) * 255
+
+
+def straight_sides(mask: np.ndarray, min_px: float = 150.0) -> list:
+    """The straight stretches of a patch's outline, as pairs of pixels (2 x 2 each), leaving out those that run along the
+    picture's own edge (where the patch was cut off, not where it ends)."""
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return []
+    poly = cv2.approxPolyDP(max(contours, key=cv2.contourArea), 8.0, True).reshape(-1, 2).astype(float)
+    h, w = mask.shape
+    out = []
+    for a, b in zip(poly, np.roll(poly, -1, axis=0)):
+        along_edge = ((a[0] < 4 and b[0] < 4) or (a[1] < 4 and b[1] < 4) or (a[0] > w - 5 and b[0] > w - 5) or (a[1] > h - 5 and b[1] > h - 5))
+        if np.linalg.norm(b - a) >= min_px and not along_edge:
+            out.append(np.array([a, b]))
+    return out

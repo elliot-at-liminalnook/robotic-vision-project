@@ -426,7 +426,8 @@ def test_every_task_has_a_solution_or_a_reason_why_not():
                                         ("l_shaped", "where_is_everyone"), ("no_arm", "how_big"), ("shelf", "on_the_shelf"),
                                         ("shelf", "under_the_ledge"), ("moved_arm", "carried"), ("workcell", "stack"),
                                         ("moved_arm", "fetch"), ("shelf", "fetch_from_shelf"), ("cluttered", "tidy_by_colour"),
-                                        ("cluttered", "fetch_hidden"), ("l_shaped", "far_leg"), ("bench", "drawer_open")])
+                                        ("cluttered", "fetch_hidden"), ("l_shaped", "far_leg"), ("bench", "drawer_open"),
+                                        ("open_small", "how_big")])
 def test_a_solution_does_its_task_as_the_referee_sees_it(scene, task):
     import solve
     r = solve.run(scene, task)
@@ -449,7 +450,7 @@ def test_the_drawer_is_judged_as_it_is_and_not_as_it_usually_is(out_m):
     assert r["done"] and r["answers"] == {"open": "yes" if out_m > 0.02 else "no"}, r
 
 
-@pytest.mark.parametrize("scene,task,words", [("open_small", "how_big", "far edge"), ("l_shaped", "how_big", "not a plain rectangle")])
+@pytest.mark.parametrize("scene,task,words", [("l_shaped", "how_big", "not a plain rectangle")])
 def test_a_solution_that_cannot_finish_says_so_and_hands_in_no_guess(scene, task, words):
     """This one does not pass yet. What must hold meanwhile: no wrong answer handed in, and the reason given."""
     import solve
@@ -530,6 +531,124 @@ def test_out_of_sight_gives_up_when_it_cannot_tell(monkeypatch):
         tasks.out_of_sight(stuck)
     assert stuck.stowed
     assert tasks.out_of_sight(_Rover(FAR_LEG, covered=lambda x, y: True)) == {"count": 0, "colours": []}
+
+
+# ---------------------------------------------------------------- the surface's edges, from a picture
+def _table(corners, lip=True, shadow=None, things=()):
+    """A picture of a surface from above at a slant: a quadrilateral of grained wood (corners in px), a darker raised edge
+    of the same stuff round it, dark all about; a shadow across part of it and things standing on it, if asked."""
+    rng = np.random.default_rng(3)
+    img = np.full((1080, 1920, 3), (40, 40, 44), np.uint8)
+    quad = np.array(corners, np.int32)
+    if lip:
+        cv2.polylines(img, [quad], True, (120, 88, 54), 26)
+    wood = np.zeros((1080, 1920), np.uint8)
+    cv2.fillPoly(wood, [quad], 255)
+    grain = rng.normal(0, 14, (1080, 1920))[..., None]
+    img[wood > 0] = np.clip(np.array([205, 158, 124]) + grain, 0, 255).astype(np.uint8)[wood > 0]
+    if shadow is not None:
+        dark = np.zeros((1080, 1920), np.uint8)
+        cv2.fillPoly(dark, [np.array(shadow, np.int32)], 255)
+        img[(dark > 0) & (wood > 0)] = (img[(dark > 0) & (wood > 0)] * 0.55).astype(np.uint8)
+    for a, b, colour in things:
+        cv2.rectangle(img, a, b, colour, -1)
+    return img
+
+
+QUAD = [(500, 250), (1500, 330), (1750, 950), (250, 900)]
+
+
+def _on_a_side(seg, quad, within=14.0) -> bool:
+    """Whether a segment (2 x 2 px) lies along one of a quadrilateral's sides."""
+    for a, b in zip(np.array(quad, float), np.roll(np.array(quad, float), -1, axis=0)):
+        n = np.array([-(b - a)[1], (b - a)[0]]) / np.linalg.norm(b - a)
+        if all(abs((p - a) @ n) < within for p in seg):
+            return True
+    return False
+
+
+@pytest.mark.parametrize("shadow,things", [
+    (None, ()),
+    ([(900, 400), (1300, 420), (1250, 800), (850, 760)], ()),                                    # a shadow across the middle
+    (None, [((700, 300), (900, 600), (225, 200, 30)), ((1100, 600), (1250, 780), (200, 30, 30))]),  # things standing on it, one over its far edge
+    ([(250, 700), (700, 700), (700, 900), (250, 900)], [((1300, 250), (1420, 500), (40, 60, 200))])])   # a shadow in a corner, a thing over an edge
+def test_the_surfaces_edges_in_a_picture_are_its_own_and_nothing_outside_it(shadow, things):
+    """The classes: the raised edge (the same stuff, darker) taken for surface, which puts every edge outside it; a
+    shadow's or a thing's outline taken for the surface's edge and landing *outside* the surface (inside does no harm:
+    only the outermost edges are used). Every straight side found lies within the surface, and each of its four
+    sides that is clear is found."""
+    from solutions import eyes
+    img = _table(QUAD, shadow=shadow, things=things)
+    mask = eyes.lit_surface(img, [(1000, 650), (1200, 500), (600, 800), (1850, 100)])              # (one sample is off the surface)
+    assert mask is not None
+    inside = np.zeros((1080, 1920), np.uint8)
+    cv2.fillPoly(inside, [np.array(QUAD, np.int32)], 255)
+    assert (mask > 0).sum() > 0.5 * (inside > 0).sum() and ((mask > 0) & (cv2.dilate(inside, np.ones((9, 9), np.uint8)) == 0)).sum() == 0
+    sides = eyes.straight_sides(mask)
+    on_side = [s for s in sides if _on_a_side(s, QUAD)]
+    assert len(on_side) >= (4 if not things and shadow is None else 2), [s.tolist() for s in sides]
+    for seg in sides:                                               # none reaches outside the surface
+        assert all(cv2.pointPolygonTest(np.array(QUAD, np.float32).reshape(-1, 1, 2), (float(p[0]), float(p[1])), True) > -14 for p in seg)
+
+
+def test_a_surface_cut_off_by_the_picture_has_no_edge_there_and_bad_samples_give_none():
+    from solutions import eyes
+    img = _table([(300, 300), (1700, 300), (2100, 1300), (-100, 1300)])                           # its near side is below the picture
+    sides = eyes.straight_sides(eyes.lit_surface(img, [(1000, 650), (1200, 500)]))
+    assert len(sides) == 3 and not any(min(s[0][1], s[1][1]) > 1070 for s in sides), "the picture's own bottom edge is not the surface's"
+    assert eyes.lit_surface(img, [(1000, 650), (50, 50)]) is None, "two samples that do not agree are no colour to go by"
+    assert eyes.lit_surface(img, []) is None
+
+
+class _Edges:
+    """An Api for how_big: the rover's map has some raised edges of a surface (rover's frame), and a fixed camera's picture
+    has others. pictures: the edges the camera sees, as ((x0, y0), (x1, y1)) places; lit: the lit area it sees."""
+    def __init__(self, map_edges, seen, pictures=(), camera=True):
+        self.map_edges, self.seen, self.pictures, self.camera, self.calls, self.rest = map_edges, seen, pictures, camera, 0, {"x": 0}
+
+    def devices(self):
+        return {"rover": {}, **({"camera_1": {}} if self.camera else {})}
+
+    def post(self, path, body=None):
+        return 409, {"error": "the map has something in the way"}
+
+    def ok(self, method, path, body=None):
+        edge = lambda a, b: {"kind": "edge of the surface", "from_m": list(a), "to_m": list(b), "length_m": float(np.linalg.norm(np.subtract(b, a))),      # noqa: E731
+                             "direction_deg": math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) % 180}
+        if path == "/survey":
+            return {"map_kept": True}
+        return {"surface": {"area_seen_m2": self.seen, "edges_found": [edge(a, b) for a, b in self.map_edges]}}
+
+
+RECT = {"near": ((-0.1, -0.14), (0.5, -0.14)), "far": ((-0.1, 0.66), (0.5, 0.66)), "left": ((-0.1, -0.14), (-0.1, 0.66)), "right": ((0.5, -0.14), (0.5, 0.66))}
+
+
+@pytest.mark.parametrize("hidden", ["far", "left", "right", "near"])
+def test_an_edge_the_rover_cannot_see_is_taken_from_a_fixed_cameras_picture(monkeypatch, hidden):
+    """Whichever side of a 0.6 x 0.8 m surface the rover's map lacks, the picture supplies it, and the area comes out.
+    Without a camera the same map gives up. (An edge from a picture is where the surface ends; one from the map is a
+    raised edge's middle, half its width further out: mixing them must not add that half twice or leave it in.)"""
+    from solutions import tasks
+    from solutions.api import GaveUp
+    grow = lambda e: tuple((p[0] + 0.005 * np.sign(p[0] - 0.2), p[1] + 0.005 * np.sign(p[1] - 0.26)) for p in e)          # noqa: E731
+    in_map = [grow(e) for name, e in RECT.items() if name != hidden]
+    seen_edge = {"kind": "edge of the surface", "from_m": list(RECT[hidden][0]), "to_m": list(RECT[hidden][1]), "length_m": 0.3,
+                 "direction_deg": 0.0 if hidden in ("near", "far") else 90.0, "inner": True}
+    monkeypatch.setattr(tasks, "edges_in_pictures", lambda api: ([seen_edge, {**seen_edge, "from_m": [0.2, 0.2], "to_m": [0.3, 0.2 + (0.0 if hidden in ("near", "far") else 0.1)]}], 0.36))
+    assert tasks.how_big(_Edges(in_map, seen=0.3)) == {"area_m2": pytest.approx(0.48, abs=0.004)}
+    with pytest.raises(GaveUp, match="only one side"):
+        tasks.how_big(_Edges(in_map, seen=0.3, camera=False))
+
+
+def test_edges_that_enclose_much_more_than_has_been_seen_are_not_answered(monkeypatch):
+    """The class: an L's bounding box answered as its area. The far ends of both legs give a rectangle of 0.9 m2 round a
+    surface of which 0.55 m2 has been seen: the corner cut out of it would not have been seen either."""
+    from solutions import tasks
+    from solutions.api import GaveUp
+    box = [((0.0, 0.0), (1.0, 0.0)), ((0.0, 0.9), (0.45, 0.9)), ((0.0, 0.0), (0.0, 0.9)), ((1.0, 0.0), (1.0, 0.4))]
+    with pytest.raises(GaveUp, match="only 0.55 m2 of that has been seen"):
+        tasks.how_big(_Edges(box, seen=0.55))
+    assert tasks.how_big(_Edges(box, seen=0.80)) == {"area_m2": pytest.approx(0.99 * 0.89, abs=0.01)}        # (seen nearly all of it: a rectangle)
 
 
 def test_how_big_does_not_take_an_l_for_a_rectangle():

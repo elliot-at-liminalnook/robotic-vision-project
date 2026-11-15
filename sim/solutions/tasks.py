@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+import cv2
 import numpy as np
 
 from . import bench, eyes, moves
@@ -30,10 +31,14 @@ EDGE_WIDTH_M = 0.01            # a raised edge's width, as it shows in the map: 
 
 
 # ---------------------------------------------------------------- how big is this place
-def _spans(surface: dict):
-    """The surface's two spans from its raised edges, or which way to go to see the edge that is missing.
-    Returns (spans, None) or (None, (bearing in the map's frame [deg], why))."""
-    edges = [e for e in surface.get("edges_found", []) if e["kind"] == "edge of the surface" and e["length_m"] >= 0.15]
+SEEN_SHARE = 0.65              # a rectangle is answered only if this much of it has been seen as surface
+SAMPLE_RING_M = 0.38           # the surface's colour is taken from places this far from the rover, all round it
+
+
+def _spans(edges: list):
+    """The surface's two spans from its edges, or which way to go to see the edge that is missing.
+    Returns (spans, None) or (None, (bearing in the edges' frame [deg], why))."""
+    edges = [e for e in edges if e["kind"] == "edge of the surface" and e["length_m"] >= 0.15]
     if not edges:
         return None, (0.0, "the survey found no edge of the surface")
     way = max(edges, key=lambda e: e["length_m"])["direction_deg"]
@@ -41,37 +46,87 @@ def _spans(surface: dict):
     for turn in (0.0, 90.0):                                    # edges along the longest one, and edges across it
         a = math.radians(way + turn)
         normal = np.array([-math.sin(a), math.cos(a)])
-        off = [float(normal @ (np.array(e["from_m"]) + e["to_m"]) / 2) for e in edges
+        # (a raised edge in the map stands outside the surface by half its width; an edge read off a picture is where the
+        # surface itself ends)
+        off = [(float(normal @ (np.array(e["from_m"]) + e["to_m"]) / 2), 0.0 if e.get("inner") else EDGE_WIDTH_M / 2) for e in edges
                if abs((e["direction_deg"] - way - turn + 90) % 180 - 90) < 20]
-        if len(off) < 2 or max(off) - min(off) < 0.15:
-            away = -normal if (off and np.mean(off) > 0) else normal        # the side no edge was found on
+        if len(off) < 2 or max(off)[0] - min(off)[0] < 0.15:
+            away = -normal if (off and np.mean([o for o, _ in off]) > 0) else normal        # the side no edge was found on
             return None, (math.degrees(math.atan2(away[1], away[0])),
                           f"only one side of the surface was seen along {((way + turn) % 180):.0f} deg: its far edge is beyond what the "
                           "rover could see from where it stood")
-        spans.append(max(off) - min(off) - EDGE_WIDTH_M)        # (each raised edge stands outside the surface: half its width a side)
+        spans.append((max(off)[0] - max(off)[1]) - (min(off)[0] + min(off)[1]))
     return spans, None
 
 
+def edges_in_pictures(api: Api) -> tuple[list, float]:
+    """The surface's edges as the fixed cameras see them, in the rover's frame, and the largest area of lit surface any one
+    of them sees [m2]. A fixed camera looks down on the surface from above and sees edges the rover, low down, cannot
+    (behind the arm, or further off than its two cameras range). What the surface looks like is taken from the
+    picture itself, at places round the rover: it stands on the surface."""
+    edges, lit = [], 0.0
+    for cam in moves.fixed_cameras(api):
+        samples = []
+        for bearing in range(0, 360, 30):
+            x, y = SAMPLE_RING_M * math.cos(math.radians(bearing)), SAMPLE_RING_M * math.sin(math.radians(bearing))
+            r = api.ok("GET", f"/where/point?camera={cam}&x={x:.3f}&y={y:.3f}&height_m=0&relative_to=rover")
+            if not r["known"]:
+                break                                            # (nothing relates this camera to the rover)
+            if r["in_picture"] and r["inside_the_edge_px"] > 30:
+                samples.append(r["pixel"])
+        mask = eyes.lit_surface(api.picture(f"/devices/{cam}"), samples) if len(samples) >= 2 else None
+        if mask is None:
+            continue
+        place = lambda p: moves_place(api, cam, p)               # noqa: E731
+        for a, b in eyes.straight_sides(mask):
+            pa, pb = place(a), place(b)
+            if pa is None or pb is None or np.linalg.norm(pb - pa) < 0.05:
+                continue
+            edges.append({"kind": "edge of the surface", "from_m": pa.tolist(), "to_m": pb.tolist(), "length_m": float(np.linalg.norm(pb - pa)),
+                          "direction_deg": math.degrees(math.atan2(pb[1] - pa[1], pb[0] - pa[0])) % 180.0, "inner": True, "seen_by": cam})
+        outline = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
+        ring = [place(q) for q in cv2.approxPolyDP(max(outline, key=cv2.contourArea), 8.0, True).reshape(-1, 2).astype(float)]
+        if ring and all(q is not None for q in ring):
+            lit = max(lit, 0.5 * abs(sum(p[0] * q[1] - q[0] * p[1] for p, q in zip(ring, ring[1:] + ring[:1]))))
+    return edges, lit
+
+
+def moves_place(api: Api, cam: str, p):
+    """A pixel of a fixed camera's picture as a place on the surface, in the rover's frame (None if it cannot be told)."""
+    r = api.ok("GET", f"/where/pixel?camera={cam}&u={float(p[0]):.1f}&v={float(p[1]):.1f}&height_m=0&relative_to=rover")
+    return np.array(r["at_m"]) if r["known"] else None
+
+
 def how_big(api: Api, **_) -> dict:
-    """The surface's area from its raised edges in the rover's map: two pairs of parallel edges are a rectangle. If an edge
-    is out of sight from where the rover stands, it turns to face that way, drives as far as the map lets it, and looks again."""
-    began = api.ok("GET", "/devices/rover/drive/state")["since_taken_over"]["heading_deg"]
+    """The surface's area from its edges: two pairs of parallel edges are a rectangle. The rover's map has the raised edges
+    near it. If one is out of its sight, the fixed cameras' pictures are asked for the surface's edges as they see them;
+    failing that the rover turns to face that way, drives as far as the map lets it, and looks again."""
     why = "the survey kept no map"
     for standpoint in range(3):
         survey = api.ok("POST", "/survey")
-        surface = api.ok("GET", "/place").get("surface")
+        surface = api.ok("GET", "/place?relative_to=rover").get("surface")          # (in the rover's own frame, as it stands now)
         if surface is None:
             raise GaveUp("the survey kept no map: " + str(survey.get("stood_still", {}).get("warning", "it saw too little")))
-        spans, missing = _spans(surface)
+        edges, seen = list(surface.get("edges_found", [])), surface["area_seen_m2"]
+        spans, missing = _spans(edges)
+        if spans is None and moves.fixed_cameras(api):
+            if "arm" in api.devices() and not getattr(api, "rest", None):
+                moves.locate_cameras(api)                        # (the cameras are related to the rover through the arm's tags)
+            more, lit = edges_in_pictures(api)
+            spans, still = _spans(edges + more)
+            seen = max(seen, lit)
+            missing = missing if spans is None and not more else still
         if spans is not None:
             area = spans[0] * spans[1]
-            if surface["area_seen_m2"] > 1.2 * area:
-                raise GaveUp(f"the surface is not a plain rectangle: {surface['area_seen_m2']:.2f} m2 of it has been seen, and the edges "
+            if seen > 1.2 * area:
+                raise GaveUp(f"the surface is not a plain rectangle: {seen:.2f} m2 of it has been seen, and the edges "
                              f"found enclose {area:.2f} m2. Its other edges are beyond what the rover could see")
+            if seen < SEEN_SHARE * area:
+                raise GaveUp(f"the edges found enclose {area:.2f} m2, and only {seen:.2f} m2 of that has been seen to be surface: "
+                             "it may not be a plain rectangle (a corner cut out of it would not have been seen)")
             return {"area_m2": round(area, 4)}
-        bearing, why = missing
-        heading = api.ok("GET", "/devices/rover/drive/state")["since_taken_over"]["heading_deg"] - began      # in the map's frame
-        turn = (bearing - heading + 180.0) % 360.0 - 180.0
+        bearing, why = missing                                   # (in the rover's frame: 0 is straight ahead)
+        turn = (bearing + 180.0) % 360.0 - 180.0
         if abs(turn) > 2.0 and api.post("/devices/rover/drive/turn", {"angle_deg": turn})[0] != 200:
             break                                               # something the map has is in the way of turning
         if api.post("/devices/rover/drive/forward", {"distance_m": 0.25})[0] != 200 and abs(turn) <= 2.0:
