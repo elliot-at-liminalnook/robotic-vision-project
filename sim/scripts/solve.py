@@ -28,11 +28,14 @@ from solutions import NO_SOLUTION, SOLVERS  # noqa: E402
 from solutions.api import Api, GaveUp  # noqa: E402
 
 
-def run(scene: str, task: str, seed: int | None = None) -> dict:
-    """One task, start to finish. Returns what the referee says, and how the solution got on."""
+def run(scene: str, task: str, seed: int | None = None, change=None) -> dict:
+    """One task, start to finish. Returns what the referee says, and how the solution got on.
+    change: a function that alters the scene's description before the world is built (a test's: the same task, begun otherwise)."""
     data = scenes.read(scene)
     if seed is not None:
         data.setdefault("imperfections", {})["seed"] = seed
+    if change is not None:
+        change(data)
     world = World(data)
     hub = Hub(world.ports)
     op = operator_api.Operator(world)

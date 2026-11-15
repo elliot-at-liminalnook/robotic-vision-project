@@ -18,18 +18,24 @@ class Blob:
     corners: np.ndarray        # the four corners of the tightest rectangle round it (4 x 2 px)
     ring: bool                 # it is a frame with the surface showing through it (a bin seen from above), not a block or a printed tag
     cut_off: bool = False      # it runs off the picture's edge: its middle here is not the thing's middle
+    tag: bool = False          # it is pale with something black inside it: a printed tag, not a thing of that colour
+    outline: np.ndarray | None = None      # its outline in the picture (N x 2 px)
 
 
 def find(image: np.ndarray, colour: str, min_area: float = 120.0) -> list[Blob]:
     """Every patch of that colour in an RGB picture, largest first."""
     hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
     mask = np.zeros(hsv.shape[:2], np.uint8)
-    if colour in PALE:                                              # white, cream: bright and nearly colourless
+    if colour == "white":                                           # lit white, and nothing else: bare steel and pale wood are not
+        mask = cv2.inRange(hsv, (0, 0, 215), (180, 18, 255))
+    elif colour == "grey":                                          # colourless and neither white nor black: bare steel, grey paint
+        mask = cv2.inRange(hsv, (0, 0, 90), (180, 45, 255)) & ~cv2.inRange(hsv, (0, 0, 215), (180, 18, 255))
+    elif colour in PALE:                                            # cream, and whatever else is bright and nearly colourless
         mask = cv2.inRange(hsv, (0, 0, 185), (180, 60, 255))
     for lo, hi in HUES.get(colour, []):
         mask |= cv2.inRange(hsv, (lo, 110, 50), (hi, 255, 255))
     # (specks are cleaned off strong colours; a pale frame may be a few pixels wide, and that would clean it off too)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE if colour in PALE else cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE if colour == "cream" else cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     contours, tree = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     out = []
     for k, c in enumerate(contours):
@@ -51,5 +57,5 @@ def find(image: np.ndarray, colour: str, min_area: float = 120.0) -> list[Blob]:
         x, y, w, h = cv2.boundingRect(c)
         cut = x <= 1 or y <= 1 or x + w >= mask.shape[1] - 1 or y + h >= mask.shape[0] - 1
         out.append(Blob(m["m10"] / m["m00"], m["m01"] / m["m00"], float(cv2.contourArea(c)), cv2.boxPoints(cv2.minAreaRect(c)),
-                        bool(ring and not dark), bool(cut)))
+                        bool(ring and not dark), bool(cut), bool(ring and dark), c.reshape(-1, 2)))
     return sorted(out, key=lambda b: -b.area)

@@ -237,6 +237,79 @@ def test_a_frame_that_runs_off_the_picture_is_said_to(corner, cut):
         assert blue[0].ring and abs(blue[0].u - (x + 60)) < 4 and abs(blue[0].v - (y + 50)) < 4
 
 
+def test_white_is_not_whatever_is_pale_and_grey_is_neither_white_nor_wood():
+    """The class: bare steel and bright wood taken for white (the cabinet's roof was the largest 'pale' patch in view)."""
+    from solutions import eyes
+    rgb = lambda h, s_, v: tuple(int(c) for c in cv2.cvtColor(np.uint8([[[h, s_, v]]]), cv2.COLOR_HSV2RGB)[0, 0])       # noqa: E731
+    img = np.full((400, 700, 3), rgb(20, 90, 235), np.uint8)                         # bright wood
+    cv2.rectangle(img, (50, 50), (150, 150), rgb(111, 25, 202), -1)                  # bare steel
+    cv2.rectangle(img, (250, 50), (350, 150), (252, 252, 252), -1)                   # white
+    cv2.rectangle(img, (450, 50), (550, 150), rgb(26, 31, 165), -1)                  # white in shadow
+    cv2.rectangle(img, (250, 250), (350, 350), (250, 250, 250), -1)                  # a printed tag: white round black
+    cv2.rectangle(img, (265, 265), (335, 335), (10, 10, 10), -1)
+    white, grey = eyes.find(img, "white"), eyes.find(img, "grey")
+    assert sorted((round(b.u, -1), round(b.v, -1), b.tag) for b in white) == [(300, 100, False), (300, 300, True)]
+    assert sorted((round(b.u, -1), round(b.v, -1)) for b in grey) == [(100, 100), (500, 100)]
+    assert all(b.outline is not None and len(b.outline) >= 4 for b in white + grey)
+
+
+class _Cabinet:
+    """An Api whose wrist camera, wherever the hand hovers, shows a grey thing with white patches as given (each a rectangle
+    in px), 0.2 mm to the pixel; `tags` are the printed tags the hub finds in that picture (4 x 2 px each)."""
+    def __init__(self, white, tags=(), grey=((700, 300), (1100, 700)), reachable=True):
+        self.white, self.tags, self.grey, self.reachable, self.calls, self.rest = white, tags, grey, reachable, 0, None
+
+    def devices(self):
+        return {"arm": {}}
+
+    def post(self, path, body=None):
+        return (200, {"reached": True}) if self.reachable else (409, {"error": "that point cannot be reached"})
+
+    def get(self, path):
+        return 200, {"tags": [{"corners_px": [list(map(float, c)) for c in t]} for t in self.tags]}
+
+    def picture(self, node):
+        img = np.full((1080, 1920, 3), (236, 190, 150), np.uint8)
+        if self.grey:
+            cv2.rectangle(img, *self.grey, (176, 180, 200), -1)
+        for a, b in self.white:
+            cv2.rectangle(img, a, b, (252, 252, 252), -1)
+        for t in self.tags:
+            cv2.fillPoly(img, [np.array(t, np.int32)], (10, 10, 10))
+        return img
+
+    def ok(self, method, path, body=None):
+        if "/where/pixel" in path:
+            q = dict(kv.split("=") for kv in path.split("?")[1].split("&"))
+            return {"known": True, "at_m": [float(q["u"]) * 0.0002, float(q["v"]) * 0.0002], "uncertainty_m": 0.002}
+        return {"joints": {"joints_rad": {"shoulder_pan": 0.0, "gripper": 0.1}}}
+
+
+@pytest.mark.parametrize("white,tags,answer", [
+    ([((640, 320), (699, 680))], (), "no"),                                          # 12 mm of white beside the grey: the drawer's front
+    ([((400, 320), (699, 680))], (), "yes"),                                         # 60 mm: its tray
+    ([((640, 320), (699, 680)), ((200, 800), (500, 1000))], (), "no"),               # ... and 60 mm of white that is beside nothing grey
+    ([((640, 320), (699, 680)), ((1101, 300), (1400, 600))], [[(1150, 350), (1350, 350), (1350, 550), (1150, 550)]], "no"),   # ... on a printed tag
+    ([((640, 320), (699, 680)), ((0, 300), (699, 310))], (), "no"),                  # ... or running off the picture
+    ([((640, 320), (699, 680)), ((1101, 300), (1400, 600))], (), "yes")])            # (the same patch with no tag on it is a tray)
+def test_a_drawer_is_out_when_more_than_its_front_shows_beside_the_cabinet(white, tags, answer):
+    """The classes: the arm's own tag block taken for a drawer (white round a printed tag, with a shaded grey side: it
+    answered 'yes' to a shut drawer); white somewhere else in view; part of a patch measured as the whole of it."""
+    from solutions import tasks
+    assert tasks.drawer_open(_Cabinet(white, tags)) == {"open": answer}
+
+
+def test_with_no_drawer_in_sight_the_question_is_not_answered():
+    from solutions import tasks
+    from solutions.api import GaveUp
+    with pytest.raises(GaveUp, match="nothing white beside anything grey"):          # a cabinet, and no white at it
+        tasks.drawer_open(_Cabinet([]))
+    with pytest.raises(GaveUp, match="nothing white beside anything grey"):          # white, and nothing grey
+        tasks.drawer_open(_Cabinet([((400, 320), (699, 680))], grey=None))
+    with pytest.raises(GaveUp, match="could not be held anywhere"):
+        tasks.drawer_open(_Cabinet([((400, 320), (699, 680))], reachable=False))
+
+
 class _Looking:
     """An Api whose wrist camera shows a given picture and whose pictures are 1 mm to the pixel, the arm's origin at (960, 540)."""
     def __init__(self, image):
@@ -348,12 +421,27 @@ def test_every_task_has_a_solution_or_a_reason_why_not():
                                         ("l_shaped", "where_is_everyone"), ("no_arm", "how_big"), ("shelf", "on_the_shelf"),
                                         ("shelf", "under_the_ledge"), ("moved_arm", "carried"), ("workcell", "stack"),
                                         ("moved_arm", "fetch"), ("shelf", "fetch_from_shelf"), ("cluttered", "tidy_by_colour"),
-                                        ("cluttered", "fetch_hidden"), ("l_shaped", "far_leg")])
+                                        ("cluttered", "fetch_hidden"), ("l_shaped", "far_leg"), ("bench", "drawer_open")])
 def test_a_solution_does_its_task_as_the_referee_sees_it(scene, task):
     import solve
     r = solve.run(scene, task)
     assert r["done"], r
     assert r["api_calls"] >= 2 and "gave_up" not in r
+
+
+@pytest.mark.parametrize("out_m", [0.01, 0.04, 0.085])
+def test_the_drawer_is_judged_as_it_is_and_not_as_it_usually_is(out_m):
+    """The class: an answer that is right because the scene always begins the same way. The same task with the drawer
+    begun ajar, half out and fully out (the cube in it moved with it)."""
+    import solve
+
+    def change(data):
+        next(f for f in data["fixtures"] if f["name"] == "cabinet")["drawer_open_m"] = out_m
+        cube = next(o for o in data["objects"] if o["name"] == "red_cube")
+        cube["at_m"] = [cube["at_m"][0] - out_m, cube["at_m"][1], cube["at_m"][2]]
+
+    r = solve.run("bench", "drawer_open", change=change)
+    assert r["done"] and r["answers"] == {"open": "yes" if out_m > 0.02 else "no"}, r
 
 
 @pytest.mark.parametrize("scene,task,words", [("open_small", "how_big", "far edge"), ("l_shaped", "how_big", "not a plain rectangle")])

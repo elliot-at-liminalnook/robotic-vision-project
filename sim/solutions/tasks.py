@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+import cv2
 import numpy as np
 
 from . import eyes, moves
@@ -255,6 +256,61 @@ def out_of_sight(api: Api, **_) -> dict:
     return {"count": len(hidden), "colours": sorted(set(hidden))}
 
 
+# ---------------------------------------------------------------- is the drawer out
+DRAWER_SHOWS_M = 0.030         # a white patch at the cabinet wider than this is the inside of a drawer, not its front edge (which
+#                                measures 10 to 12 mm from above; 12 mm ajar measures 22 to 24 and is not called open)
+LOOK_RING_M = 0.24             # the hand hovers this far out to look down, at each of LOOK_BEARINGS: the wrist camera sees 0.15 m each way
+LOOK_BEARINGS = (0.0, 35.0, -35.0, 70.0, -70.0, 105.0, -105.0)
+BESIDE_PX = 60.0               # a white patch this near a grey one in the picture is part of the same thing
+TAG_GROWN = 1.8                # a printed tag's outline, grown by this, covers the white border it is printed in
+
+
+def drawer_open(api: Api, **_) -> dict:
+    """Whether the grey cabinet's drawer is out, by looking down with the wrist camera from places all round the arm.
+    The cabinet is something grey with something white at its side: its drawer. Shut, what shows of the drawer is the top
+    of its front, a strip some 10 mm wide. Out, its tray shows. The answer is how wide the widest such patch is.
+    (The rover's map is not used: the cabinet may stand at the edge of what the rover's two cameras can range.)"""
+    if "arm" not in api.devices():
+        raise GaveUp("this takes an arm, to look down with the camera on its wrist")
+    joints = api.ok("GET", "/devices/arm/state")["joints"]["joints_rad"]
+    api.rest = {k: v for k, v in joints.items() if k != "gripper"}
+    widths, looked = [], 0
+    for bearing in LOOK_BEARINGS:
+        way = np.array([math.cos(math.radians(bearing)), math.sin(math.radians(bearing))])
+        try:
+            moves.hover_over(api, LOOK_RING_M * way, hover=0.16)
+        except OutOfReach:
+            continue
+        looked += 1
+        picture = api.picture(moves.WRIST)
+        # The arm's own tag blocks are white round their printed tags, and grey on their shaded sides: the hub says where
+        # the tags are in this picture, and what is on one is left out.
+        status, found = api.get(f"{moves.WRIST}/picture?tags=true")
+        tags = [np.array(t["corners_px"], np.float32) for t in found.get("tags", [])] if status == 200 else []
+        tags = [(c.mean(axis=0) + TAG_GROWN * (c - c.mean(axis=0))).reshape(-1, 1, 2) for c in tags]
+
+        def plain(b):                                            # not on a printed tag, and all of it in the picture
+            return not (b.tag or b.cut_off or any(cv2.pointPolygonTest(t, (float(b.u), float(b.v)), False) >= 0 for t in tags))
+
+        grey = [g for g in eyes.find(picture, "grey", min_area=4000.0) if not g.tag
+                and not any(cv2.pointPolygonTest(t, (float(g.u), float(g.v)), False) >= 0 for t in tags)]
+        for b in eyes.find(picture, "white", min_area=300.0)[:6]:
+            if not plain(b) or not any(cv2.pointPolygonTest(g.outline.reshape(-1, 1, 2).astype(np.float32), (float(q[0]), float(q[1])), True) > -BESIDE_PX
+                                       for g in grey for q in b.outline[::max(1, len(b.outline) // 12)]):
+                continue                                         # a printed tag, or white that is not at anything grey
+            corners = [moves._place(api, "arm/wrist_camera", float(c[0]), float(c[1]), 0.01)[0] for c in b.corners]
+            if any(c is None for c in corners):
+                continue
+            widths.append(min(float(np.linalg.norm(corners[1] - corners[0])), float(np.linalg.norm(corners[2] - corners[1]))))
+    moves.park(api)
+    if not looked:
+        raise GaveUp("the hand could not be held anywhere to look down")
+    if not widths:
+        raise GaveUp(f"looking down from {looked} places round the arm, the wrist camera saw nothing white beside anything grey: "
+                     "no drawer to judge")
+    return {"open": "yes" if max(widths) > DRAWER_SHOWS_M else "no"}
+
+
 SOLVERS = {
     ("open_small", "where_is_everyone"): where_is("rover", "arm"),
     ("moved_arm", "where_is_everyone"): where_is("rover", "arm"),
@@ -262,6 +318,7 @@ SOLVERS = {
     ("no_arm", "where_is_everyone"): where_is("camera_1", "rover"),
     ("open_small", "how_big"): how_big,
     ("l_shaped", "far_leg"): out_of_sight,
+    ("bench", "drawer_open"): drawer_open,
     ("l_shaped", "how_big"): how_big,
     ("no_arm", "how_big"): how_big,
     ("shelf", "on_the_shelf"): on_the_shelf,
@@ -277,5 +334,4 @@ SOLVERS = {
 NO_SOLUTION = {
     ("bench", "tidy"): "eight steps with a drawer, a socket and two bins; its solution still runs on the old API (sim/scripts/sim_api.py), "
                        "which is given where things are. Through the hub it needs each thing found by sight first",
-    ("bench", "drawer_open"): "nothing in the hub says whether a drawer is out: it takes looking at a picture",
 }

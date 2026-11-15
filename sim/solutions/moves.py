@@ -105,18 +105,22 @@ def roughly(api: Api, colour: str, ring: bool = False, height: float = 0.015, pi
     return best[0]
 
 
-def closely(api: Api, colour: str, near: np.ndarray, height: float, ring: bool = False, hover: float = HOVER_M) -> tuple[np.ndarray, float | None]:
-    """Hover over `near` and look down with the wrist camera: the thing's place in the arm's frame, and which way one of its
-    sides runs [deg in the arm's x-y plane] (None for a bin). hover: how high the tip is held while looking."""
-    # Straight above a thing near the arm's base is out of its reach at hovering height: hover a little further out, or lower.
+def hover_over(api: Api, near, hover: float = HOVER_M) -> dict:
+    """Hold the hand over `near` for the wrist camera to look down. Straight above a thing near the arm's base is out of its
+    reach at hovering height: then a little further out, or lower. Returns the hub's answer to the move that worked."""
     reach, way = float(np.linalg.norm(near)), np.asarray(near, float) / max(float(np.linalg.norm(near)), 1e-6)
     r = None
     for out, z in ((max(reach, 0.215), hover), (max(reach, 0.20), hover - 0.03), (reach, hover - 0.05)):
         status, r = goto(api, float(way[0] * out), float(way[1] * out), z, tolerance_m=0.01)
         if status == 200:
-            break
-    else:
-        raise OutOfReach(f"the hand cannot hover over ({near[0]:.3f}, {near[1]:.3f}): {r.get('error', r)}")
+            return r
+    raise OutOfReach(f"the hand cannot hover over ({near[0]:.3f}, {near[1]:.3f}): {r.get('error', r)}")
+
+
+def closely(api: Api, colour: str, near: np.ndarray, height: float, ring: bool = False, hover: float = HOVER_M) -> tuple[np.ndarray, float | None]:
+    """Hover over `near` and look down with the wrist camera: the thing's place in the arm's frame, and which way one of its
+    sides runs [deg in the arm's x-y plane] (None for a bin). hover: how high the tip is held while looking."""
+    r = hover_over(api, near, hover)
     seen = eyes.find(api.picture(WRIST), colour, min_area=400)
     # the one nearest where it was expected, among those of a fair size
     placed = [(b, _place(api, "arm/wrist_camera", b.u, b.v, height)[0]) for b in _kind(seen, ring)[:4]]
