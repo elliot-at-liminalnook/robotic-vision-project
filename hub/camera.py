@@ -16,14 +16,22 @@ class Camera:
         self.kind = self.identity.get("kind", "cm3_wide")
         self.last: Frame | None = None
         self.pictures = 0
+        self.focal_scale = 1.0           # this unit's focal length over its kind's nominal one, once found (hub/calibrate.py)
+        self.focal_sigma = builtin.LENS_FOCAL_TOLERANCE      # ... and how well that is known
 
     @property
     def serial(self) -> str:
         return str(self.identity.get("serial", "?"))
 
-    def lens(self, width: int, height: int) -> builtin.Lens:
+    def nominal(self, width: int, height: int) -> builtin.Lens:
         """The nominal lens of this kind of camera at a picture size. Not this unit's true one."""
         return builtin.LENSES[self.kind if self.kind in builtin.LENSES else "cm3_wide"].at(width, height)
+
+    def lens(self, width: int, height: int) -> builtin.Lens:
+        """This camera's lens at a picture size, as well as the hub knows it: its kind's nominal values, with this unit's
+        focal length where that has been found."""
+        n = self.nominal(width, height)
+        return n if self.focal_scale == 1.0 else builtin.Lens(n.width, n.height, n.fx * self.focal_scale, n.fy * self.focal_scale, n.cx, n.cy, n.dist)
 
     def grab(self) -> Frame:
         """A fresh full-size picture. Raises PortError if the camera is gone."""

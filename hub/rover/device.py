@@ -102,6 +102,8 @@ class RoverDevice:
         self.volts = float(np.mean([f["volts"] for f in fb.values()]))
         self._lag_t = 0.0
         self.guard = self.after_drive = None                 # set by the hub: what the map says of a drive (hub/guard.py)
+        self.wheel_scale = 1.0                               # its wheels' size over what its description says, once found
+        self.pair = {"offset_px": 0.0, "stretch": None}      # its two cameras against each other, once found (hub/calibrate.py)
         self.last_block = None
 
     # ---- sensing ---------------------------------------------------------------
@@ -134,7 +136,7 @@ class RoverDevice:
         for side, i in self.wheel_ids.items():
             d = (fb[i]["ticks"] - self._wheel_ticks[side] + 2048) % 4096 - 2048
             self._wheel_ticks[side] = fb[i]["ticks"]
-            step[side] = self.group.by_id[i].direction * d * 2 * math.pi / 4096 * self.rover.wheel_radius
+            step[side] = self.group.by_id[i].direction * d * 2 * math.pi / 4096 * self.rover.wheel_radius * self.wheel_scale
             self.travel[side] += step[side]
         ds, dth = (step["left"] + step["right"]) / 2, (step["right"] - step["left"]) / self.rover.track
         th = self.pose[2] + dth / 2
@@ -280,7 +282,7 @@ class RoverDevice:
     # ---- the wheels ------------------------------------------------------------------
     def _wheels(self, v: float, w: float):
         """Ground speed v [m/s] and turning rate w [rad/s], as wheel speeds."""
-        r, half = self.rover.wheel_radius, self.rover.track / 2
+        r, half = self.rover.wheel_radius * self.wheel_scale, self.rover.track / 2
         self.group.write_speeds({self.wheel_ids["left"]: (v - w * half) / r, self.wheel_ids["right"]: (v + w * half) / r})
 
     def _drive(self, distance: float, angle: float, timeout_s: float, slow: bool = False) -> dict:

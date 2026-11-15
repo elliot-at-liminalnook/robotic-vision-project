@@ -41,8 +41,9 @@ def _quat(R) -> list[float]:
     return [float(v) for v in q]
 
 
-def add_rover(spec: mujoco.MjSpec, name: str, x: float, y: float, yaw_rad: float, contact: dict) -> dict:
-    """Add the rover standing on the surface at (x, y), facing yaw. Returns what was added (ground truth)."""
+def add_rover(spec: mujoco.MjSpec, name: str, x: float, y: float, yaw_rad: float, contact: dict, wheel_scale: float = 1.0) -> dict:
+    """Add the rover standing on the surface at (x, y), facing yaw. Returns what was added (ground truth).
+    wheel_scale: its wheels are this many times the size its description gives (an imperfection: the hub is not told)."""
     asm = assembly()
     loop, lim = position_loop(), servo_limits()
     kp, kv_damping, stall = float(loop["stiffness_nm_per_rad"]), float(loop["back_emf_nm_s_per_rad"]), float(lim["stall_torque_nm"])
@@ -55,7 +56,8 @@ def add_rover(spec: mujoco.MjSpec, name: str, x: float, y: float, yaw_rad: float
         origin[b["name"]] = o
         bname = name if b["parent"] is None else f"{name}_{b['name']}"
         if b["parent"] is None:
-            body = spec.worldbody.add_body(name=bname, pos=[x, y, 0.0], quat=[math.cos(yaw_rad / 2), 0, 0, math.sin(yaw_rad / 2)])
+            body = spec.worldbody.add_body(name=bname, pos=[x, y, max(0.0, asm["wheel_radius_m"] * (wheel_scale - 1.0))],
+                                           quat=[math.cos(yaw_rad / 2), 0, 0, math.sin(yaw_rad / 2)])
             body.add_freejoint(name=f"{name}_free")
         else:
             body = bodies[b["parent"]].add_body(name=bname, pos=(o - origin[b["parent"]]).tolist())
@@ -115,7 +117,9 @@ def add_rover(spec: mujoco.MjSpec, name: str, x: float, y: float, yaw_rad: float
             elif c["type"] == "sphere":
                 body.add_geom(type=mujoco.mjtGeom.mjGEOM_SPHERE, pos=c["centre"], size=[c["radius"], 0, 0], **common)
             else:
-                body.add_geom(type=mujoco.mjtGeom.mjGEOM_ELLIPSOID, pos=c["centre"], size=c["radii"], condim=4, **common)
+                r = c["radii"]                                           # (a wheel: round about its axle, which is its y)
+                body.add_geom(type=mujoco.mjtGeom.mjGEOM_ELLIPSOID, pos=c["centre"], size=[r[0] * wheel_scale, r[1], r[2] * wheel_scale],
+                              condim=4, **common)
         for cam in b["cameras"]:
             z, up = -np.array(cam["looks"], float), np.array(cam["up"], float)      # a MuJoCo camera looks along its -z
             body.add_camera(name=f"{name}_{cam['name'].split('_', 1)[1]}", pos=cam["lens_m"],

@@ -24,6 +24,7 @@ from .locator import Locator
 from .place import Place, re_frame
 from .guard import Guard
 from . import landmarks
+from . import calibrate as C
 from . import geometry as G
 from . import survey as S
 from .vision import tags as V
@@ -277,7 +278,21 @@ class Hub:
                 "again at something, or from somewhere the rover has driven to. Raise and point the head first.", lambda: S.look(self))
         self.root.commands["wait"] = Command("Let time pass with every device holding still.", self.wait,
                                              {"seconds": Param("number", "how long", True, 0.0, 30.0)})
+        self.root.commands["calibrate"] = Command(
+            "Find how the devices differ from what their drivers believe, from what they see of each other's printed tags: each "
+            "fixed camera's focal length (the arm shows its wrist tag), the rover's wheel size (a camera watches it drive) and its "
+            "pair of cameras (the head looks at the arm's tags while the cameras move apart). Does each that the devices here can, "
+            "and says what it found, changed, or could not do. Takes a minute or two.", lambda: C.everything(self))
+        for name in self.cameras:
+            devices.children[name].commands["calibrate"] = Command(
+                "Find this camera's own focal length from what it has seen of the arm's tags (POST /locate with show_wrist_tag first).",
+                lambda name=name: C.lens(self, name))
         if self.rover is not None:
+            rover.children["head"].commands["calibrate"] = Command(
+                "Find how the head's two cameras sit against each other: with the head pointed at a printed tag 0.25 to 0.5 m away, "
+                "the cameras are moved apart in steps and the tag's shift between the two pictures is followed.", lambda: C.pair(self))
+            rover.children["drive"].commands["calibrate"] = Command(
+                "Find the wheels' true size: a fixed camera watches the rover drive 0.15 m there and back.", lambda: C.wheels(self))
             self.root.commands["survey"] = Command(
                 "The rover looks all round from where it stands, without driving: its head turns through its range at a few "
                 "heights, tilts and camera spacings, taking a pair of pictures at each. From them come the map (GET /place), "

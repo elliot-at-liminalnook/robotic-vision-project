@@ -293,6 +293,30 @@ Fuzzed, against the referee: thirty random drives and turns after a survey move 
 leave the surface, and leave the wheels' count within 50 mm and 12° of where the rover is; forty random
 tip targets never touch the rover and shove nothing.
 
+## Self-calibration (`calibrate.py`)
+
+The devices are not quite what their drivers believe: each lens differs from its datasheet, a printed
+wheel is not its drawing's size, a printer may have scaled the tags. `POST /calibrate` finds what it can
+from what the devices see of each other's tags, with no target put down by a person. Each part says
+what it found, how sure it is, and what it changed; each can also be asked for alone.
+
+| What | How | Command | In the simulation |
+|---|---|---|---|
+| A fixed camera's focal length | The arm shows the tag behind its wrist at several poses. The tags' places are known from the arm's joints; the focal length is the one that makes them all land where they were seen. Weighed against the datasheet by how sure each is | `POST /devices/camera_N/calibrate` (after `/locate` with `show_wrist_tag`) | Found to 0.1 to 0.5 % of itself from 7 or 8 sightings; stated as good to 0.5 to 0.9 % where the datasheet is good to 1.5 % |
+| The rover's pair of cameras | The head looks at a tag while the spacing drive moves the cameras apart in five steps. The tag's disparity is a straight line in the spacing; what is left at no spacing is the pair's sideways shift. The ratio of the two focal lengths comes from how the rows of one picture run against the other's | `POST /devices/rover/head/calibrate` (head raised, pointed at a tag) | Shift found to 0.5 px (it was 3 to 10 px: 2 to 7 % of a distance at 0.4 m); focal ratio to 0.2 % |
+| The rover's wheels | A fixed camera watches the rover drive up to 0.25 m and back, twice, over ground the map shows free. Weighed against the description (good to 3 %) | `POST /devices/rover/drive/calibrate` (after a survey) | Wheels 5 % large: taken as 4.6 to 4.7 % large afterwards. Wheels right: taken as 0.5 % large |
+
+- After the pair is calibrated the survey and `look` use its shift and focal ratio, and the tags are
+  measured again by the spacing drive: tags printed 4 % large measure 1.035 to 1.04 of their printed
+  size and are reported as disagreeing.
+- **Refused, or left out, rather than believed:** a camera that has seen the wrist tag at fewer than
+  three poses; tags all at one distance; a disparity that is not a straight line in the spacing (one
+  misread spacing is left out); a leg of the wheel drive that goes where nothing has looked, because
+  what stops the rover there spoils the count (found: backing into the edge made the wheels look 5 %
+  small).
+- **Not found:** the lenses' centres and distortion (still the datasheet's); the zero of each servo; the
+  arm's own link lengths.
+
 ## How well locating does
 
 `locate.camera_from_arm(image, lens)`: a camera's pose in the arm's base frame from one picture of the arm's

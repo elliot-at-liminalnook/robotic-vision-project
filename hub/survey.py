@@ -55,9 +55,13 @@ MIN_TAG_PX = 60                     # a tag smaller than this in either picture 
 RULER_TOLERANCE = 0.04              # rulers that disagree by more than this are reported as disagreeing
 
 
-def measure_tags(found_left, found_right, lens_left, lens_right, baseline_m: float) -> dict[int, float]:
-    """Tags seen by both cameras: tag id -> its side as measured across the pair, over its printed side."""
+def measure_tags(found_left, found_right, lens_left, lens_right, baseline_m: float, shift_px: float = 0.0, stretch=None) -> dict[int, float]:
+    """Tags seen by both cameras: tag id -> its side as measured across the pair, over its printed side.
+    shift_px, stretch: the pair's sideways shift and right-over-left focal length, where they have been found."""
     right = {d.id: d for d in found_right}
+    if stretch is not None:
+        lens_right = type(lens_right)(lens_right.width, lens_right.height, lens_right.fx * stretch, lens_right.fy * stretch,
+                                      lens_right.cx, lens_right.cy, lens_right.dist)
     out = {}
     for d in found_left:
         kind = builtin.kind_of_tag(d.id)
@@ -65,7 +69,7 @@ def measure_tags(found_left, found_right, lens_left, lens_right, baseline_m: flo
             continue
         if max(abs(float(np.mean(d.corners[:, 0])) - lens_left.cx), abs(float(np.mean(right[d.id].corners[:, 0])) - lens_right.cx)) > USE_FIELD * lens_left.fx:
             continue                                         # at the side of a picture, where the lenses are least alike
-        p = stereo.triangulate(d.corners, right[d.id].corners, lens_left, lens_right, baseline_m)
+        p = stereo.triangulate(d.corners, right[d.id].corners, lens_left, lens_right, baseline_m, offset_px=shift_px)
         sides = [float(np.linalg.norm(p[k] - p[(k + 1) % 4])) for k in range(4)]
         out[d.id] = float(np.mean(sides)) / builtin.tags(kind)[d.id].size_m
     return out
@@ -95,9 +99,10 @@ def take_view(hub, ratios: dict, heights: list, arm_q=None) -> tuple[dict, np.nd
     found_l, found_r = V.detect(fl.image), V.detect(fr.image)
     for side, found, frame in (("left", found_l, fl), ("right", found_r, fr)):
         locator.see_from_rover(side, found, frame.t, head, arm_q, rover.pose.copy(), (left if side == "left" else right).lens(1920, 1080))
-    for tag, ratio in measure_tags(found_l, found_r, lens_l, lens_r, baseline).items():
+    shift, stretch = float(rover.pair["offset_px"]), rover.pair["stretch"]
+    for tag, ratio in measure_tags(found_l, found_r, lens_l, lens_r, baseline, shift, stretch).items():
         ratios.setdefault(tag, []).append(ratio)
-    cloud = stereo.depth(fl.image, fr.image, lens_l, lens_r, baseline)
+    cloud = stereo.depth(fl.image, fr.image, lens_l, lens_r, baseline, offset_px=shift, stretch=stretch)
     T_cam = rover.rover.camera("left", head)
     view = {"lens_height_m": round(float(T_cam[2, 3]), 3), "tilt_deg": round(math.degrees(head["tilt"]), 1),
             "lens_spacing_m": round(baseline, 3), "pan_deg": round(math.degrees(head["pan"]), 1),

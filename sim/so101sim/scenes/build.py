@@ -372,7 +372,8 @@ def build(scene: dict) -> Built:
             built.devices.append({"kind": "camera", "name": name, "at_m": list(pos), "looking_at_m": list(aim)})
             built.cameras[name] = {"device": name, "mounted_on": "world"}
         elif kind == "rover":
-            info = add_rover(spec, name, d["at_m"][0], d["at_m"][1], math.radians(d.get("facing_deg", 0.0)), CONTACT)
+            info = add_rover(spec, name, d["at_m"][0], d["at_m"][1], math.radians(d.get("facing_deg", 0.0)), CONTACT,
+                             wheel_scale=float(scene.get("imperfections", {}).get("wheel_scale", 1.0)))
             built.devices.append({"kind": "rover", "name": name, "at_m": list(d["at_m"][:2]),
                                   "facing_deg": float(d.get("facing_deg", 0.0)), "battery_charge": float(d.get("battery_charge", 0.9)),
                                   **info})
@@ -383,4 +384,10 @@ def build(scene: dict) -> Built:
         built.model = spec.compile()
     except Exception as e:                       # MuJoCo's own message names the element
         raise SceneError(f"the model does not compile: {str(e).splitlines()[0]}") from e
+    imperfect = scene.get("imperfections", {})
+    m = built.model
+    for g in range(m.ngeom):                     # not what the drivers believe (schema.py: imperfections; the wheels are above)
+        gname = m.geom(g).name
+        if gname.startswith("tag_") and gname[4:].isdigit() and "tag_scale" in imperfect:
+            m.geom_size[g, :2] *= float(imperfect["tag_scale"])
     return built

@@ -165,10 +165,10 @@ Found on the way: three scenes had a loose thing under the parked rover's head; 
 
 Plan: [5.10](MULTI_DEVICE_PLAN.md#510-keeping-the-gap-small)
 
-- [ ] Simulated devices that differ from their descriptions, set in the scene file
-- [ ] Routines that find and correct the differences using the devices' own tags
-- [ ] Lens values corrected from what is seen
-- [ ] Tests written
+- [x] Simulated devices that differ from their descriptions, set in the scene file (`[imperfections]`: each camera's lens, `wheel_scale`, `tag_scale`. Not simulated: servo zeros, play in the head's slide)
+- [x] Routines that find and correct the differences using the devices' own tags (`POST /calibrate`: wheel size, the rover's camera pair; the tags' print scale is measured and reported, not corrected)
+- [x] Lens values corrected from what is seen (each fixed camera's focal length; the pair's shift and focal ratio. Centres and distortion stay the datasheet's)
+- [x] Tests written (`sim/tests/test_calibrate.py`, not run as a suite; each test called directly)
 
 ## Step 13. Tasks run
 

@@ -368,8 +368,8 @@ def test_the_rover_is_in_the_tree_with_its_parts_and_groups(system):
     tree = call(hub, "GET", "/tree")[1]["tree"]["under_it"]
     rover = tree["devices"]["under_it"]["rover"]
     assert set(rover["under_it"]) == {"drive", "head", "power"} and set(rover["under_it"]["head"]["under_it"]) == {"left", "right"}
-    assert set(rover["under_it"]["drive"]["commands"]) == {"forward", "turn"}
-    assert set(rover["under_it"]["head"]["commands"]) == {"point", "raise", "spread", "stow", "look"}
+    assert set(rover["under_it"]["drive"]["commands"]) == {"forward", "turn", "calibrate"}
+    assert set(rover["under_it"]["head"]["commands"]) == {"point", "raise", "spread", "stow", "look", "calibrate"}
     groups = tree["groups"]["under_it"]
     assert {"/devices/rover/head/left", "/devices/rover/head/right"} <= set(groups["cameras"]["members"])
     assert groups["power"]["members"] == ["/devices/rover/power"] and "/devices/rover" in groups["movers"]["members"]

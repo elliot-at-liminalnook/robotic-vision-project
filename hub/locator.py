@@ -103,6 +103,7 @@ class CameraTrack:
     link: Link | None = None           # arm in the camera's frame... kept as camera -> arm
     why_not: str = "it has not seen any of the arm's tags"
     notes: list[str] = field(default_factory=list)
+    focal_tolerance: float = LENS_FOCAL_TOLERANCE      # how far its focal length may be from what `lens` says, as a fraction
 
 
 @dataclass
@@ -117,11 +118,11 @@ def _se2(pose) -> np.ndarray:
     return G.pose(G.rot_z(float(pose[2])), [float(pose[0]), float(pose[1]), 0.0])
 
 
-def _body_link(fix: V.BodyFix, t: float, support: str) -> Link:
+def _body_link(fix: V.BodyFix, t: float, support: str, tolerance: float = LENS_FOCAL_TOLERANCE) -> Link:
     """A tag sighting as a link camera -> body, with the floor an uncalibrated lens puts under its uncertainty."""
     cov = fix.cov.copy()
     reach = float(np.linalg.norm(fix.T_cam_body[:3, 3]))
-    cov[3:, 3:] += np.eye(3) * (LENS_FOCAL_TOLERANCE * reach) ** 2
+    cov[3:, 3:] += np.eye(3) * (tolerance * reach) ** 2
     cov[:3, :3] += np.eye(3) * math.radians(0.4) ** 2
     return Link(fix.T_cam_body, cov, t, [support])
 
@@ -181,12 +182,20 @@ class Locator:
         fix = V.body_pose(use, corners, lens)
         if fix is None or fix.ambiguous or fix.rms_px > MAX_RMS_PX * lens.width / 1920:
             return []
-        link = _body_link(fix, t, f"{other} saw the rover's tags {sorted(d.id for d in use)}")
+        tolerance = self.cameras[other].focal_tolerance if other in self.cameras else LENS_FOCAL_TOLERANCE
+        link = _body_link(fix, t, f"{other} saw the rover's tags {sorted(d.id for d in use)}", tolerance)
         if T_other_cam is not None:                          # seen from a camera that itself rides on a device
             link = Link(T_other_cam, cam_cov, t, []).then(link)
         self.rover_seen.append(RoverSighting(other, link, np.array(odometry, float)))
         del self.rover_seen[:-200]
         return [d.id for d in use]
+
+    def new_lens(self, camera: str, lens: Lens, tolerance: float):
+        """This camera's own lens has been found (hub/calibrate.py): everything it saw is solved again with it."""
+        track = self.cameras[camera]
+        track.lens, track.focal_tolerance = lens, tolerance
+        self._solve(track)
+        self.rover_seen = [s for s in self.rover_seen if s.other != camera]      # (they were placed with the old lens)
 
     def forget_rover(self, since: float = -math.inf):
         """Drop what was seen of the rover, or by it, from `since` on: it has been moved without its wheels counting it."""
@@ -280,7 +289,7 @@ class Locator:
             # What many sightings cannot average away: this lens is not the datasheet's. Until the camera's own
             # values are found, every distance through it is off by about LENS_FOCAL_TOLERANCE of itself.
             reach = float(np.linalg.norm(fix.T_cam_body[:3, 3]))
-            cov[3:, 3:] += np.eye(3) * (LENS_FOCAL_TOLERANCE * reach) ** 2
+            cov[3:, 3:] += np.eye(3) * (track.focal_tolerance * reach) ** 2
             cov[:3, :3] += np.eye(3) * math.radians(0.4) ** 2
             if any(s.moving_part for s in track.sightings) and not any(not s.moving_part for s in track.sightings):
                 # Resting on the wrist tag alone: the arm's own knowledge of where its wrist is limits it.

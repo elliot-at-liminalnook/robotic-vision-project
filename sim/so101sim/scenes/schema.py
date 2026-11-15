@@ -73,7 +73,10 @@ SCENE = {
                 "ambient": F(NUM, lo=0, hi=1)}),
     "fixtures": F("list", of=FIXTURE), "objects": F("list", of=OBJECT), "devices": F("list", True, of=DEVICE),
     "regions": F("list", of=REGION), "tasks": F("list", of=TASK),
-    "imperfections": F({"seed": F(int, lo=0, hi=2 ** 31)}),
+    # How the devices here differ from what their drivers believe. seed: each camera's own lens. wheel_scale: the rover's
+    # wheels are this many times the size its description gives. tag_scale: every printed tag came out this many times
+    # the size of its file (a printer's "fit to page").
+    "imperfections": F({"seed": F(int, lo=0, hi=2 ** 31), "wheel_scale": F(NUM, lo=0.97, hi=1.1), "tag_scale": F(NUM, lo=0.9, hi=1.1)}),      # (wheels under 0.97: it rests on its skid)
 }
 
 
