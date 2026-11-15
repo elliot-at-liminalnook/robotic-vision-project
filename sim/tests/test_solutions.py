@@ -344,7 +344,7 @@ def _carrying(monkeypatch, patches, real):
     """into_bins with the looking and the carrying stood in for: `patches` are where the fixed camera sees the colour (in
     order), `real` says which of them is a thing (the others raise). Returns (the places carried from, the solver)."""
     from solutions import moves, tasks
-    from solutions.api import GaveUp, NotThere, OutOfReach
+    from solutions.api import GaveUp, Missed, NotThere, OutOfReach
     carried, there = [], [np.array(p, float) for p in patches]
 
     def roughly(api, colour, ring=False, height=0.015, pick=0):
@@ -356,12 +356,16 @@ def _carrying(monkeypatch, patches, real):
 
     def find_thing(api, colour, pick=0, height_guess=0.03, near=None):
         k = next(i for i, p in enumerate(there) if np.allclose(p, near))
-        if real[k] is not True:
+        if real[k] in (NotThere, OutOfReach):
             raise real[k]("not a thing" if real[k] is NotThere else "cannot hover")
+        if real[k] == "in the bin":                                 # (seen somewhere else by the fixed camera; from close above, in the bin)
+            return {"at": np.array([0.01, 0.31]), "top": 0.03, "side_deg": 0.0}
         return {"at": near, "top": 0.03, "side_deg": 0.0}
 
     def pick(api, thing):
         k = next(i for i, p in enumerate(there) if np.allclose(p, thing["at"]))
+        if real[k] is Missed:
+            raise Missed("the jaws closed on nothing")
         carried.append(tuple(thing["at"]))
         there.pop(k), real.pop(k)                                   # (it is in the bin now, and is no longer seen out there)
         return 0.011
@@ -373,12 +377,13 @@ def _carrying(monkeypatch, patches, real):
 
 
 def test_a_patch_that_is_not_a_thing_is_passed_over_and_the_next_one_tried(monkeypatch):
-    """The class: the first patch of the colour is the arm itself (it is printed yellow), and the task ends there. Every
-    order of 'not a thing', 'out of reach' and 'a thing' must end with exactly the things carried, each once."""
+    """The class: the first patch of the colour is the arm itself (it is printed yellow), and the task ends there; or it is
+    a thing already carried to the bin, which the task then goes back for. Every order of 'not a thing', 'out of reach',
+    'nothing between the jaws', 'in the bin already' and 'a thing' must end with exactly the things carried, each once."""
     import itertools
-    from solutions.api import NotThere, OutOfReach
+    from solutions.api import Missed, NotThere, OutOfReach
     places = [(0.2, 0.0), (0.25, -0.1), (0.3, 0.1), (0.15, -0.15)]
-    for kinds in itertools.product((True, NotThere, OutOfReach), repeat=3):
+    for kinds in itertools.product((True, NotThere, OutOfReach, Missed, "in the bin"), repeat=3):
         carried, solve = _carrying(monkeypatch, places[:3], list(kinds))
         if True not in kinds:
             continue

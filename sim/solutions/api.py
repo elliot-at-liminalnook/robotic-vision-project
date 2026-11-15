@@ -15,6 +15,10 @@ class OutOfReach(GaveUp):
     """The hand cannot be held over that place to look: whatever is there cannot be picked up either."""
 
 
+class Missed(GaveUp):
+    """The jaws closed where a thing was taken to be and there was nothing between them."""
+
+
 class NotThere(GaveUp):
     """A closer look did not find what a first look took for a thing: not a failure of the arm, but news about that patch."""
 

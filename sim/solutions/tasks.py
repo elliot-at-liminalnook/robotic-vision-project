@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import math
 
-import cv2
 import numpy as np
 
-from . import eyes, moves
-from .api import Api, GaveUp, NotThere, OutOfReach
+from . import bench, eyes, moves
+from .api import Api, GaveUp, Missed, NotThere, OutOfReach
 
 
 # ---------------------------------------------------------------- where is everyone
@@ -126,6 +125,7 @@ def stack(thing: str, on: str):
     return solve
 
 
+IN_THE_BIN_M = 0.05            # a thing found this near a bin's middle is in it
 BIN_SPOTS = np.array([[0.0, 0.0], [0.018, 0.018], [-0.018, -0.018], [0.018, -0.018]])      # where in a bin the first, second, ... thing goes
 
 
@@ -152,14 +152,18 @@ def into_bins(pairs=(("red", "red"), ("blue", "blue")), high: float = 0.03):
                     break
                 try:
                     thing = moves.find_thing(api, colour, height_guess=high, near=near)
-                except (NotThere, OutOfReach) as e:
+                    if np.linalg.norm(thing["at"] - bin_at) < IN_THE_BIN_M:
+                        # Found from close above, it is in the bin: one carried there already, which the fixed camera put
+                        # somewhere else because it guessed its height as it was before (up on a shelf).
+                        raise NotThere(f"what the fixed camera saw at ({near[0]:.3f}, {near[1]:.3f}) is in the bin already")
+                    grasp = moves.pick(api, thing)
+                except (NotThere, OutOfReach, Missed) as e:
                     # What a fixed camera took for such a thing is not one from close above, or is where the hand cannot be
-                    # held to look: part of the arm itself (it is printed in one of these colours), or a thing too far off
-                    # its guessed height. Pass over it.
+                    # held to look, or the jaws found nothing there: part of the arm itself (it is printed in one of these
+                    # colours), or a thing too far off its guessed height. Pass over it.
                     passed.append(near)
                     why_not.append(str(e))
                     continue
-                grasp = moves.pick(api, thing)
                 moves.put(api, bin_at + BIN_SPOTS[carried % len(BIN_SPOTS)], 0.0, grasp, let_go_above=0.02)     # (not onto the last one)
                 carried += 1
             if not carried:
@@ -261,8 +265,6 @@ DRAWER_SHOWS_M = 0.030         # a white patch at the cabinet wider than this is
 #                                measures 10 to 12 mm from above; 12 mm ajar measures 22 to 24 and is not called open)
 LOOK_RING_M = 0.24             # the hand hovers this far out to look down, at each of LOOK_BEARINGS: the wrist camera sees 0.15 m each way
 LOOK_BEARINGS = (0.0, 35.0, -35.0, 70.0, -70.0, 105.0, -105.0)
-BESIDE_PX = 60.0               # a white patch this near a grey one in the picture is part of the same thing
-TAG_GROWN = 1.8                # a printed tag's outline, grown by this, covers the white border it is printed in
 
 
 def drawer_open(api: Api, **_) -> dict:
@@ -282,22 +284,13 @@ def drawer_open(api: Api, **_) -> dict:
         except OutOfReach:
             continue
         looked += 1
-        picture = api.picture(moves.WRIST)
-        # The arm's own tag blocks are white round their printed tags, and grey on their shaded sides: the hub says where
-        # the tags are in this picture, and what is on one is left out.
-        status, found = api.get(f"{moves.WRIST}/picture?tags=true")
-        tags = [np.array(t["corners_px"], np.float32) for t in found.get("tags", [])] if status == 200 else []
-        tags = [(c.mean(axis=0) + TAG_GROWN * (c - c.mean(axis=0))).reshape(-1, 1, 2) for c in tags]
-
-        def plain(b):                                            # not on a printed tag, and all of it in the picture
-            return not (b.tag or b.cut_off or any(cv2.pointPolygonTest(t, (float(b.u), float(b.v)), False) >= 0 for t in tags))
-
-        grey = [g for g in eyes.find(picture, "grey", min_area=4000.0) if not g.tag
-                and not any(cv2.pointPolygonTest(t, (float(g.u), float(g.v)), False) >= 0 for t in tags)]
-        for b in eyes.find(picture, "white", min_area=300.0)[:6]:
-            if not plain(b) or not any(cv2.pointPolygonTest(g.outline.reshape(-1, 1, 2).astype(np.float32), (float(q[0]), float(q[1])), True) > -BESIDE_PX
-                                       for g in grey for q in b.outline[::max(1, len(b.outline) // 12)]):
-                continue                                         # a printed tag, or white that is not at anything grey
+        # (What is on a printed tag is left out: the arm's own tag blocks are white round their tags and grey on their
+        # shaded sides. bench.Look asks the hub where the tags are in the picture.)
+        look = bench.Look(api)
+        grey = look.find("grey", 4000.0)
+        for b in look.find("white", 300.0)[:6]:
+            if b.cut_off or not any(bench.beside(b, g) for g in grey):
+                continue                                         # part of a patch, or white that is not at anything grey
             corners = [moves._place(api, "arm/wrist_camera", float(c[0]), float(c[1]), 0.01)[0] for c in b.corners]
             if any(c is None for c in corners):
                 continue
@@ -319,6 +312,7 @@ SOLVERS = {
     ("open_small", "how_big"): how_big,
     ("l_shaped", "far_leg"): out_of_sight,
     ("bench", "drawer_open"): drawer_open,
+    ("bench", "tidy"): bench.tidy,
     ("l_shaped", "how_big"): how_big,
     ("no_arm", "how_big"): how_big,
     ("shelf", "on_the_shelf"): on_the_shelf,
@@ -332,6 +326,4 @@ SOLVERS = {
 }
 
 NO_SOLUTION = {
-    ("bench", "tidy"): "eight steps with a drawer, a socket and two bins; its solution still runs on the old API (sim/scripts/sim_api.py), "
-                       "which is given where things are. Through the hub it needs each thing found by sight first",
 }

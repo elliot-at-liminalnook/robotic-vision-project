@@ -12,11 +12,19 @@ import math
 import numpy as np
 
 from . import eyes
-from .api import Api, GaveUp, NotThere, OutOfReach
+from .api import Api, GaveUp, Missed, NotThere, OutOfReach
 
 HOVER_M = 0.14                 # how high the tip hovers to look down with the wrist camera
 WRIST = "/devices/arm/wrist_camera"
 NEAR_M = 0.12                  # what the wrist camera takes for the thing must be this near where it was expected
+VIA_REACH_M = 0.23             # how far out the point is by way of which the hand goes where no straight line leads
+FRAGMENT_M = 0.03              # a patch this near a patch twice its size is a part of that one
+WRIST_TURNED_RAD = 0.15         # a wrist this far from how it began is turned back before the wrist camera looks down
+LOW_THING_M = 0.025            # a thing whose top is lower than this is taken along its longer side
+LONG_THING_M = 0.036           # a thing longer than this does not fit under the jaws opened wide
+JAW_CLEAR_M = 0.020            # for such a thing the jaws open this much wider than it is long
+SNUG_CLEAR_M = 0.016           # ... and for a thing in a tight place, this much
+NOTHING_HELD_M = 0.006         # jaws that have closed to less than this have nothing between them
 REACH_M = (0.11, 0.40)         # how near and how far from its base the arm can pick something up (nearer are its own tag blocks)
 
 
@@ -64,10 +72,23 @@ def _go(api: Api, x: float, y: float, z, **more) -> dict:
     """Send the hand to (x, y) at height z, or at the first of several heights it can reach (highest first: near its base the
     arm cannot hold its hand as high)."""
     r = {}
-    for height in (z if isinstance(z, (list, tuple)) else [z]):
-        status, r = goto(api, x, y, float(height), **more)
+    heights = [float(h) for h in (z if isinstance(z, (list, tuple)) else [z])]
+    for height in heights:
+        status, r = goto(api, x, y, height, **more)
         if status == 200:
             return r
+    if "straight line" in str(r.get("error", "")):
+        # No line leads there from where the hand is: near its base the arm cannot hold its hand high, and a line down
+        # and inward passes through where it cannot. Go by way of a point further out on the same bearing, at the
+        # height wanted, and straight in from there.
+        reach = math.hypot(x, y)
+        out = max(reach, VIA_REACH_M) / max(reach, 1e-6)
+        for height in heights:
+            if goto(api, x * out, y * out, height, **more)[0] != 200:
+                continue
+            status, r = goto(api, x, y, height, **more)
+            if status == 200:
+                return r
     raise GaveUp(f"the hand could not be sent to ({x:.3f}, {y:.3f}, {z}): {r.get('error', r)}")
 
 
@@ -109,10 +130,22 @@ def hover_over(api: Api, near, hover: float = HOVER_M) -> dict:
     """Hold the hand over `near` for the wrist camera to look down. Straight above a thing near the arm's base is out of its
     reach at hovering height: then a little further out, or lower. Returns the hub's answer to the move that worked."""
     reach, way = float(np.linalg.norm(near)), np.asarray(near, float) / max(float(np.linalg.norm(near)), 1e-6)
+    # If the wrist is not as it was when the solution began, it is turned back. The camera sits to one side of the jaws
+    # and looks down only with the wrist that way: after the jaws have been turned to take something (a move keeps the
+    # wrist as it is unless told), the same hover has the camera looking at the horizon. (Only if it is not: a move
+    # that is told the wrist's angle is planned differently, and what follows it had been found to work without.)
+    turn, rest = {}, getattr(api, "rest", None) or {}
+    if "wrist_roll" in rest:
+        now = api.ok("GET", "/devices/arm/state")["joints"]["joints_rad"]["wrist_roll"]
+        if abs(now - rest["wrist_roll"]) > WRIST_TURNED_RAD:
+            turn = {"roll": rest["wrist_roll"]}
     r = None
     for out, z in ((max(reach, 0.215), hover), (max(reach, 0.20), hover - 0.03), (reach, hover - 0.05)):
-        status, r = goto(api, float(way[0] * out), float(way[1] * out), z, tolerance_m=0.01)
+        status, r = goto(api, float(way[0] * out), float(way[1] * out), z, tolerance_m=0.01, **turn)
         if status == 200:
+            # ... and the jaws opened: closed (after a touch) they hide most of what is straight below the camera. A
+            # standing cylinder's patch shrank from 19 000 px to 2 700, and its middle moved 10 mm.
+            api.post("/devices/arm/gripper/set", {"opening": 1.0})
             return r
     raise OutOfReach(f"the hand cannot hover over ({near[0]:.3f}, {near[1]:.3f}): {r.get('error', r)}")
 
@@ -120,10 +153,18 @@ def hover_over(api: Api, near, hover: float = HOVER_M) -> dict:
 def closely(api: Api, colour: str, near: np.ndarray, height: float, ring: bool = False, hover: float = HOVER_M) -> tuple[np.ndarray, float | None]:
     """Hover over `near` and look down with the wrist camera: the thing's place in the arm's frame, and which way one of its
     sides runs [deg in the arm's x-y plane] (None for a bin). hover: how high the tip is held while looking."""
+    return sized(api, colour, near, height, ring, hover)[:2]
+
+
+def sized(api: Api, colour: str, near: np.ndarray, height: float, ring: bool = False, hover: float = HOVER_M, lengthwise: bool = False):
+    """closely, and how long the thing is along that side and across it [m] (None if not measured). lengthwise: the side given
+    is the longer one. Only for a thing known to be low and long: a standing thing seen at a slant is smeared along the
+    line of sight, which is not its length (jaws turned that way for a standing cylinder could not be brought to it)."""
     r = hover_over(api, near, hover)
     seen = eyes.find(api.picture(WRIST), colour, min_area=400)
     # the one nearest where it was expected, among those of a fair size
-    placed = [(b, _place(api, "arm/wrist_camera", b.u, b.v, height)[0]) for b in _kind(seen, ring)[:4]]
+    # (not only the largest few: the arm's own parts are in view and are larger than a peg)
+    placed = [(b, _place(api, "arm/wrist_camera", b.u, b.v, height)[0]) for b in _kind(seen, ring)[:8]]
     placed = [(b, p) for b, p in placed if p is not None and np.linalg.norm(p - near) < NEAR_M]
     if ring:
         # From this close a bin's frame may not fit in the picture: the part of it that does has its middle somewhere else
@@ -137,12 +178,21 @@ def closely(api: Api, colour: str, near: np.ndarray, height: float, ring: bool =
         raise NotThere(f"hovering over ({near[0]:.3f}, {near[1]:.3f}) the wrist camera sees no {colour} thing within {NEAR_M * 1000:.0f} mm of there"
                      + ("" if r["reached"] else f" (the hand did not get there: {r.get('why_not_reached')})"))
     b, at = min(placed, key=lambda bp: np.linalg.norm(bp[1] - near))
-    side = None
+    # ... unless that one is a fragment of something larger right beside it (a standing thing's top and its side are two
+    # patches where the light falls on them differently): then the larger is the thing.
+    whole = [(b2, p2) for b2, p2 in placed if b2.area > 2.0 * b.area and np.linalg.norm(p2 - at) < FRAGMENT_M]
+    if whole:
+        b, at = max(whole, key=lambda bp: bp[0].area)
+    side = long = across = None
     if not ring:
-        a, c = (_place(api, "arm/wrist_camera", float(p[0]), float(p[1]), height)[0] for p in b.corners[:2])
+        a, c, d = (_place(api, "arm/wrist_camera", float(p[0]), float(p[1]), height)[0] for p in b.corners[:3])
         if a is not None and c is not None and np.linalg.norm(c - a) > 0.005:
-            side = math.degrees(math.atan2(c[1] - a[1], c[0] - a[0])) % 180.0
-    return at, side
+            run, other = c - a, (d - c if d is not None else None)  # one of its sides: the jaws close along it
+            if lengthwise and other is not None and np.linalg.norm(other) > np.linalg.norm(run):
+                run, other = other, run                             # ... the longer one, if asked
+            side, long = math.degrees(math.atan2(run[1], run[0])) % 180.0, float(np.linalg.norm(run))
+            across = float(np.linalg.norm(other)) if other is not None else None
+    return at, side, long, across
 
 
 def touch(api: Api, at: np.ndarray, guess: float, start: float = 0.10) -> float:
@@ -155,32 +205,77 @@ def touch(api: Api, at: np.ndarray, guess: float, start: float = 0.10) -> float:
     return guess
 
 
-def find_thing(api: Api, colour: str, pick=0, height_guess: float = 0.03, near=None) -> dict:
-    """A loose thing of that colour: where it is in the arm's frame, how high, and which way its sides run.
-    height_guess: about how high its top is; it need not be right, a touch finds out. near: where a fixed camera put it,
-    if that has been asked already. NotThere if the wrist camera, hovering over that place, sees no such thing."""
+def find_thing(api: Api, colour: str, pick=0, height_guess: float = 0.03, near=None, lengthwise: bool = False) -> dict:
+    """A loose thing of that colour: where it is in the arm's frame, how high, which way one of its sides runs and how long
+    it is that way. height_guess: about how high its top is; it need not be right, a touch finds out. near: where a
+    fixed camera put it, if that has been asked already. lengthwise: the side given is its longer one (for a low, long
+    block: pinched across its width it rolls onto its side). NotThere if the wrist camera, hovering over that place,
+    sees no such thing."""
     hover = max(HOVER_M, height_guess + 0.11)
     if near is None:
         near = roughly(api, colour, height=max(height_guess - 0.015, 0.0), pick=pick)
     at, _ = closely(api, colour, near, height_guess, hover=hover)
     at, _ = closely(api, colour, at, height_guess, hover=hover)     # from more nearly above it, the guess matters less
     top = touch(api, at, height_guess, start=height_guess + 0.07)
-    at, side = closely(api, colour, at, top, hover=max(HOVER_M, top + 0.11))      # again, now that its height is known
-    return {"at": at, "top": float(top), "side_deg": side}
+    # (again, its height known. A low thing is taken by its ends: seen from above it shows no side to smear its outline,
+    # and pinched across its width it rolls over.)
+    at, side, long, across = sized(api, colour, at, top, hover=max(HOVER_M, top + 0.11), lengthwise=lengthwise or top < LOW_THING_M)
+    return {"at": at, "top": float(top), "side_deg": side, "along_m": long, "across_m": across}
 
 
-def pick(api: Api, thing: dict) -> float:
-    """Take hold of a thing found by find_thing and lift it. Returns how high above the surface the jaws hold it."""
+def pick(api: Api, thing: dict, snug: bool = False) -> float:
+    """Take hold of a thing found by find_thing and lift it. Returns how high above the surface the jaws hold it.
+    snug: the thing stands in a tight place (a drawer's tray): the jaws open only a little wider than it is long.
+    If the hand is stopped on its way down with the jaws one way (something stands beside the thing), the jaws are
+    turned the other way and it is tried once more."""
+    side = thing["side_deg"]
+    ways = [(side, thing.get("along_m"))] + ([((side + 90.0) % 180.0, thing.get("across_m"))] if side is not None else [])
+    for k, (way, long) in enumerate(ways):
+        try:
+            return _pick(api, thing, way, long, snug)
+        except Missed as e:
+            if k == len(ways) - 1 or BLOCKED not in str(e):         # (it got down and there was nothing there: turning will not help)
+                raise
+            # Stopped against something, the arm may be left where no straight line leads back to the thing. Its joints
+            # can always be sent to how it stood at the start; from there the thing was reached the first time.
+            if getattr(api, "rest", None):
+                park(api)
+            else:
+                api.post("/devices/arm/home")
+            try:
+                hover_over(api, thing["at"], max(HOVER_M, thing["top"] + 0.11))
+            except OutOfReach:
+                pass
+    raise AssertionError("not reached")
+
+
+BLOCKED = "the hand did not get down"
+
+
+def _pick(api: Api, thing: dict, side, long, snug: bool) -> float:
+    """pick, with the jaws closing along `side` [deg], the thing being `long` metres that way (None: not measured)."""
     grasp = max(0.011, thing["top"] - 0.022)
     x, y = float(thing["at"][0]), float(thing["at"][1])
-    api.ok("POST", "/devices/arm/gripper/set", {"opening": 1.0})
-    turn = {"jaws_along_deg": thing["side_deg"]} if thing["side_deg"] is not None else {"square_jaws": True}
+    # Opened as wide as they go, the jaws come down over a thing 30 mm long with room to spare, which forgives a place
+    # that is a few millimetres out. Over a thing 40 mm long they do not: above 65 mm of gap part of the hand comes to
+    # rest on the thing's top. For a long thing they open to its length and a little more.
+    gripper = api.ok("GET", "/devices/arm/state")["gripper"]
+    gap = (min(long + (SNUG_CLEAR_M if snug else JAW_CLEAR_M), gripper["max_gap_m"] - 0.001)
+           if long and (snug or long > LONG_THING_M) and side is not None else None)
+    api.ok("POST", "/devices/arm/gripper/set", {"gap_m": round(gap, 4)} if gap else {"opening": 1.0})
+    turn = {"jaws_along_deg": side} if side is not None else {"square_jaws": True}
     _go(api, x, y, [grasp + 0.07, grasp + 0.05, grasp + 0.035], **turn)
     down = _go(api, x, y, grasp)
     held = api.ok("POST", "/devices/arm/gripper/set", {"opening": 0.0})
-    if not held.get("holding"):
-        raise GaveUp(f"the jaws closed on nothing at ({x:.3f}, {y:.3f}, {grasp:.3f})"
-                     + ("" if down["reached"] else f"; the hand did not get down: {down.get('why_not_reached')}"))
+    between = api.ok("GET", "/devices/arm/state")["gripper"]["gap_m"]
+    if not held.get("holding") or between < NOTHING_HELD_M:
+        # (a jaw pressed down on a thing's top is loaded too, and reads as holding: the jaws must also have stopped apart)
+        try:
+            _go(api, x, y, [grasp + 0.07, grasp + 0.05, grasp + 0.035])                # back up, if it can
+        except GaveUp:
+            pass
+        raise Missed(f"the jaws closed on nothing at ({x:.3f}, {y:.3f}, {grasp:.3f}): they are {between * 1000:.0f} mm apart"
+                     + ("" if down["reached"] else f"; {BLOCKED}: {down.get('why_not_reached')}"))
     _go(api, x, y, [grasp + 0.10, grasp + 0.07, grasp + 0.05])
     return grasp
 

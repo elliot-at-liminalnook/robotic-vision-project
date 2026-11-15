@@ -9,6 +9,7 @@ written for that task. Everything about where things are comes from the hub.
     python sim/scripts/solve.py                    # every task that has a solution, scored by the referee
     python sim/scripts/solve.py shelf on_the_shelf
 
-SOLVERS maps (scene, task) to its solution. A task missing from it has none yet; solve.py says why.
+SOLVERS maps (scene, task) to its solution (tasks.py; the bench's tidy is long enough to have its own file,
+bench.py). A task missing from it has none yet; solve.py says why.
 """
 from .tasks import NO_SOLUTION, SOLVERS  # noqa: F401

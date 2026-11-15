@@ -28,6 +28,8 @@ def find(image: np.ndarray, colour: str, min_area: float = 120.0) -> list[Blob]:
     mask = np.zeros(hsv.shape[:2], np.uint8)
     if colour == "white":                                           # lit white, and nothing else: bare steel and pale wood are not
         mask = cv2.inRange(hsv, (0, 0, 215), (180, 18, 255))
+    elif colour == "black":                                         # dark, whatever its tint
+        mask = cv2.inRange(hsv, (0, 0, 0), (180, 255, 70))
     elif colour == "grey":                                          # colourless and neither white nor black: bare steel, grey paint
         mask = cv2.inRange(hsv, (0, 0, 90), (180, 45, 255)) & ~cv2.inRange(hsv, (0, 0, 215), (180, 18, 255))
     elif colour in PALE:                                            # cream, and whatever else is bright and nearly colourless
