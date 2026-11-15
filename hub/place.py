@@ -31,6 +31,7 @@ MIN_POINTS = 12                        # points in a cell before one view says a
 GROUND_BAND_M = 0.006                  # the surface, give or take
 BELOW_M = 0.012                        # a cell with a fifth of its points this far under the surface is not believed
 HIGH_M = 0.010                         # this far above the surface is something standing on it
+MET_M = 0.012                          # what stopped the rover's wheels is taken to be at least this high
 STEP_M = 0.015                         # neighbouring cells whose heights differ by more than this are different things
 EDGE_MIN_M = 0.18                      # a straight thin run of occupied cells at least this long is reported as an edge
 MAX_RANGE_M = 1.2                      # points further than this from the camera are not used
@@ -140,6 +141,22 @@ class Place:
         self.used += 1
         self.levels.append(level)
         return {"used": True, "surface_read_at_mm": round(level * 1000, 1), **added}
+
+    def mark_free(self, xy: np.ndarray):
+        """These points (N x 2, map frame) are on bare surface for certain: the rover is standing on them. One count each,
+        and nothing there is occupied any more (a mismatch under the rover's own nose, or a thing it has since been told of)."""
+        ij = np.floor(np.asarray(xy, float) / CELL_M).astype(int) + HALF_CELLS
+        ij = ij[(ij >= 0).all(axis=1) & (ij < 2 * HALF_CELLS).all(axis=1)]
+        self.ground[ij[:, 0], ij[:, 1]] = np.maximum(self.ground[ij[:, 0], ij[:, 1]], 1)
+        self.high[ij[:, 0], ij[:, 1]] = 0
+        self.height[ij[:, 0], ij[:, 1]] = 0.0
+
+    def mark_met(self, xy: np.ndarray, at_least_m: float = MET_M):
+        """Something stopped the rover at these points (N x 2, map frame): occupied, and at least high enough to stop it."""
+        ij = np.floor(np.asarray(xy, float) / CELL_M).astype(int) + HALF_CELLS
+        ij = ij[(ij >= 0).all(axis=1) & (ij < 2 * HALF_CELLS).all(axis=1)]
+        self.high[ij[:, 0], ij[:, 1]] = np.maximum(self.high[ij[:, 0], ij[:, 1]], self.ground[ij[:, 0], ij[:, 1]] + 1)
+        self.height[ij[:, 0], ij[:, 1]] = np.maximum(self.height[ij[:, 0], ij[:, 1]], at_least_m)
 
     # ---- what it adds up to --------------------------------------------------------
     def cells(self) -> np.ndarray:

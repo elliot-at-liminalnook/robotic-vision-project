@@ -47,8 +47,8 @@ looking_at_m = [0.45, 0.4, 0.0]
 [[devices]]
 kind = "rover"
 name = "rover"
-at_m = [0.22, 0.2]
-facing_deg = 45
+at_m = [0.20, 0.12]              # parked clear of the cube the arm fetches: its stowed head reaches 0.25 m ahead
+facing_deg = 90
 
 [[tasks]]
 name = "where_is_everyone"

@@ -14,6 +14,7 @@ That a task can actually be done is a stronger claim; it waits for a reference s
 """
 from __future__ import annotations
 
+import cv2
 import mujoco
 import numpy as np
 
@@ -21,6 +22,7 @@ from . import geometry as G
 from . import schema, tasks
 from .build import Built, SceneError, build
 
+UNDER_HEAD_M = 0.015         # a loose thing's centre this near the parked rover's outline, seen from above, is under its head
 OVERLAP_M = 0.0005          # deeper than this at the start is an overlap, not a resting contact
 MOVED_M = 0.002             # a thing that ends this far from where it started was not at rest
 INSIDE_MARGIN_M = 0.0       # a footprint may touch the lip's inner face
@@ -72,6 +74,20 @@ def placing_problems(built: Built, d) -> list[str]:
         if pair not in seen:
             seen.add(pair)
             out.append(f"{pair[0]} and {pair[1]} overlap by {-c.dist * 1000:.1f} mm at the start")
+    # Nothing loose stands under the rover's parked head. The head reaches 0.25 m ahead of the axle and 0.12 m to each
+    # side, a few centimetres above the surface: a thing under it touches nothing, so the overlap check passes, but the
+    # rover cannot drive off without pushing it and the arm cannot pick it without meeting the head.
+    for dev in built.devices:
+        if dev["kind"] != "rover":
+            continue
+        rb = m.body(dev["body"]).id
+        pts = np.vstack([_corners(m, d, g) for g in range(m.ngeom) if m.geom_contype[g] and _root(m, m.geom_bodyid[g]) == rb])
+        hull = cv2.convexHull(pts[:, :2].astype(np.float32)).reshape(-1, 1, 2)
+        for o in built.objects:
+            x, y = (float(v) for v in d.xpos[m.body(o).id][:2])
+            if cv2.pointPolygonTest(hull, (x, y), True) > -UNDER_HEAD_M:
+                out.append(f"objects '{o}': under the parked rover's head, or within {UNDER_HEAD_M * 1000:.0f} mm of its outline "
+                           "(the head reaches 0.25 m ahead of the rover and 0.12 m to each side)")
     return out
 
 

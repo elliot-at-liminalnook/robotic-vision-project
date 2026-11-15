@@ -20,6 +20,7 @@ from hub import api as A
 from hub import geometry as G
 from hub import landmarks
 from hub.builtin import Lens
+from hub.errors import Refused
 from hub.hub import Hub
 from hub.locator import Locator
 from hub.place import Place, colour_of, re_frame
@@ -263,7 +264,10 @@ def test_a_view_from_where_the_rover_has_driven_to_lands_in_the_same_map():
 
     first = view(-25.0)
     assert the_cube(first)["colour"] == "red" and first["driven_since_the_map_was_begun_m"] == 0.0 and "note" not in first
-    assert r.stow()["reached"] and r.turn(-20.0)["reached"] and r.forward(-0.06)["reached"]
+    assert r.stow()["reached"]
+    with pytest.raises(Refused):                                    # turning where it stands would swing its head into the cube
+        r.turn(-20.0)
+    assert r.forward(-0.06)["reached"] and r.turn(-20.0)["reached"], "backed off first, it may turn"
     moved = G.inv(T0) @ frame_of(world, "rover")
     assert np.linalg.norm(moved[:2, 3]) > 0.04 and abs(math.degrees(G.yaw_of(moved))) > 12, "the rover did not move as asked"
     second = view(0.0)

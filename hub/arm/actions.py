@@ -20,6 +20,8 @@ from . import controller as C
 from . import grasp as G
 
 FRAME = 1.0 / C.FRAME_HZ
+CAUTIOUS_SPEED = 0.08           # m/s: the tip's speed where nothing has looked, or where it ends at a thing
+CAUTIOUS_LAG_M = 0.012          # ... and it has met something if its command went this far in PROBE_WINDOW_S and it did not follow
 PROBE_SPEED = 0.03              # m/s: the tip's speed going down in a probe
 PROBE_WINDOW_S = 0.3            # the tip has stopped if over this long ...
 PROBE_LAG_M = 0.005             # ... its command went down this far and it did not follow
@@ -38,6 +40,8 @@ class ArmActions:
         self.max_gap = float(ik.jaw_gap(C.GRIP_OPEN))
         self._goal_point = None                          # where the last move_tip was asked to put the tip
         self._tick0, self._timeout = 0, 0.0
+        self.guard = None                                # set by the hub: what the map says of a path of the hand (hub/guard.py)
+        self._cautious = False                           # this move is slow and stops at the first touch
 
     def state(self) -> dict:
         """What the arm knows about itself now, from its encoders and its own controller."""
@@ -79,9 +83,22 @@ class ArmActions:
         app.failed_point = app.last_block = None
         app.paused = False               # (hands-on: a person may have paused it; an action needs time to pass)
         prev, still = app.sim.q(), 0
+        window = max(3, int(round(PROBE_WINDOW_S / FRAME)))
+        told, went = [np.array(app.target, float)], [app.tip_pos(prev)]
         for _ in range(max(1, int(round(timeout_s / FRAME)))):
             self._frame()
             q = app.sim.q()
+            if self._cautious and app.move is not None:
+                # Going where nothing has looked: stop at the first touch. The tip has met something if its command has
+                # gone on over the last PROBE_WINDOW_S and it has not followed (long before the stall guard would say so).
+                told.append(np.array(app.target, float))
+                went.append(app.tip_pos(q))
+                if (len(told) > window and np.linalg.norm(went[-1] - went[0]) > 0.004
+                        and np.linalg.norm(told[-1] - told[-window]) > CAUTIOUS_LAG_M and np.linalg.norm(went[-1] - went[-window]) < 0.002):
+                    app.hold_here(q)
+                    app.last_block = {"joint": "the tip", "behind_rad": 0.0, "seconds": PROBE_WINDOW_S,
+                                      "load": float(np.max(app.load_frac())), "gentle": True}
+                    return False, app.sim.time - t0
             still = still + 1 if app.move is None and np.abs(q - prev).max() < 0.002 and done() else 0
             prev = q
             if still >= 4:
@@ -140,6 +157,10 @@ class ArmActions:
         point it could not solve, the command filter's events, the joint angles and the servo loads."""
         app = self.app
         mm = lambda v: [round(float(x) * 1000, 1) for x in v]       # noqa: E731
+        if app.last_block is not None and app.last_block.get("gentle"):
+            return (f"The tip met something and the arm stopped at the first touch: its command went on for {PROBE_WINDOW_S} s and "
+                    f"the tip did not follow. It holds where it is, {np.linalg.norm(err) * 1000:.0f} mm short (x, y, z: {mm(-err)} mm "
+                    "still to go). What it met is at the tip, or against the hand or the arm behind it.")
         if app.last_block is not None:
             b = app.last_block
             return (f"The arm stopped itself: {b['joint']} stayed {math.degrees(b['behind_rad']):.1f} deg behind its command for "
@@ -241,6 +262,15 @@ class ArmActions:
             raise Refused("the servos' torque is switched off (the arm is limp), so nothing was moved. "
                           "Switch it back on first (the arm then holds the pose it has sagged to).", 409)
 
+    def _hand_path(self, start, end) -> np.ndarray:
+        """The hand's lowest point along a straight move of the tip, every 10 mm: N x 3."""
+        safety = getattr(self.app.sim, "safety", None)
+        q = self.app.sim.q()
+        drop = float(safety.lowest_of_hand(q)[2] - self.tip(q)[2]) if safety is not None else 0.0
+        start, end = np.asarray(start, float), np.asarray(end, float)
+        n = max(2, int(np.linalg.norm(end - start) / 0.01) + 1)
+        return start + (end - start) * np.linspace(0.0, 1.0, n)[:, None] + [0.0, 0.0, min(drop, 0.0)]
+
     def move_tip(self, x, y, z, roll=None, square_jaws=False, jaws_along_deg=None, timeout_s=6.0, tolerance_m=0.004) -> dict:
         self._need_torque()
         app = self.app
@@ -270,13 +300,19 @@ class ArmActions:
                            + self._why_unreachable(p + self._mid(q_bad, gap), q_bad)
                            + " Go by way of another point (for example lift or lower the tip first, or move nearer the "
                              "middle of the arm's reach), or use move_joints.")
-        if not app.move_to(end, "api: move_tip", roll=float(q[4]) if (turn is not None or roll is not None) else None):
+        cautious, careful = (False, None) if self.guard is None else self.guard(self._hand_path(self.tip(), point))
+        if not app.move_to(end, "api: move_tip", roll=float(q[4]) if (turn is not None or roll is not None) else None,
+                           speed=CAUTIOUS_SPEED if cautious else None):
             why = app.message
             app.message = said
             raise Refused(f"the controller refused the move ({why}), so nothing was moved. " + self._why_unreachable(point))
         self._goal_point = point
-        reached, elapsed = self._run(timeout_s, lambda: np.linalg.norm(self.tip() - point) <= tolerance_m)
-        return self._action(reached, elapsed)
+        self._cautious = cautious
+        try:
+            reached, elapsed = self._run(timeout_s, lambda: np.linalg.norm(self.tip() - point) <= tolerance_m)
+        finally:
+            self._cautious = False
+        return self._action(reached, elapsed, {"careful": careful} if cautious else None)
 
     def probe(self, x, y, from_z=0.12, timeout_s=12.0) -> dict:
         """Touch: lower the tip slowly, straight down at (x, y), until it rests on something or reaches the surface. Says
@@ -284,6 +320,8 @@ class ArmActions:
         guard would, so what it rests on is pressed only lightly."""
         self._need_torque()
         app = self.app
+        if self.guard is not None:                                  # a thing may be touched; the rover may not
+            self.guard(self._hand_path([x, y, from_z], [x, y, 0.0]), touching=True)
         above = self.move_tip(x, y, from_z, timeout_s=min(6.0, timeout_s), tolerance_m=0.006)
         if not above["reached"]:
             return {**above, "touched": None, "note": "the tip could not be brought above that point, so nothing was touched there"}

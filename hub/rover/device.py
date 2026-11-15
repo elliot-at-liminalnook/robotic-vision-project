@@ -35,6 +35,9 @@ from .description import HEAD_JOINTS, STOWED, Rover
 
 TICK_S = 0.05                              # control tick over the radio link
 V_MAX, A_MAX = 0.08, 0.25                  # m/s, m/s2 along the ground
+PUSH_LEARN, PUSH_LOAD, PUSH_S = 8, 0.010, 0.5   # ticks at a steady speed to learn what rolling takes; this much more load (of 1),
+#                                            for this long, is pushing. Set from the simulation: to be set again on the real rover
+V_SLOW, W_SLOW = 0.025, 0.3                # ... and into what has never been seen: what is there is met at a crawl
 W_MAX = 1.0                                # rad/s turning on the spot (its heading)
 HEAD_RATE = {"pan": 1.2, "lift": 0.8, "tilt": 1.2, "spacing": 0.03}        # rad/s, rad/s, rad/s, m/s
 GROUND_CLEAR_M = 0.006                     # the head's lowest point is kept this far above the surface
@@ -98,6 +101,7 @@ class RoverDevice:
         self.travel = {"left": 0.0, "right": 0.0}             # metres each wheel has rolled
         self.volts = float(np.mean([f["volts"] for f in fb.values()]))
         self._lag_t = 0.0
+        self.guard = self.after_drive = None                 # set by the hub: what the map says of a drive (hub/guard.py)
         self.last_block = None
 
     # ---- sensing ---------------------------------------------------------------
@@ -279,7 +283,7 @@ class RoverDevice:
         r, half = self.rover.wheel_radius, self.rover.track / 2
         self.group.write_speeds({self.wheel_ids["left"]: (v - w * half) / r, self.wheel_ids["right"]: (v + w * half) / r})
 
-    def _drive(self, distance: float, angle: float, timeout_s: float) -> dict:
+    def _drive(self, distance: float, angle: float, timeout_s: float, slow: bool = False) -> dict:
         self._may_move()
         if not self.stowed():
             raise Refused("the rover drives only with its head stowed (forward, low, cameras together): it is top-heavy otherwise. "
@@ -288,8 +292,9 @@ class RoverDevice:
         turning = distance == 0.0
         goal = abs(angle) if turning else abs(distance)
         sign = math.copysign(1.0, angle if turning else distance)
-        v_cap, a_cap = (W_MAX, 3.0) if turning else (V_MAX, A_MAX)
+        v_cap, a_cap = ((W_SLOW if slow else W_MAX), 3.0) if turning else ((V_SLOW if slow else V_MAX), A_MAX)
         speed, stalled_t, self.last_block, reached = 0.0, 0.0, None, False
+        cruise, rolling, pushing_t, onset = [], None, 0.0, None
         try:
             while self.clock.now() - t0 < timeout_s:
                 done = abs(self.pose[2] - start[2]) if turning else abs(((self.travel["left"] - s0["left"]) + (self.travel["right"] - s0["right"])) / 2)
@@ -315,6 +320,26 @@ class RoverDevice:
                 if stalled_t >= 0.4:                           # a wheel servo at its limit: something is in the way
                     self.last_block = "wheels"
                     break
+                # Against something low with the tyres slipping, the servos are nowhere near their limit: they only work a
+                # little harder than rolling takes. Once at a steady speed, what rolling takes is measured, and a load that
+                # stays above it means the rover is pushing, not going. What the wheels counted since then is taken back.
+                if speed >= v_cap - 1e-9:
+                    cruise.append(float(np.mean([abs(fb[i]["load"]) for i in self.wheel_ids.values()])))
+                    if len(cruise) == PUSH_LEARN:
+                        rolling = float(np.median(cruise[2:]))
+                    elif rolling is not None:
+                        if float(np.mean(cruise[-5:])) > rolling + PUSH_LOAD:
+                            if pushing_t == 0.0:
+                                onset = (self.pose.copy(), dict(self.travel), dict(self._last_ticks) if hasattr(self, "_last_ticks") else None)
+                            pushing_t += TICK_S
+                        else:
+                            pushing_t = 0.0
+                        if pushing_t >= PUSH_S:
+                            self.pose, self.travel = onset[0], onset[1]
+                            self.last_block = "pushing"
+                            break
+                else:
+                    cruise, pushing_t = [], 0.0
         finally:
             try:
                 self._wheels(0.0, 0.0)
@@ -322,6 +347,9 @@ class RoverDevice:
                 pass                                           # the link is gone; the rover's own board stops the wheels
         for _ in range(4):                                     # let it come to rest, still counting
             self._tick()
+        moved = self.pose - start
+        if self.last_block == "pushing":                       # (the ticks while it came to rest were not travel either)
+            self.pose, self.travel = onset[0], onset[1]
         moved = self.pose - start
         self.message = ("drive: there" if reached else "drive: the battery ran low" if self.last_block == "battery"
                         else "drive: the wheels met something and stopped" if self.last_block else "drive: ran out of time")
@@ -331,18 +359,37 @@ class RoverDevice:
                "state": self.drive_state()}
         if not reached:
             out["why_not_reached"] = ("a wheel servo was at its torque limit: the rover is against something" if self.last_block == "wheels"
+                                      else "the wheels were working harder than rolling takes: the rover is against something and its "
+                                           "tyres were slipping. What they counted while slipping has been taken back" if self.last_block == "pushing"
                                       else "the battery fell below its limit" if self.last_block == "battery" else f"the {timeout_s:g} s allowed ran out")
         return out
 
+    def _guarded(self, distance: float, angle: float, timeout_s) -> dict:
+        """A drive as the map allows it (hub/guard.py): not into what has been seen there, slowly into what has not."""
+        self._may_move()
+        asked, slow, note = (distance, angle), False, None
+        if self.guard is not None and self.stowed():
+            distance, angle, slow, note = self.guard(distance, angle)
+        turning = distance == 0.0
+        speed = (W_SLOW if slow else W_MAX) if turning else (V_SLOW if slow else V_MAX)
+        out = self._drive(distance, angle, timeout_s or abs(angle if turning else distance) / speed * 1.5 + 3.0, slow=slow)
+        if note is not None:
+            out["limited"] = note
+            if (distance, angle) != asked:                         # it went as far as the map allows, which is not where it was sent
+                out["reached"] = False
+                out["why_not_reached"] = note
+        if self.after_drive is not None:
+            self.after_drive(0 if turning else int(math.copysign(1, distance)), self.last_block in ("wheels", "pushing"))
+        return out
+
     def forward(self, distance_m, timeout_s=None) -> dict:
-        d = float(distance_m)
-        return self._drive(d, 0.0, timeout_s or abs(d) / V_MAX * 1.5 + 3.0)
+        return self._guarded(float(distance_m), 0.0, timeout_s)
 
     def turn(self, angle_deg, timeout_s=None) -> dict:
         a = math.radians(float(angle_deg))
         if a == 0.0:
             raise Refused("an angle of 0 is no turn")
-        return self._drive(0.0, a, timeout_s or abs(a) / W_MAX * 1.5 + 3.0)
+        return self._guarded(0.0, a, timeout_s)
 
     # ---- stopping ------------------------------------------------------------------------
     def stop(self):

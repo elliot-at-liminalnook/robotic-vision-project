@@ -256,6 +256,43 @@ the arm 7 mm from where it is in the rover's frame (stated 83 mm).
 Not done: the wrist camera adds no depth yet (two pictures from two arm poses would); the fixed cameras
 say nothing about cells the rover has not seen.
 
+## Safety from what has been found (`guard.py`)
+
+Nothing here is a list of keep-outs: the hub is told nothing of the place. A motion is put to the map
+before it is made.
+
+| What the map says there | The rover's wheels | The arm's hand |
+|---|---|---|
+| Seen occupied | Not driven into. A drive stops 20 mm short and says so; if it cannot move at all it is refused (409) with what is in the way and where | Not passed through (409, with how high it is and how to go over). A move may *end* at a thing, or start at one: that is a touch or a grasp, made carefully |
+| Never seen | At a crawl (25 mm/s, 0.3 rad/s) for the whole drive, if it crosses more than 12 cm² of it | Carefully |
+| Seen free | As usual | As usual |
+| No map at all | At a crawl | Carefully |
+
+- **Carefully** means 80 mm/s and stopping at the first touch: when the tip's command has gone on 12 mm
+  in 0.3 s and the tip has not followed, the arm holds where it is and says so, long before its stall
+  guard would (which needs a joint 12° behind for 0.4 s, the arm's full push). The answer carries
+  `careful` and why. *It does not feel a light loose thing*: a 30 g cube slides along with the hand.
+- **The arm and the rover.** The rover's own shape, where the locator puts it in the arm's frame, grown
+  by 30 mm and twice how unsure that place is, is closed to the hand up to the rover's height; so is a
+  touch (`probe`) there. A hand already inside it may always move away. With nothing relating the two,
+  the hand goes carefully wherever it is lower than the rover is tall (the plan had it stay above that
+  height; then it could never touch the landmark that would relate them).
+- **What the rover's cameras map of the arm is the arm**, at each pose it was seen in: those cells count
+  as never seen for the hand, not as things.
+- **Pushing.** A rover against something low with its tyres slipping is nowhere near its servos'
+  limit, and its wheels go on counting. Once at a steady speed the hub learns what rolling takes; a
+  load that stays 1 % of full above it for 0.5 s is pushing. The drive stops, what the wheels counted
+  since the load rose is taken back, and what stopped it goes into the map just past the end of the
+  rover that led. (Found when backing 0.30 m into the surface's edge counted 0.30 m and moved 0.10.)
+  The numbers are from the simulation and must be set again on the real rover.
+- **Where the rover stands is free**: its outline is marked so at every view and after every drive.
+- **Stop** at the root freezes every device; under a device, only that one. Every way out of the
+  program switches every servo's torque off.
+
+Fuzzed, against the referee: thirty random drives and turns after a survey move no loose thing, never
+leave the surface, and leave the wheels' count within 50 mm and 12° of where the rover is; forty random
+tip targets never touch the rover and shove nothing.
+
 ## How well locating does
 
 `locate.camera_from_arm(image, lens)`: a camera's pose in the arm's base frame from one picture of the arm's

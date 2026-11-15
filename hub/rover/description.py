@@ -81,6 +81,20 @@ class Rover:
     def fixed_tags(self) -> set[int]:
         return {i for i, t in self.tags.items() if t.on == "chassis"}
 
+    def shape(self, q: dict) -> np.ndarray:
+        """Every corner of every part's collision box, wheels included, in the rover's own frame: N x 3."""
+        out = []
+        for name, b in self.bodies.items():
+            T = self.body(name, q)
+            for c in b["collision"]:
+                if c["type"] == "box":
+                    lo, hi = np.array(c["lo"]), np.array(c["hi"])
+                else:                                            # (a wheel or the caster: the box round it)
+                    r = np.array(c["radii"]) if "radii" in c else np.full(3, c["radius"])
+                    lo, hi = np.array(c["centre"]) - r, np.array(c["centre"]) + r
+                out += [(T @ np.array([x, y, z, 1.0]))[:3] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
+        return np.array(out)
+
     def lowest(self, q: dict) -> float:
         """Height of the lowest point of the head's parts above the surface the rover stands on [m]."""
         low = np.inf

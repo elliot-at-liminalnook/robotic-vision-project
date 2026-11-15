@@ -242,7 +242,7 @@ def test_stop_and_torque_through_the_tree():
     hub = Hub(world.ports)
     call(hub, "POST", "/devices/arm/move_joints", {"shoulder_pan": 0.5, "timeout_s": 0.15})        # still on its way when this returns
     r = call(hub, "POST", "/stop")[1]
-    assert r["stopped"] == ["devices/arm"]
+    assert sorted(r["stopped"]) == ["devices/arm", "devices/rover"]          # everything that can move, in this scene
     call(hub, "POST", "/wait", {"seconds": 0.6})
     s = call(hub, "GET", "/devices/arm/state")[1]
     assert not s["moving"] and abs(s["joints"]["joints_rad"]["shoulder_pan"]) < 0.45, "the stop did not stop the move"

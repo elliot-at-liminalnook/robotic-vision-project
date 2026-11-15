@@ -177,8 +177,8 @@ class ArmController:
             self.mode = mode
             self.say(f"{mode} mode")
 
-    def move_to(self, end, msg: str, roll=None):
-        """Start a straight-line tip move (click-to-move, home). Always runs in Cartesian mode."""
+    def move_to(self, end, msg: str, roll=None, speed=None):
+        """Start a straight-line tip move (click-to-move, home). Always runs in Cartesian mode. speed: no faster than this."""
         self.set_mode("cartesian")
         end = np.array(end, float)
         end[2] = max(end[2], MIN_TIP_Z)
@@ -188,6 +188,8 @@ class ArmController:
             return False
         g = self.gov_cfg
         v = float(g["click_speed_m_s"]) if self.fast else LIN_SPEED[False] * 2
+        if speed is not None:
+            v = min(v, float(speed))
         self.move = CartesianMove(self.target, end, v, float(g["click_accel_m_s2"]))
         self.move_roll = roll
         self.say(msg)

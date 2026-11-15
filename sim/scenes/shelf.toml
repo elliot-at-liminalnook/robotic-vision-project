@@ -57,7 +57,7 @@ shape = "cylinder"
 size_m = [0.03, 0.06]
 mass_kg = 0.025
 colour = "yellow"
-at_m = [0.74, 0.3]
+at_m = [0.72, 0.44]              # (not under the parked rover's head, which reaches to x = 0.85 at y = 0.25)
 
 [[devices]]
 kind = "arm"

@@ -143,6 +143,15 @@ class CommandFilter:
         pts += [(d.geom_xmat[g].reshape(3, 3) @ _shape_vertices(m, g).T).T + d.geom_xpos[g] for g in self.base_geoms]
         return np.vstack(pts)[:, :2]
 
+    def outlines(self, q) -> list[np.ndarray]:
+        """The arm's parts in the pose q, each as the corners of its shapes seen from above (N x 2), base included."""
+        m, d = self.m, self.d
+        d.qpos[self.qadr] = q
+        mujoco.mj_kinematics(m, d)
+        parts = [(p @ d.xmat[b].reshape(3, 3).T + d.xpos[b])[:, :2] for b, p in self.points.items()]
+        parts.append(np.vstack([(d.geom_xmat[g].reshape(3, 3) @ _shape_vertices(m, g).T).T + d.geom_xpos[g] for g in self.base_geoms])[:, :2])
+        return parts
+
     def lowest_of_hand(self, q) -> np.ndarray:
         """The lowest point of the hand (gripper and jaw) in the pose q: its x, y, and its height above the surface."""
         m, d = self.m, self.d

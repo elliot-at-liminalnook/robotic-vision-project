@@ -153,11 +153,13 @@ Plan: [5.5](MULTI_DEVICE_PLAN.md#55-finding-out-what-the-place-is)
 
 Plan: [5.9](MULTI_DEVICE_PLAN.md#59-safety-when-nothing-is-known)
 
-- [ ] Stop at the root freezes every device; every exit switches every servo's torque off
-- [ ] Rover filter working from the map: stays inside the lip, slow into unseen space, no driving with the head up
-- [ ] Arm filter working from the map: out of occupied space, gentle into unseen space
-- [ ] Arm kept out of the rover's estimated space
-- [ ] Tests written (fuzzed runs)
+- [x] Stop at the root freezes every device; every exit switches every servo's torque off
+- [x] Rover filter working from the map: stays inside the lip, slow into unseen space, no driving with the head up (and stops when it is pushing, not rolling)
+- [x] Arm filter working from the map: out of occupied space, gentle into unseen space (gentle: 80 mm/s and stopped at the first touch; a light loose thing is not felt)
+- [x] Arm kept out of the rover's estimated space (unplaced rover: careful below its height, not kept above it: DECISIONS MD76)
+- [x] Tests written (fuzzed runs): `sim/tests/test_safety.py`, not run as a suite; each test called directly
+
+Found on the way: three scenes had a loose thing under the parked rover's head; two pick tests had been failing since the rover got its shape (never run). Fixed, and the validator now refuses it.
 
 ## Step 12. Self-calibration
 

@@ -107,6 +107,7 @@ def take_view(hub, ratios: dict, heights: list, arm_q=None) -> tuple[dict, np.nd
         return view, fl.image, lens_l
     if place.empty:
         hub.map_origin = rover.pose.copy()                   # the map's frame is the rover's as it stands at its first view
+    hub.guard.saw_arm(arm_q)                                 # what this view maps of the arm is the arm
     T = hub.map_from_rover() @ T_cam
     keep = (np.abs(cloud.points[:, 0]) < USE_FIELD * cloud.points[:, 2]) & (np.linalg.norm(cloud.points, axis=1) < REACH_PER_SPACING * baseline)
     seen = cloud.points[keep]
@@ -116,6 +117,7 @@ def take_view(hub, ratios: dict, heights: list, arm_q=None) -> tuple[dict, np.nd
         pts[:, 2] = (1.0 - seen @ ground) / np.linalg.norm(ground)
         heights.append(1.0 / float(np.linalg.norm(ground)) / float(T_cam[2, 3]))
     view.update(place.add_cloud(pts, T[:3, 3], None if cloud.colours is None else cloud.colours[keep]), matched=True)
+    hub.guard.stood_here()                                   # and where the rover stands is bare surface
     return view, fl.image, lens_l
 
 

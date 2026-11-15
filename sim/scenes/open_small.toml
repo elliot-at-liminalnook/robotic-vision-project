@@ -39,8 +39,8 @@ looking_at_m = [0.30, 0.27, 0.0]
 [[devices]]
 kind = "rover"
 name = "rover"
-at_m = [0.52, 0.12]
-facing_deg = 150
+at_m = [0.54, 0.30]              # parked clear of both objects: its stowed head reaches 0.25 m ahead and 0.12 m to each side
+facing_deg = 270
 
 [[tasks]]
 name = "where_is_everyone"

@@ -22,6 +22,7 @@ from .camera import Camera
 from .errors import Refused
 from .locator import Locator
 from .place import Place, re_frame
+from .guard import Guard
 from . import landmarks
 from . import geometry as G
 from . import survey as S
@@ -94,6 +95,11 @@ class Hub:
         self.map_origin = np.zeros(3)
         self.last_survey: list[dict] = []                   # every view of the last survey, in detail
         self._touches_tried, self.landmark_note = 0, None
+        self.guard = Guard(self)                            # what the map says of a motion before it is made
+        if self.rover is not None:
+            self.rover.guard, self.rover.after_drive = self.guard.drive, self.guard.stood_here
+        if self.arm is not None:
+            self.arm.actions.guard = self.guard.hand
         self._build_tree()
         out = self.found()
         if self.survey_at_start and self.rover is not None and len(self.rover.cameras) == 2:
@@ -161,9 +167,8 @@ class Hub:
                     if 0 <= px[0] < lens.width and 0 <= px[1] < lens.height:
                         t.setdefault("in_picture", {})[name] = [int(round(float(px[0]))), int(round(float(px[1])))]
             T_arm, _ = self._map_in("arm") if self.arm is not None else (None, "")
-            safety = getattr(self.arm.link, "safety", None) if self.arm is not None else None
-            if T_arm is not None and safety is not None:         # the rover's cameras see the arm too: say which things are it
-                own = safety.footprint(self.arm.link.q())
+            own = self.guard.arm_shadow() if T_arm is not None else np.zeros((0, 2))
+            if len(own):                                         # the rover's cameras see the arm too: say which things are it
                 for t in out["things"]:
                     p = (T_arm @ [t["at_m"][0], t["at_m"][1], 0.0, 1.0])[:2]
                     if float(np.linalg.norm(own - p, axis=1).min()) < 0.04:
