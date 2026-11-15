@@ -4,6 +4,8 @@
     python sim/scripts/run_system.py                       # scene open_small
     python sim/scripts/run_system.py --scene shelf
     python sim/scripts/run_system.py --scene bench --survey    # a rover, if there is one, looks all round before the API opens
+    python sim/scripts/run_system.py --window              # also show it: every camera's view and a status line, at real speed
+    python sim/scripts/run_system.py --hands-on            # the window also takes keys: a person and the model take turns
     curl http://127.0.0.1:8765/                            # the hub's API: give this guide to the model
     curl http://127.0.0.1:8766/                            # the operator's API: scenes, truth, scoring (never for the model)
 
@@ -41,15 +43,29 @@ def main() -> int:
                                                          "(about a minute); otherwise POST /survey does the same when asked")
     ap.add_argument("--rover-fw", action="store_true", help="run the rover board's own firmware (firmware/rover-bridge, compiled for "
                                                            "this PC) between the radio link and the rover's servos")
+    ap.add_argument("--window", action="store_true", help="show every camera's view and a status line, and play what happens at real speed")
+    ap.add_argument("--hands-on", action="store_true", help="--window, and its keys send commands to the hub between requests: a person "
+                                                           "and the API's caller take turns (sim/scripts/system_window.py lists the keys)")
     ap.add_argument("--quiet", action="store_true", help="don't log each request")
     a = ap.parse_args()
+    a.window = a.window or a.hands_on
     try:
         world = World(a.scene, rover_firmware=a.rover_fw)
     except (FileNotFoundError, ValueError) as e:
         ap.error(str(e))
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))          # a kill leaves through the same finally
     hub = Hub(world.ports, survey=a.survey)
-    hub_server = HTTPServer((a.host, a.hub_port), hub_api.make_handler(hub, verbose=not a.quiet))
+    window, handler = None, hub_api.make_handler(hub, verbose=not a.quiet)
+    if a.window:
+        import system_window
+        window = system_window.Window(world, hub, hands_on=a.hands_on)
+
+        class Watched(handler):                                      # (the window's status line says what was last asked)
+            def _answer(self, method: str):
+                window.said(f"{method} {self.path}")
+                super()._answer(method)
+        handler = Watched
+    hub_server = HTTPServer((a.host, a.hub_port), handler)
     op_server = HTTPServer((a.host, a.operator_port), operator_api.make_handler(operator_api.Operator(world), verbose=not a.quiet))
     hub_server.timeout = op_server.timeout = 0.02
     print(f"hub API       http://{a.host}:{hub_server.server_address[1]}/   found: {', '.join(hub.found()['devices']) or 'nothing'}")
@@ -57,7 +73,9 @@ def main() -> int:
     for note in hub.notes:
         print("  note:", note)
     try:
-        while True:
+        if window is not None:
+            system_window.serve(window, (hub_server, op_server))     # until the window is closed
+        while window is None:
             hub_server.handle_request()
             op_server.handle_request()
     except KeyboardInterrupt:

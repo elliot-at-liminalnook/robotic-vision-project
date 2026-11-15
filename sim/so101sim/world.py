@@ -64,6 +64,9 @@ def cell_voltage(charge: float) -> float:
     return float(np.interp(charge, [p[0] for p in pts], [p[1] for p in pts]))
 
 
+FRAME_S = 1.0 / 30.0             # how often a watcher is shown the world while it runs [s of simulated time]
+
+
 @dataclass
 class Bus:
     """One servo bus: emulated servos on a simulated wire, each driving one joint of the model."""
@@ -227,6 +230,8 @@ class World:
         self.directory = directory                # where scene files are (default: sim/scenes/)
         self.generation = 0                       # goes up with every load: "this is a different place now"
         self.on_load: list = []                   # called with the world after each load (ports re-attach here)
+        self.on_frame: list = []                  # called every FRAME_S of simulated time while it runs (a window draws here)
+        self._frame_at = 0.0
         self.load(scene)
 
     # ---- scenes ------------------------------------------------------------
@@ -361,6 +366,10 @@ class World:
             if self.battery is not None:
                 self._battery_step(dt)
             mujoco.mj_step(m, d)
+            if self.on_frame and not (self._frame_at - FRAME_S <= d.time < self._frame_at):
+                self._frame_at = d.time + FRAME_S                # (also after a reset, when time has gone back)
+                for hook in self.on_frame:
+                    hook()
         for bus in self.buses:
             bus.wire.process(t)
         self.t = max(self.t, t)
