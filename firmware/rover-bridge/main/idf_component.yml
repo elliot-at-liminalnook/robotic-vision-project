@@ -1,0 +1,12 @@
+## The ESP32-P4 has no radio of its own. On the ESP32-P4-WIFI6 boards an ESP32-C6 beside it is the radio, and
+## these two components make the usual esp_wifi calls reach it. Versions are not pinned: not yet built.
+dependencies:
+  idf: ">=5.3"
+  espressif/esp_wifi_remote:
+    version: "*"
+    rules:
+      - if: "target in [esp32p4]"
+  espressif/esp_hosted:
+    version: "*"
+    rules:
+      - if: "target in [esp32p4]"

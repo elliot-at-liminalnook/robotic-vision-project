@@ -1,0 +1,3 @@
+CONFIG_IDF_TARGET="esp32p4"
+# One-millisecond ticks: the bridge's loop waits one tick for bus bytes, and a servo's reply must not sit 10 ms.
+CONFIG_FREERTOS_HZ=1000

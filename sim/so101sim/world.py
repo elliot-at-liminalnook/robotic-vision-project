@@ -22,7 +22,7 @@ from __future__ import annotations
 import copy
 import math
 import zlib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import cv2
 import mujoco
@@ -82,6 +82,8 @@ class Bus:
     last_word: float = 0.0              # when the hub's last bytes reached the device's board
     wheels: tuple = ()                  # indices of servos the board's watchdog stops
     board_stops: int = 0
+    fw: object = None                   # the board's firmware, when it is run in the loop (rover_fw.RoverFirmware)
+    fw_inbox: list = field(default_factory=list)       # (arrival time, bytes) on their way from the hub to the board
 
 
 class WirePort:
@@ -143,8 +145,11 @@ class RadioPort(WirePort):
             return
         arrival = max(self._last_arrival, w.t + self._delay())       # bytes arrive in the order they were sent
         self._last_arrival = arrival
+        bus = w.buses[self.index]
+        if bus.fw is not None:                                       # the board's firmware sees them when they arrive
+            bus.fw_inbox.append((arrival, bytes(data)))
         wire.host_write(data, arrival)
-        w.buses[self.index].last_word = arrival
+        bus.last_word = arrival
 
     def read(self, n: int, timeout_s: float) -> bytes:
         w, wire = self.world, self._wire()
@@ -162,7 +167,11 @@ class RadioPort(WirePort):
                 w.advance_to(deadline)
                 break
             w.advance_to(max(nxt, w.t + 1e-6))
-        return wire.host_read(n, w.t - back) if w.buses[self.index].link_up else b""
+        if not w.buses[self.index].link_up:
+            return b""
+        got = wire.host_read(n, w.t - back)
+        fw = w.buses[self.index].fw
+        return fw.from_bus(got, int((w.t - back) * 1000)) if fw is not None and got else got
 
     def reset_input(self):
         wire = self._wire()
@@ -211,7 +220,10 @@ class WorldCamera:
 
 
 class World:
-    def __init__(self, scene: str | dict = "workcell", directory=None):
+    def __init__(self, scene: str | dict = "workcell", directory=None, rover_firmware: bool = False):
+        """rover_firmware: run the rover board's own firmware (firmware/rover-bridge, compiled for this PC) between the
+        radio link and the rover's servos, in place of this file's model of what that board does."""
+        self.rover_firmware = bool(rover_firmware)
         self.directory = directory                # where scene files are (default: sim/scenes/)
         self.generation = 0                       # goes up with every load: "this is a different place now"
         self.on_load: list = []                   # called with the world after each load (ports re-attach here)
@@ -298,6 +310,12 @@ class World:
             self.data.ctrl[bus.act] = 0.0
             bus.wire.reset()
             bus.last_word, bus.board_stops = 0.0, 0
+            bus.fw, bus.fw_inbox = None, []
+            if self.rover_firmware and bus.radio and bus.wheels:     # the board starts up with the scene
+                from .rover_fw import RoverFirmware
+                speed = R.BY_NAME["motion_speed"]
+                bus.fw = RoverFirmware(wheel_ids=tuple(bus.servos[k].id for k in bus.wheels), speed_addr=speed.addr, speed_size=speed.size,
+                                       watchdog_ms=int(round(BOARD_WATCHDOG_S * 1000)), now_ms=0)
             for s, hold, zero, ratio in zip(bus.servos, bus.hold, bus.zero, bus.ratio):
                 s.power_cycle()
                 ticks = int(round(zero + s.mount_dir * (hold / ratio) * TICKS / (2 * math.pi)))
@@ -324,7 +342,16 @@ class World:
         while d.time + dt <= t + 1e-9:
             for bus in self.buses:
                 bus.wire.process(d.time)
-                if bus.radio and bus.wheels and d.time - bus.last_word > BOARD_WATCHDOG_S:
+                if bus.fw is not None:                           # the board's own firmware decides
+                    while bus.fw_inbox and bus.fw_inbox[0][0] <= d.time:
+                        _, data = bus.fw_inbox.pop(0)
+                        if bus.fw.from_hub(data, int(d.time * 1000)) != data:
+                            raise AssertionError("the rover's firmware changed bytes on their way from the hub to the bus")
+                    stop = bus.fw.tick(int(d.time * 1000))
+                    if stop:
+                        bus.wire.host_write(stop, d.time)
+                        bus.board_stops = bus.fw.count("trips")
+                elif bus.radio and bus.wheels and d.time - bus.last_word > BOARD_WATCHDOG_S:
                     self._board_stops_wheels(bus)
                 q, qd = d.qpos[bus.qadr] / bus.ratio, d.qvel[bus.dof] / bus.ratio       # at each servo's shaft
                 for k, s in enumerate(bus.servos):

@@ -1,0 +1,57 @@
+menu "Rover bridge"
+
+    config ROVER_BRIDGE_WIFI_SSID
+        string "Wi-Fi network to join"
+        default "rover-net"
+
+    config ROVER_BRIDGE_WIFI_PASSWORD
+        string "Its password"
+        default ""
+
+    config ROVER_BRIDGE_PORT
+        int "TCP port the hub connects to"
+        default 3333
+
+    config ROVER_BRIDGE_UART_NUM
+        int "UART joined to the servo bus interface"
+        default 1
+
+    config ROVER_BRIDGE_TX_GPIO
+        int "GPIO to the bus interface's RX"
+        default 4
+        help
+            Placeholder: set to the pin wired on the board.
+
+    config ROVER_BRIDGE_RX_GPIO
+        int "GPIO from the bus interface's TX"
+        default 5
+        help
+            Placeholder: set to the pin wired on the board.
+
+    config ROVER_BRIDGE_BAUD
+        int "Servo bus speed"
+        default 1000000
+
+    config ROVER_BRIDGE_WHEEL_LEFT_ID
+        int "Servo id of the left wheel"
+        default 11
+
+    config ROVER_BRIDGE_WHEEL_RIGHT_ID
+        int "Servo id of the right wheel"
+        default 12
+
+    config ROVER_BRIDGE_SPEED_ADDR
+        int "Register a wheel's speed is written to (HX-30HM: 46, two bytes)"
+        default 46
+
+    config ROVER_BRIDGE_WATCHDOG_MS
+        int "Silence from the hub after which the wheels are stopped [ms]"
+        default 400
+
+    config ROVER_BRIDGE_STRIP_ECHO
+        bool "The bus interface repeats back what is sent: do not pass it to the hub"
+        default n
+        help
+            Not known for the BusLinker in UART mode: check with a logic probe on first power-up.
+
+endmenu

@@ -39,10 +39,12 @@ def main() -> int:
     ap.add_argument("--operator-port", type=int, default=8766, help="the operator's API: scenes and ground truth")
     ap.add_argument("--survey", action="store_true", help="if a rover is found, it looks all round from where it stands first "
                                                          "(about a minute); otherwise POST /survey does the same when asked")
+    ap.add_argument("--rover-fw", action="store_true", help="run the rover board's own firmware (firmware/rover-bridge, compiled for "
+                                                           "this PC) between the radio link and the rover's servos")
     ap.add_argument("--quiet", action="store_true", help="don't log each request")
     a = ap.parse_args()
     try:
-        world = World(a.scene)
+        world = World(a.scene, rover_firmware=a.rover_fw)
     except (FileNotFoundError, ValueError) as e:
         ap.error(str(e))
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))          # a kill leaves through the same finally

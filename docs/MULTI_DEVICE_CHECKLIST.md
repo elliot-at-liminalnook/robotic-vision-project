@@ -194,7 +194,7 @@ Plan: [5.6](MULTI_DEVICE_PLAN.md#56-the-rover), [8. Risks and unknowns](MULTI_DE
 
 ## Has no step yet
 
-- [ ] Rover firmware: drives the servos from a board and carries the bus over Wi-Fi; stops the wheels by itself when the link goes quiet. Needed by step 14 ([5.6](MULTI_DEVICE_PLAN.md#56-the-rover))
+- [x] Rover firmware: drives the servos from a board and carries the bus over Wi-Fi; stops the wheels by itself when the link goes quiet. Needed by step 14 ([5.6](MULTI_DEVICE_PLAN.md#56-the-rover)). In `firmware/rover-bridge/`. What the board decides (`bridge.c`) is compiled for the PC, tested (`sim/tests/test_rover_fw.py`, 23 cases called directly) and runs in the simulation (`run_system.py --rover-fw`). **The part that needs the board (Wi-Fi, socket, UART) is written and has not been built or flashed:** there is no ESP-IDF on this machine; its README lists what to check first
 
 ## Open questions
 
